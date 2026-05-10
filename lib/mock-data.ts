@@ -4,21 +4,44 @@ export const counties = ["All Counties", ...COUNTY_LIST];
 
 export const programs = [
   "All Programs",
-  "Business Catalyst",
-  "Youth Mentorship",
-  "Women Entrepreneurs",
-  "Veterans Initiative",
+  // Entrepreneurship & Business Support
+  "RCP Small Business Mentorship Program",
+  "SEED Micro-Grant Program",
+  "Business Technical Assistance Hub",
+  // Workforce & Talent Development
+  "Parker Dewey Micro-Internship Program",
+  "Workforce Development & Navigation",
+  // Community & Coalition-Based Work
+  "Local Health Equity Action Teams (LHEATs)",
+  "Coalition Leadership Roundtable",
+  // Media, Storytelling & Outreach
+  "Rural Connect Magazine",
+  // Investing in Communities
+  "Park & Community Space Upgrades",
+  "Cost Benefit & Feasibility Studies",
+  // Capital & Access to Funding
+  "Microloan Program",
+  // Emerging / Strategic Initiatives
+  "MAZK (Materials Alliance Zone of Kansas)",
 ];
 
 // Operational KPIs
 export const operationalKPIs = {
   activeClientsByProgram: {
-    "Business Catalyst": 45,
-    "Youth Mentorship": 32,
-    "Women Entrepreneurs": 28,
-    "Veterans Initiative": 19,
+    "RCP Small Business Mentorship Program": 45,
+    "SEED Micro-Grant Program": 28,
+    "Business Technical Assistance Hub": 32,
+    "Parker Dewey Micro-Internship Program": 24,
+    "Workforce Development & Navigation": 56,
+    "Local Health Equity Action Teams (LHEATs)": 45,
+    "Coalition Leadership Roundtable": 24,
+    "Rural Connect Magazine": 6000,
+    "Park & Community Space Upgrades": 0,
+    "Cost Benefit & Feasibility Studies": 8,
+    "Microloan Program": 0,
+    "MAZK (Materials Alliance Zone of Kansas)": 12,
   },
-  //  11 counties with realistic distribution
+  // 11 counties with realistic distribution
   clientsByCounty: {
     Linn: 24,
     Bourbon: 31,
@@ -70,13 +93,13 @@ export const sessionsPerMonth = [
 
 // Clients by program for bar chart
 export const clientsByProgramChart = [
-  { program: "Business Catalyst", clients: 45, fill: "var(--color-chart-1)" },
-  { program: "Youth Mentorship", clients: 32, fill: "var(--color-chart-2)" },
-  { program: "Women Entrepreneurs", clients: 28, fill: "var(--color-chart-3)" },
-  { program: "Veterans Initiative", clients: 19, fill: "var(--color-chart-4)" },
+  { program: "RCP Small Business Mentorship Program", clients: 45, fill: "var(--color-chart-1)" },
+  { program: "SEED Micro-Grant Program", clients: 28, fill: "var(--color-chart-2)" },
+  { program: "Business Technical Assistance Hub", clients: 32, fill: "var(--color-chart-3)" },
+  { program: "Parker Dewey Micro-Internship Program", clients: 24, fill: "var(--color-chart-4)" },
 ];
 
-// UPDATED: Clients by county for pie chart - 11 counties
+// Clients by county for pie chart - 11 counties
 export const clientsByCountyChart = [
   { county: "Linn", clients: 24, fill: "var(--color-chart-1)" },
   { county: "Bourbon", clients: 31, fill: "var(--color-chart-2)" },
@@ -91,12 +114,12 @@ export const clientsByCountyChart = [
   { county: "Greenwood", clients: 16, fill: "var(--color-chart-1)" },
 ];
 
-// UPDATED: Participants table data with new counties
+// Updated participants table data with new counties
 export const participants = [
   {
     id: "1",
     name: "Sarah Johnson",
-    program: "Business Catalyst",
+    program: "RCP Small Business Mentorship Program",
     county: "Bourbon",
     stage: "Active",
     mentor: "Michael Chen",
@@ -104,7 +127,7 @@ export const participants = [
   {
     id: "2",
     name: "James Williams",
-    program: "Youth Mentorship",
+    program: "Workforce Development & Navigation",
     county: "Linn",
     stage: "Onboarding",
     mentor: "Lisa Thompson",
@@ -112,7 +135,7 @@ export const participants = [
   {
     id: "3",
     name: "Maria Garcia",
-    program: "Women Entrepreneurs",
+    program: "SEED Micro-Grant Program",
     county: "Crawford",
     stage: "Active",
     mentor: "David Park",
@@ -120,7 +143,7 @@ export const participants = [
   {
     id: "4",
     name: "Robert Davis",
-    program: "Veterans Initiative",
+    program: "Business Technical Assistance Hub",
     county: "Cherokee",
     stage: "Completing",
     mentor: "Jennifer Lee",
@@ -128,7 +151,7 @@ export const participants = [
   {
     id: "5",
     name: "Emily Brown",
-    program: "Business Catalyst",
+    program: "Parker Dewey Micro-Internship Program",
     county: "Labette",
     stage: "Active",
     mentor: "Tom Anderson",
@@ -136,7 +159,7 @@ export const participants = [
   {
     id: "6",
     name: "Michael Martinez",
-    program: "Youth Mentorship",
+    program: "Local Health Equity Action Teams (LHEATs)",
     county: "Montgomery",
     stage: "Matched",
     mentor: "Susan White",
@@ -144,7 +167,7 @@ export const participants = [
   {
     id: "7",
     name: "Amanda Wilson",
-    program: "Women Entrepreneurs",
+    program: "Coalition Leadership Roundtable",
     county: "Woodson",
     stage: "Active",
     mentor: "Chris Taylor",
@@ -152,7 +175,7 @@ export const participants = [
   {
     id: "8",
     name: "Kevin Thomas",
-    program: "Veterans Initiative",
+    program: "Rural Connect Magazine",
     county: "Wilson",
     stage: "Alumni",
     mentor: "Rachel Green",
@@ -160,7 +183,7 @@ export const participants = [
   {
     id: "9",
     name: "Jessica Rodriguez",
-    program: "Business Catalyst",
+    program: "MAZK (Materials Alliance Zone of Kansas)",
     county: "Allen",
     stage: "Active",
     mentor: "Mark Johnson",
@@ -168,16 +191,15 @@ export const participants = [
   {
     id: "10",
     name: "Daniel Lee",
-    program: "Youth Mentorship",
+    program: "Cost Benefit & Feasibility Studies",
     county: "Neosho",
     stage: "Onboarding",
     mentor: "Amy Chen",
   },
-  // Added more participants to distribute across counties
   {
     id: "11",
     name: "Patricia Smith",
-    program: "Business Catalyst",
+    program: "RCP Small Business Mentorship Program",
     county: "Greenwood",
     stage: "Active",
     mentor: "Michael Chen",
@@ -185,7 +207,7 @@ export const participants = [
   {
     id: "12",
     name: "Thomas Brown",
-    program: "Veterans Initiative",
+    program: "Business Technical Assistance Hub",
     county: "Bourbon",
     stage: "Active",
     mentor: "Jennifer Lee",
@@ -193,7 +215,7 @@ export const participants = [
   {
     id: "13",
     name: "Jennifer Wilson",
-    program: "Women Entrepreneurs",
+    program: "SEED Micro-Grant Program",
     county: "Cherokee",
     stage: "Onboarding",
     mentor: "David Park",
@@ -201,7 +223,7 @@ export const participants = [
   {
     id: "14",
     name: "Charles Jones",
-    program: "Youth Mentorship",
+    program: "Workforce Development & Navigation",
     county: "Linn",
     stage: "Active",
     mentor: "Lisa Thompson",
@@ -209,7 +231,7 @@ export const participants = [
   {
     id: "15",
     name: "Linda Garcia",
-    program: "Business Catalyst",
+    program: "RCP Small Business Mentorship Program",
     county: "Neosho",
     stage: "Completing",
     mentor: "Tom Anderson",

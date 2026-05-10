@@ -8,6 +8,7 @@ import { ParticipantsTab } from "@/components/dashboard/participants-tab";
 import { MentorsTab } from "@/components/dashboard/mentors-tab";
 import { LeadershipTab } from "@/components/dashboard/leadership-tab";
 import { ReportsTab } from "@/components/dashboard/reports-tab";
+import { ResourcesTab } from "@/components/dashboard/resources-tab";
 import { SlidePanel } from "@/components/slide-panel";
 import { RoundtableSignupForm } from "@/components/roundtable-signup-form";
 import {
@@ -795,6 +796,7 @@ export default function DashboardPage() {
             onCloseSignup={() => setPanel(null)}
           />
         )}
+        {activeTab === "Resources" && <ResourcesTab />}
         {activeTab === "Reports" && (
           <ReportsTab
             profileName={profile.name}

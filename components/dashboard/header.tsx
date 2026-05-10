@@ -17,6 +17,7 @@ const navTabs = [
   "Participants",
   "Mentors",
   "Leadership Roundtable",
+  "Resources",
   "Reports",
 ];
 
@@ -56,7 +57,7 @@ export function Header({
           ))}
         </nav>
 
-        {/* Icon buttons — plain <button> tags, no shadcn dependency */}
+        {/* Icon buttons */}
         <div className="flex items-center gap-1 min-w-[120px] justify-end">
           <div className="relative">
             <button

@@ -176,7 +176,7 @@ export function LeadershipTab({
             <button
               onClick={() =>
                 alert(
-                  "Learn more about the Leadership Roundtable - More info coming soon!",
+                  `The Leadership Roundtable is where leaders across Southeast Kansas come together to take on adaptive challenges. By combining the Business Model Canvas with Kansas Leadership Center principles, we're aligning strategy, building leadership capacity, and creating real momentum across communities.`,
                 )
               }
               className="px-6 py-3 bg-emerald-500/30 text-white font-medium rounded-xl hover:bg-emerald-500/40 transition-all text-sm border border-white/20"
