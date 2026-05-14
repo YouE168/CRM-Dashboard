@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Header } from "@/components/dashboard/header";
 import { OverviewTab } from "@/components/dashboard/overview-tab";
 import { AnalyticsTab } from "@/components/dashboard/analytics-tab";
 import { ParticipantsTab } from "@/components/dashboard/participants-tab";
 import { MentorsTab } from "@/components/dashboard/mentors-tab";
 import { LeadershipTab } from "@/components/dashboard/leadership-tab";
-import { ReportsTab } from "@/components/dashboard/reports-tab";
 import { ResourcesTab } from "@/components/dashboard/resources-tab";
+import { ReportsTab } from "@/components/dashboard/reports-tab";
 import { SlidePanel } from "@/components/slide-panel";
 import { RoundtableSignupForm } from "@/components/roundtable-signup-form";
 import {
@@ -20,6 +21,7 @@ import {
   EyeOff,
   ChevronLeft,
   X,
+  LogOut,
 } from "lucide-react";
 
 type PanelType =
@@ -119,10 +121,22 @@ function PasswordInput({
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState("Overview");
   const [selectedProgram, setSelectedProgram] = useState("All Programs");
   const [selectedCounty, setSelectedCounty] = useState("All Counties");
   const [panel, setPanel] = useState<PanelType>(null);
+
+  // CHECK AUTHENTICATION - THIS IS THE KEY PART YOU WERE MISSING!
+  useEffect(() => {
+    const user = localStorage.getItem("currentUser");
+    if (!user) {
+      router.push("/login");
+    } else {
+      setIsAuthenticated(true);
+    }
+  }, [router]);
 
   // Notifications
   const [notifications, setNotifications] = useState<Notification[]>([
@@ -222,8 +236,11 @@ export default function DashboardPage() {
     }, 1200);
   };
 
-  const signOut = () => {
-    if (confirm("Are you sure you want to sign out?")) alert("Signed out!");
+  const handleLogout = () => {
+    if (confirm("Are you sure you want to sign out?")) {
+      localStorage.removeItem("currentUser");
+      router.push("/login");
+    }
   };
 
   // Team Notes
@@ -272,6 +289,15 @@ export default function DashboardPage() {
     setNotes((p) =>
       p.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)),
     );
+
+  // Show loading while checking authentication
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -331,7 +357,7 @@ export default function DashboardPage() {
         )}
       </SlidePanel>
 
-      {/* Settings Panel - Fully Functional */}
+      {/* Settings Panel*/}
       <SlidePanel
         open={panel === "settings"}
         onClose={() => setPanel(null)}
@@ -444,7 +470,7 @@ export default function DashboardPage() {
 
           <div className="border-t border-gray-100" />
 
-          {/* Appearance Settings */}
+          {/* Appearance Settings*/}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Appearance
@@ -455,42 +481,86 @@ export default function DashboardPage() {
                   <p className="text-sm font-medium text-gray-800">Dark mode</p>
                   <p className="text-xs text-gray-400">Switch to dark theme</p>
                 </div>
-                <Toggle
-                  value={settings.darkMode}
-                  onChange={(v) => updateSetting("darkMode", v)}
-                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newDarkMode = !settings.darkMode;
+                    updateSetting("darkMode", newDarkMode);
+                    if (newDarkMode) {
+                      document.documentElement.classList.add("dark");
+                    } else {
+                      document.documentElement.classList.remove("dark");
+                    }
+                  }}
+                  className={`w-11 h-6 rounded-full flex items-center px-1 transition-colors duration-200 ${
+                    settings.darkMode ? "bg-emerald-500" : "bg-gray-300"
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
+                      settings.darkMode ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-2">
                   Dashboard Layout
                 </label>
                 <div className="flex gap-3">
-                  {[
-                    { value: "compact", label: "Compact", icon: "▦" },
-                    { value: "comfortable", label: "Comfortable", icon: "▣" },
-                    { value: "spacious", label: "Spacious", icon: "◧" },
-                  ].map((layout) => (
-                    <button
-                      key={layout.value}
-                      onClick={() =>
-                        updateSetting("dashboardLayout", layout.value)
-                      }
-                      className={`flex-1 py-2 px-3 rounded-lg border text-sm transition-colors ${
-                        settings.dashboardLayout === layout.value
-                          ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <span className="text-lg mr-1">{layout.icon}</span>
-                      {layout.label}
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => {
+                      updateSetting("dashboardLayout", "compact");
+                      // Apply layout change (you can add CSS classes or zoom levels)
+                      document.body.style.zoom = "0.9";
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm transition-colors ${
+                      settings.dashboardLayout === "compact"
+                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <span className="text-lg mr-1">▦</span>
+                    Compact
+                  </button>
+                  <button
+                    onClick={() => {
+                      updateSetting("dashboardLayout", "comfortable");
+                      document.body.style.zoom = "1";
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm transition-colors ${
+                      settings.dashboardLayout === "comfortable"
+                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <span className="text-lg mr-1">▣</span>
+                    Comfortable
+                  </button>
+                  <button
+                    onClick={() => {
+                      updateSetting("dashboardLayout", "spacious");
+                      document.body.style.zoom = "1.1";
+                    }}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-sm transition-colors ${
+                      settings.dashboardLayout === "spacious"
+                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <span className="text-lg mr-1">◧</span>
+                    Spacious
+                  </button>
                 </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  Current layout:{" "}
+                  <span className="font-medium">
+                    {settings.dashboardLayout}
+                  </span>
+                </p>
               </div>
             </div>
           </div>
-
-          <div className="border-t border-gray-100" />
 
           {/* Security Settings */}
           <div>
@@ -530,14 +600,22 @@ export default function DashboardPage() {
             </h3>
             <div className="space-y-2">
               <button
-                onClick={() => alert("Exporting all data as CSV...")}
+                onClick={() =>
+                  alert(
+                    "Exporting all data as CSV...\n\nThis feature will be available soon.",
+                  )
+                }
                 className="w-full text-left px-3 py-2 text-sm text-gray-700 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-between"
               >
                 <span>Export all data (CSV)</span>
                 <span className="text-xs text-gray-400">↓</span>
               </button>
               <button
-                onClick={() => alert("Export participant data...")}
+                onClick={() =>
+                  alert(
+                    "Export participant data...\n\nThis feature will be available soon.",
+                  )
+                }
                 className="w-full text-left px-3 py-2 text-sm text-gray-700 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-between"
               >
                 <span>Export participant list</span>
@@ -580,7 +658,7 @@ export default function DashboardPage() {
               onClick={() => {
                 if (
                   confirm(
-                    "WARNING: This will clear all mock data. Are you absolutely sure?",
+                    "WARNING: This will clear all mock data. This action cannot be undone. Are you absolutely sure?",
                   )
                 ) {
                   alert("Data cleared. Refresh to see changes.");
@@ -609,7 +687,7 @@ export default function DashboardPage() {
         </div>
       </SlidePanel>
 
-      {/* Profile Panel */}
+      {/* Profile Panel with Logout */}
       <SlidePanel
         open={panel === "profile"}
         onClose={() => setPanel(null)}
@@ -644,10 +722,12 @@ export default function DashboardPage() {
           >
             Change Password
           </button>
+          <div className="border-t border-gray-100 my-2"></div>
           <button
-            onClick={signOut}
-            className="w-full text-left px-4 py-2.5 rounded-lg text-sm text-red-600 hover:bg-red-50"
+            onClick={handleLogout}
+            className="w-full text-left px-4 py-2.5 rounded-lg text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
           >
+            <LogOut className="h-4 w-4" />
             Sign Out
           </button>
         </div>
