@@ -1,18 +1,26 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { KPICard } from "./kpi-card";
 import { ParticipantsTable } from "./participants-table";
 import { Users, UserCheck, ClipboardList, Award } from "lucide-react";
 import { participants } from "@/lib/mock-data";
+import { loadCMSData } from "@/lib/cms-data";
 
 export function ParticipantsTab() {
+  const [cmsData, setCmsData] = useState(loadCMSData());
+
+  useEffect(() => {
+    setCmsData(loadCMSData());
+  }, []);
+
   return (
     <>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Participants</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {participants.length} total participants across all programs
+            {cmsData.participants.total} total participants across all programs
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -27,7 +35,12 @@ export function ParticipantsTab() {
                     : "bg-gray-100 text-gray-600"
               }`}
             >
-              {participants.filter((p) => p.stage === s).length} {s}
+              {s === "Active"
+                ? cmsData.participants.active
+                : s === "Onboarding"
+                  ? cmsData.participants.onboarding
+                  : cmsData.participants.alumni}{" "}
+              {s}
             </span>
           ))}
         </div>
@@ -35,28 +48,28 @@ export function ParticipantsTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KPICard
           title="Total Participants"
-          value={participants.length}
+          value={cmsData.participants.total}
           icon={Users}
         />
         <KPICard
           title="Active"
-          value={participants.filter((p) => p.stage === "Active").length}
+          value={cmsData.participants.active}
           icon={UserCheck}
           variant="success"
         />
         <KPICard
           title="In Onboarding"
-          value={participants.filter((p) => p.stage === "Onboarding").length}
+          value={cmsData.participants.onboarding}
           icon={ClipboardList}
           variant="warning"
         />
         <KPICard
           title="Alumni"
-          value={participants.filter((p) => p.stage === "Alumni").length}
+          value={cmsData.participants.alumni}
           icon={Award}
         />
       </div>
-      <ParticipantsTable />
+      <ParticipantsTable participants={participants} />
     </>
   );
 }

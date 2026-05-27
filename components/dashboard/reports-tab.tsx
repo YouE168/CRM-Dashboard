@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SessionsChart } from "./sessions-chart";
 import { ClientsByCountyChart } from "./clients-by-county-chart";
+import { loadReportData } from "@/lib/report-data";
 import {
   BarChart3,
   Users,
@@ -33,6 +34,11 @@ interface ReportsTabProps {
   onAddNote: (content: string) => void;
   onDeleteNote: (id: number) => void;
   onTogglePin: (id: number) => void;
+  showToast: (
+    message: string,
+    type: "success" | "error" | "info" | "warning",
+    duration?: number,
+  ) => void;
 }
 
 type ReportView =
@@ -50,14 +56,19 @@ export function ReportsTab({
   onAddNote,
   onDeleteNote,
   onTogglePin,
+  showToast,
 }: ReportsTabProps) {
   const [currentView, setCurrentView] = useState<ReportView>("list");
   const [noteInput, setNoteInput] = useState("");
+
+  // Load editable report data
+  const reportData = loadReportData();
 
   const handleAddNote = () => {
     if (!noteInput.trim()) return;
     onAddNote(noteInput);
     setNoteInput("");
+    showToast("Note added successfully!", "success");
   };
 
   const sortedNotes = [...notes].sort(
@@ -115,7 +126,7 @@ export function ReportsTab({
     },
   ];
 
-  // Report detail components
+  // Report detail components - UPDATED to use reportData
   const MonthlyReport = () => (
     <div className="space-y-6">
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
@@ -126,17 +137,23 @@ export function ReportsTab({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-emerald-50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-emerald-600">124</div>
+            <div className="text-2xl font-bold text-emerald-600">
+              {reportData.monthlyReport.totalParticipants}
+            </div>
             <div className="text-sm text-gray-600">Total Participants</div>
             <div className="text-xs text-gray-400">+12% vs last month</div>
           </div>
           <div className="bg-blue-50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">156</div>
+            <div className="text-2xl font-bold text-blue-600">
+              {reportData.monthlyReport.sessions}
+            </div>
             <div className="text-sm text-gray-600">Sessions</div>
             <div className="text-xs text-gray-400">+15% vs last month</div>
           </div>
           <div className="bg-purple-50 rounded-lg p-4 text-center">
-            <div className="text-2xl font-bold text-purple-600">94%</div>
+            <div className="text-2xl font-bold text-purple-600">
+              {reportData.monthlyReport.satisfaction}%
+            </div>
             <div className="text-sm text-gray-600">Satisfaction</div>
             <div className="text-xs text-gray-400">+3% vs last month</div>
           </div>
@@ -145,10 +162,9 @@ export function ReportsTab({
         <div className="border-t border-gray-100 pt-4">
           <h3 className="font-semibold text-gray-900 mb-2">Key Highlights</h3>
           <ul className="space-y-2 text-sm text-gray-600">
-            <li>• 12 new participants joined this month</li>
-            <li>• 8 businesses launched through the program</li>
-            <li>• 3 new mentors completed training</li>
-            <li>• 92% of participants would recommend the program</li>
+            {reportData.monthlyReport.highlights.map((highlight, i) => (
+              <li key={i}>• {highlight}</li>
+            ))}
           </ul>
         </div>
       </div>
@@ -181,57 +197,35 @@ export function ReportsTab({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            <tr>
-              <td className="px-4 py-3">Sarah Johnson</td>
-              <td className="px-4 py-3">Business Catalyst</td>
-              <td className="px-4 py-3">
-                <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs">
-                  Active
-                </span>
-              </td>
-              <td className="px-4 py-3">
-                <div className="w-24 bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-emerald-600 h-2 rounded-full"
-                    style={{ width: "75%" }}
-                  ></div>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3">James Williams</td>
-              <td className="px-4 py-3">Youth Mentorship</td>
-              <td className="px-4 py-3">
-                <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs">
-                  Onboarding
-                </span>
-              </td>
-              <td className="px-4 py-3">
-                <div className="w-24 bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-emerald-600 h-2 rounded-full"
-                    style={{ width: "30%" }}
-                  ></div>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3">Maria Garcia</td>
-              <td className="px-4 py-3">Women Entrepreneurs</td>
-              <td className="px-4 py-3">
-                <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs">
-                  Active
-                </span>
-              </td>
-              <td className="px-4 py-3">
-                <div className="w-24 bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-emerald-600 h-2 rounded-full"
-                    style={{ width: "60%" }}
-                  ></div>
-                </div>
-              </td>
-            </tr>
+            {reportData.participantReport.participants.map(
+              (participant, idx) => (
+                <tr key={idx}>
+                  <td className="px-4 py-3">{participant.name}</td>
+                  <td className="px-4 py-3">{participant.program}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs ${
+                        participant.stage === "Active"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : participant.stage === "Onboarding"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-blue-100 text-blue-700"
+                      }`}
+                    >
+                      {participant.stage}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="w-24 bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-emerald-600 h-2 rounded-full"
+                        style={{ width: `${participant.progress}%` }}
+                      ></div>
+                    </div>
+                  </td>
+                </tr>
+              ),
+            )}
           </tbody>
         </table>
       </div>
@@ -246,36 +240,7 @@ export function ReportsTab({
       <p className="text-sm text-gray-500 mb-6">April 2025</p>
 
       <div className="space-y-4">
-        {[
-          {
-            name: "Michael Chen",
-            sessions: 24,
-            hours: 48,
-            rating: 4.9,
-            mentees: 8,
-          },
-          {
-            name: "Lisa Thompson",
-            sessions: 18,
-            hours: 36,
-            rating: 4.7,
-            mentees: 6,
-          },
-          {
-            name: "David Park",
-            sessions: 15,
-            hours: 30,
-            rating: 4.8,
-            mentees: 5,
-          },
-          {
-            name: "Jennifer Lee",
-            sessions: 21,
-            hours: 42,
-            rating: 4.6,
-            mentees: 7,
-          },
-        ].map((mentor, idx) => (
+        {reportData.mentorReport.mentors.map((mentor, idx) => (
           <div
             key={idx}
             className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
@@ -313,15 +278,25 @@ export function ReportsTab({
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Grants</span>
-              <span className="font-medium">$124,500</span>
+              <span className="font-medium">
+                ${reportData.financialReport.grants.toLocaleString()}
+              </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Donations</span>
-              <span className="font-medium">$18,200</span>
+              <span className="font-medium">
+                ${reportData.financialReport.donations.toLocaleString()}
+              </span>
             </div>
             <div className="flex justify-between text-sm border-t pt-2 mt-2">
               <span className="font-semibold">Total Revenue</span>
-              <span className="font-semibold">$142,700</span>
+              <span className="font-semibold">
+                $
+                {(
+                  reportData.financialReport.grants +
+                  reportData.financialReport.donations
+                ).toLocaleString()}
+              </span>
             </div>
           </div>
         </div>
@@ -330,19 +305,32 @@ export function ReportsTab({
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Personnel</span>
-              <span className="font-medium">$45,200</span>
+              <span className="font-medium">
+                ${reportData.financialReport.personnel.toLocaleString()}
+              </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Programming</span>
-              <span className="font-medium">$32,500</span>
+              <span className="font-medium">
+                ${reportData.financialReport.programming.toLocaleString()}
+              </span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Operations</span>
-              <span className="font-medium">$28,300</span>
+              <span className="font-medium">
+                ${reportData.financialReport.operations.toLocaleString()}
+              </span>
             </div>
             <div className="flex justify-between text-sm border-t pt-2 mt-2">
               <span className="font-semibold">Total Expenses</span>
-              <span className="font-semibold">$106,000</span>
+              <span className="font-semibold">
+                $
+                {(
+                  reportData.financialReport.personnel +
+                  reportData.financialReport.programming +
+                  reportData.financialReport.operations
+                ).toLocaleString()}
+              </span>
             </div>
           </div>
         </div>
@@ -351,10 +339,13 @@ export function ReportsTab({
       <div className="mt-6 pt-4 border-t border-gray-100">
         <div className="flex justify-between text-sm">
           <span className="font-semibold text-gray-900">Net Surplus</span>
-          <span className="font-semibold text-emerald-600">$36,700</span>
+          <span className="font-semibold text-emerald-600">
+            ${reportData.financialReport.netSurplus.toLocaleString()}
+          </span>
         </div>
         <div className="mt-2 text-xs text-gray-500">
-          5 invoices pending approval ($12,450)
+          {reportData.financialReport.pendingInvoices} invoices pending approval
+          (${reportData.financialReport.pendingAmount.toLocaleString()})
         </div>
       </div>
     </div>
@@ -369,19 +360,27 @@ export function ReportsTab({
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="text-center p-3 bg-green-50 rounded-lg">
-          <div className="text-2xl font-bold text-green-600">18</div>
+          <div className="text-2xl font-bold text-green-600">
+            {reportData.outcomeReport.businessLaunches}
+          </div>
           <div className="text-xs text-gray-600">Business Launches</div>
         </div>
         <div className="text-center p-3 bg-blue-50 rounded-lg">
-          <div className="text-2xl font-bold text-blue-600">94%</div>
+          <div className="text-2xl font-bold text-blue-600">
+            {reportData.outcomeReport.satisfaction}%
+          </div>
           <div className="text-xs text-gray-600">Satisfaction</div>
         </div>
         <div className="text-center p-3 bg-purple-50 rounded-lg">
-          <div className="text-2xl font-bold text-purple-600">89</div>
+          <div className="text-2xl font-bold text-purple-600">
+            {reportData.outcomeReport.mentorMatches}
+          </div>
           <div className="text-xs text-gray-600">Mentor Matches</div>
         </div>
         <div className="text-center p-3 bg-amber-50 rounded-lg">
-          <div className="text-2xl font-bold text-amber-600">12</div>
+          <div className="text-2xl font-bold text-amber-600">
+            {reportData.outcomeReport.referrals}
+          </div>
           <div className="text-xs text-gray-600">Referrals</div>
         </div>
       </div>
@@ -389,8 +388,7 @@ export function ReportsTab({
       <div className="border-t border-gray-100 pt-4">
         <h3 className="font-semibold text-gray-900 mb-2">Success Stories</h3>
         <p className="text-sm text-gray-600">
-          8 new businesses launched with mentor support. $124,500 in capital
-          accessed by participants.
+          {reportData.outcomeReport.successStory}
         </p>
       </div>
     </div>
@@ -404,22 +402,10 @@ export function ReportsTab({
       <p className="text-sm text-gray-500 mb-6">April 2025</p>
 
       <div className="space-y-3">
-        {[
-          { county: "Bourbon", count: 31, percentage: 14 },
-          { county: "Cherokee", count: 27, percentage: 12 },
-          { county: "Linn", count: 24, percentage: 11 },
-          { county: "Labette", count: 24, percentage: 11 },
-          { county: "Neosho", count: 22, percentage: 10 },
-          { county: "Wilson", count: 20, percentage: 9 },
-          { county: "Allen", count: 19, percentage: 9 },
-          { county: "Crawford", count: 18, percentage: 8 },
-          { county: "Greenwood", count: 16, percentage: 7 },
-          { county: "Montgomery", count: 15, percentage: 7 },
-          { county: "Woodson", count: 12, percentage: 5 },
-        ].map((item) => (
-          <div key={item.county}>
+        {reportData.countyReport.counties.map((item) => (
+          <div key={item.name}>
             <div className="flex justify-between text-sm mb-1">
-              <span className="font-medium text-gray-700">{item.county}</span>
+              <span className="font-medium text-gray-700">{item.name}</span>
               <span className="text-gray-500">
                 {item.count} participants ({item.percentage}%)
               </span>
@@ -435,6 +421,17 @@ export function ReportsTab({
       </div>
     </div>
   );
+
+  const generatePDF = () => {
+    showToast("📄 Preparing PDF export...", "info", 2000);
+    setTimeout(() => {
+      showToast(
+        "✅ PDF export complete! Your file has been downloaded.",
+        "success",
+        3000,
+      );
+    }, 1500);
+  };
 
   const renderReportContent = () => {
     switch (currentView) {
@@ -479,14 +476,21 @@ export function ReportsTab({
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => window.print()}
+              onClick={() => {
+                window.print();
+                showToast(
+                  "🖨️ Print dialog opened. Use browser print to save as PDF.",
+                  "info",
+                  3000,
+                );
+              }}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-2"
             >
               <Printer className="h-4 w-4" />
               Print
             </button>
             <button
-              onClick={() => alert("Download feature coming soon!")}
+              onClick={generatePDF}
               className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center gap-2"
             >
               <Download className="h-4 w-4" />

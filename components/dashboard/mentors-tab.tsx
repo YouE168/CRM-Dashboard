@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { KPICard } from "./kpi-card";
 import { Users, UserCheck, Heart, Award } from "lucide-react";
+import { loadCMSData } from "@/lib/cms-data";
 
 const mentors = [
   {
@@ -76,33 +78,43 @@ function initials(name: string) {
 }
 
 export function MentorsTab() {
+  const [cmsData, setCmsData] = useState(loadCMSData());
+
+  useEffect(() => {
+    setCmsData(loadCMSData());
+  }, []);
+
   return (
     <>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Mentors</h1>
         <p className="text-sm text-gray-500 mt-1">
-          {mentors.length} mentors ·{" "}
-          {mentors.filter((m) => m.status === "Active").length} currently active
+          {cmsData.mentors.total} mentors · {cmsData.mentors.active} currently
+          active
         </p>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KPICard title="Total Mentors" value={mentors.length} icon={Users} />
+        <KPICard
+          title="Total Mentors"
+          value={cmsData.mentors.total}
+          icon={Users}
+        />
         <KPICard
           title="Active Mentors"
-          value={mentors.filter((m) => m.status === "Active").length}
+          value={cmsData.mentors.active}
           icon={UserCheck}
           variant="success"
         />
         <KPICard
           title="Active Matches"
-          value={89}
+          value={cmsData.mentors.activeMatches}
           icon={Heart}
-          trend={{ value: 8, isPositive: true }}
+          trend={{ value: cmsData.mentors.matchesTrend, isPositive: true }}
           subtitle="paired"
         />
         <KPICard
           title="Avg. Rating"
-          value="4.7★"
+          value={`${cmsData.mentors.avgRating}★`}
           icon={Award}
           variant="success"
         />

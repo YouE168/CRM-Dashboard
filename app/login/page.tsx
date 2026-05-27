@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Mail, Lock, CheckCircle, Building2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, CheckCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,6 +12,35 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
+
+  // Function to track login for state reports
+  const trackLogin = (email: string) => {
+    const loginHistory = JSON.parse(
+      localStorage.getItem("loginHistory") || "[]",
+    );
+    loginHistory.push({
+      email: email,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      loginDate: new Date().toLocaleDateString(),
+      loginTime: new Date().toLocaleTimeString(),
+    });
+    localStorage.setItem("loginHistory", JSON.stringify(loginHistory));
+  };
+
+  // Function to create profile for regular users
+  const createUserProfile = (email: string) => {
+    if (email !== "admin@ruralcommunity.org") {
+      const userName = email.split("@")[0];
+      const displayName = userName.charAt(0).toUpperCase() + userName.slice(1);
+      const userProfile = {
+        name: displayName,
+        email: email,
+        role: "Staff",
+      };
+      localStorage.setItem(`profile_${email}`, JSON.stringify(userProfile));
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +69,12 @@ export default function LoginPage() {
         user ||
         (email === "admin@ruralcommunity.org" && password === "admin123")
       ) {
+        // Track this login for state reports
+        trackLogin(email);
+
+        // Create profile for regular users
+        createUserProfile(email);
+
         localStorage.setItem("currentUser", email);
         router.push("/");
       } else {

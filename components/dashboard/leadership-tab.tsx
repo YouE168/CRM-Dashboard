@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { KPICard } from "./kpi-card";
+import { AddActionModal } from "@/components/ui/add-action-modal";
+import { loadCMSData } from "@/lib/cms-data";
 import {
   Users,
   CalendarDays,
@@ -25,6 +27,11 @@ interface LeadershipTabProps {
   onOpenSignup: () => void;
   isSignupOpen: boolean;
   onCloseSignup: () => void;
+  showToast: (
+    message: string,
+    type: "success" | "error" | "info" | "warning",
+    duration?: number,
+  ) => void;
 }
 
 export function LeadershipTab({
@@ -33,6 +40,7 @@ export function LeadershipTab({
   onOpenSignup,
   isSignupOpen,
   onCloseSignup,
+  showToast,
 }: LeadershipTabProps) {
   const [actionItems, setActionItems] = useState<ActionItemType[]>([
     {
@@ -61,9 +69,12 @@ export function LeadershipTab({
     },
   ]);
 
-  // Signups and Resources state
-  const [totalMembers] = useState(24);
-  const [newSignups] = useState(8);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [cmsData, setCmsData] = useState(loadCMSData());
+
+  useEffect(() => {
+    setCmsData(loadCMSData());
+  }, []);
 
   const toggleActionItemStatus = (index: number) => {
     setActionItems((prev) =>
@@ -76,10 +87,17 @@ export function LeadershipTab({
         return item;
       }),
     );
+    showToast(
+      actionItems[index].status === "completed"
+        ? "Task marked as incomplete"
+        : "Task marked as complete!",
+      "success",
+    );
   };
 
   const deleteActionItem = (index: number) => {
     setActionItems((prev) => prev.filter((_, i) => i !== index));
+    showToast("Action item deleted", "info");
   };
 
   const addActionItem = (task: string) => {
@@ -93,6 +111,7 @@ export function LeadershipTab({
       status: "pending",
     };
     setActionItems((prev) => [...prev, newItem]);
+    showToast(`✅ Action item added: "${task}"`, "success");
   };
 
   const pastMeetings = [
@@ -124,10 +143,26 @@ export function LeadershipTab({
   ];
 
   const resources = [
-    { name: "Roundtable Charter", icon: "📋" },
-    { name: "Meeting Minutes Archive", icon: "📝" },
-    { name: "Annual Impact Report", icon: "📊" },
-    { name: "Strategic Plan 2026", icon: "🎯" },
+    {
+      name: "Roundtable Charter",
+      icon: "📋",
+      description: "Leadership Roundtable governing document",
+    },
+    {
+      name: "Meeting Minutes Archive",
+      icon: "📝",
+      description: "Past meeting notes and summaries",
+    },
+    {
+      name: "Annual Impact Report",
+      icon: "📊",
+      description: "Yearly performance and outcomes report",
+    },
+    {
+      name: "Strategic Plan 2026",
+      icon: "🎯",
+      description: "Annual goals and strategic initiatives",
+    },
   ];
 
   return (
@@ -174,11 +209,13 @@ export function LeadershipTab({
               Apply to Join →
             </button>
             <button
-              onClick={() =>
-                alert(
-                  `The Leadership Roundtable is where leaders across Southeast Kansas come together to take on adaptive challenges. By combining the Business Model Canvas with Kansas Leadership Center principles, we're aligning strategy, building leadership capacity, and creating real momentum across communities.`,
-                )
-              }
+              onClick={() => {
+                showToast(
+                  "The Leadership Roundtable is where leaders across Southeast Kansas come together to take on adaptive challenges. By combining the Business Model Canvas with Kansas Leadership Center principles, we're aligning strategy, building leadership capacity, and creating real momentum across communities.",
+                  "info",
+                  8000,
+                );
+              }}
               className="px-6 py-3 bg-emerald-500/30 text-white font-medium rounded-xl hover:bg-emerald-500/40 transition-all text-sm border border-white/20"
             >
               Learn More
@@ -187,27 +224,30 @@ export function LeadershipTab({
         </div>
       </div>
 
-      {/* SIGNUPS STATS ROW - New */}
+      {/* SIGNUPS STATS ROW - Using CMS Data */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <KPICard
           title="Total Members"
-          value={totalMembers}
+          value={cmsData.leadership.totalMembers}
           icon={Users}
-          trend={{ value: 8, isPositive: true }}
+          trend={{ value: cmsData.leadership.membersTrend, isPositive: true }}
           subtitle="active members"
         />
         <KPICard
           title="New Signups"
-          value={newSignups}
+          value={cmsData.leadership.newSignups}
           icon={Users}
-          trend={{ value: 12, isPositive: true }}
+          trend={{ value: cmsData.leadership.signupsTrend, isPositive: true }}
           subtitle="this month"
         />
         <KPICard
           title="Avg. Attendance"
-          value="87%"
+          value={`${cmsData.leadership.avgAttendance}%`}
           icon={CalendarDays}
-          trend={{ value: 5, isPositive: true }}
+          trend={{
+            value: cmsData.leadership.attendanceTrend,
+            isPositive: true,
+          }}
           subtitle="per session"
         />
         <KPICard
@@ -221,14 +261,17 @@ export function LeadershipTab({
         />
         <KPICard
           title="Member Satisfaction"
-          value="96%"
+          value={`${cmsData.leadership.memberSatisfaction}%`}
           icon={Award}
-          trend={{ value: 2, isPositive: true }}
+          trend={{
+            value: cmsData.leadership.satisfactionTrend,
+            isPositive: true,
+          }}
           subtitle="positive rating"
         />
       </div>
 
-      {/* RESOURCES INVESTED SECTION - New */}
+      {/* RESOURCES INVESTED SECTION - Using CMS Data */}
       <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white">
           <div className="flex items-center gap-2">
@@ -242,23 +285,29 @@ export function LeadershipTab({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-emerald-600">
-                $124,500
+                ${cmsData.leadership.grantFunding.toLocaleString()}
               </div>
               <div className="text-xs text-gray-500 mt-1">Grant Funding</div>
               <div className="text-[10px] text-gray-400 mt-0.5">FY 2026</div>
             </div>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-emerald-600">312</div>
+              <div className="text-2xl font-bold text-emerald-600">
+                {cmsData.leadership.mentorHours}
+              </div>
               <div className="text-xs text-gray-500 mt-1">Mentor Hours</div>
               <div className="text-[10px] text-gray-400 mt-0.5">YTD</div>
             </div>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-emerald-600">8</div>
+              <div className="text-2xl font-bold text-emerald-600">
+                {cmsData.leadership.staffMembers}
+              </div>
               <div className="text-xs text-gray-500 mt-1">Staff Members</div>
               <div className="text-[10px] text-gray-400 mt-0.5">Dedicated</div>
             </div>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-emerald-600">$18,200</div>
+              <div className="text-2xl font-bold text-emerald-600">
+                ${cmsData.leadership.inKindSupport.toLocaleString()}
+              </div>
               <div className="text-xs text-gray-500 mt-1">In-Kind Support</div>
               <div className="text-[10px] text-gray-400 mt-0.5">
                 Venue + Materials
@@ -270,30 +319,40 @@ export function LeadershipTab({
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="text-gray-600">Budget Utilization</span>
-              <span className="text-gray-900 font-medium">68%</span>
+              <span className="text-gray-900 font-medium">
+                {cmsData.leadership.budgetUtilization}%
+              </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className="bg-emerald-600 h-2 rounded-full"
-                style={{ width: "68%" }}
+                style={{ width: `${cmsData.leadership.budgetUtilization}%` }}
               ></div>
             </div>
             <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
               <div className="flex justify-between">
                 <span className="text-gray-500">Personnel:</span>
-                <span className="font-medium">$45,200</span>
+                <span className="font-medium">
+                  ${cmsData.leadership.personnelCost.toLocaleString()}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Programming:</span>
-                <span className="font-medium">$32,500</span>
+                <span className="font-medium">
+                  ${cmsData.leadership.programmingCost.toLocaleString()}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Operations:</span>
-                <span className="font-medium">$28,300</span>
+                <span className="font-medium">
+                  ${cmsData.leadership.operationsCost.toLocaleString()}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Marketing:</span>
-                <span className="font-medium">$18,500</span>
+                <span className="font-medium">
+                  ${cmsData.leadership.marketingCost.toLocaleString()}
+                </span>
               </div>
             </div>
           </div>
@@ -352,7 +411,10 @@ export function LeadershipTab({
                 </div>
                 <button
                   onClick={() =>
-                    alert("Meeting link will be available on May 15, 2026")
+                    showToast(
+                      "Meeting link will be available on May 15, 2026. You will receive an email with the Zoom link 1 hour before the meeting.",
+                      "info",
+                    )
                   }
                   className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
                 >
@@ -404,13 +466,10 @@ export function LeadershipTab({
             </div>
             <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
               <button
-                onClick={() => {
-                  const newTask = prompt("Enter new action item:");
-                  if (newTask) addActionItem(newTask);
-                }}
-                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+                onClick={() => setIsAddModalOpen(true)}
+                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
               >
-                + Add Action Item
+                <span className="text-lg">+</span> Add Action Item
               </button>
             </div>
           </div>
@@ -447,7 +506,12 @@ export function LeadershipTab({
                     </div>
                   </div>
                   <button
-                    onClick={() => alert(`Viewing notes for: ${meeting.title}`)}
+                    onClick={() =>
+                      showToast(
+                        `📄 ${meeting.title}\n\nMeeting minutes and presentation slides are available. Contact the coordinator for access.`,
+                        "info",
+                      )
+                    }
                     className="text-sm text-emerald-600 hover:text-emerald-700"
                   >
                     {meeting.notes ? "View Notes" : "Minutes"}
@@ -523,7 +587,12 @@ export function LeadershipTab({
             </div>
             <div className="px-5 py-3 border-t border-gray-100">
               <button
-                onClick={() => alert("Full member directory coming soon!")}
+                onClick={() =>
+                  showToast(
+                    "Full member directory coming soon! You'll be able to view all Leadership Roundtable members and their contact information.",
+                    "info",
+                  )
+                }
                 className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
               >
                 View All Members →
@@ -540,17 +609,32 @@ export function LeadershipTab({
               {resources.map((res, idx) => (
                 <button
                   key={idx}
-                  onClick={() => alert(`Opening: ${res.name}`)}
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                  onClick={() =>
+                    showToast(
+                      `📁 ${res.name}\n\n${res.description}\n\nThis resource will be available for download soon.`,
+                      "info",
+                    )
+                  }
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2 transition-colors"
                 >
                   <span className="text-lg">{res.icon}</span>
-                  <span className="text-sm text-gray-700">{res.name}</span>
+                  <div className="flex-1">
+                    <span className="text-sm text-gray-700">{res.name}</span>
+                    <p className="text-xs text-gray-400">{res.description}</p>
+                  </div>
                 </button>
               ))}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Add Action Modal */}
+      <AddActionModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onAdd={addActionItem}
+      />
     </>
   );
 }

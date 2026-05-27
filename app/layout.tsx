@@ -3,13 +3,12 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const geist = Geist({ subsets: ["latin"] });
+const geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Mentoring Dashboard | Rural Community Partners",
+  title: "Rural Community Partners | Mentoring Dashboard",
   description: "Analytics dashboard for mentoring program management",
-  generator: "v0.app",
   icons: {
     icon: [
       {
@@ -23,6 +22,10 @@ export const metadata: Metadata = {
       {
         url: "/icon.svg",
         type: "image/svg+xml",
+      },
+      {
+        url: "/logo.png",
+        type: "image/png",
       },
     ],
     apple: "/apple-icon.png",

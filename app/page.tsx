@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { participants } from "@/lib/mock-data";
+import { ToastNotification } from "@/components/ui/toast-notification";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/dashboard/header";
 import { OverviewTab } from "@/components/dashboard/overview-tab";
-import { AnalyticsTab } from "@/components/dashboard/analytics-tab";
+import AnalyticsTab from "@/components/dashboard/analytics-tab";
 import { ParticipantsTab } from "@/components/dashboard/participants-tab";
 import { MentorsTab } from "@/components/dashboard/mentors-tab";
 import { LeadershipTab } from "@/components/dashboard/leadership-tab";
@@ -12,6 +14,7 @@ import { ResourcesTab } from "@/components/dashboard/resources-tab";
 import { ReportsTab } from "@/components/dashboard/reports-tab";
 import { SlidePanel } from "@/components/slide-panel";
 import { RoundtableSignupForm } from "@/components/roundtable-signup-form";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import {
   Bell,
   Settings,
@@ -22,6 +25,7 @@ import {
   ChevronLeft,
   X,
   LogOut,
+  Camera,
 } from "lucide-react";
 
 type PanelType =
@@ -44,6 +48,7 @@ interface ProfileData {
   name: string;
   email: string;
   role: string;
+  avatar?: string;
 }
 
 interface SettingsData {
@@ -62,6 +67,21 @@ interface TeamNote {
   content: string;
   time: string;
   pinned: boolean;
+}
+
+interface ToastState {
+  message: string;
+  type: "success" | "error" | "info" | "warning";
+  visible: boolean;
+  duration?: number;
+}
+
+interface ConfirmModalState {
+  isOpen: boolean;
+  type: "danger" | "warning" | "info";
+  title: string;
+  message: string;
+  onConfirm: () => void;
 }
 
 // Toggle component
@@ -127,8 +147,56 @@ export default function DashboardPage() {
   const [selectedProgram, setSelectedProgram] = useState("All Programs");
   const [selectedCounty, setSelectedCounty] = useState("All Counties");
   const [panel, setPanel] = useState<PanelType>(null);
+  const [selectedDateRange, setSelectedDateRange] = useState("Last 12 months");
 
-  // CHECK AUTHENTICATION - THIS IS THE KEY PART YOU WERE MISSING!
+  // Toast notification state
+  const [toast, setToast] = useState<ToastState>({
+    message: "",
+    type: "info",
+    visible: false,
+  });
+
+  // Confirmation modal state
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState>({
+    isOpen: false,
+    type: "warning",
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
+  const showToast = (
+    message: string,
+    type: "success" | "error" | "info" | "warning" = "info",
+    duration?: number,
+  ) => {
+    setToast({ message, type, visible: true, duration });
+  };
+
+  const hideToast = () => {
+    setToast({ message: "", type: "info", visible: false });
+  };
+
+  const showConfirmModal = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    type: "danger" | "warning" | "info" = "warning",
+  ) => {
+    setConfirmModal({
+      isOpen: true,
+      type,
+      title,
+      message,
+      onConfirm,
+    });
+  };
+
+  const hideConfirmModal = () => {
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  // CHECK AUTHENTICATION
   useEffect(() => {
     const user = localStorage.getItem("currentUser");
     if (!user) {
@@ -137,6 +205,34 @@ export default function DashboardPage() {
       setIsAuthenticated(true);
     }
   }, [router]);
+
+  // LOAD USER PROFILE FROM LOCALSTORAGE
+  useEffect(() => {
+    const currentUser = localStorage.getItem("currentUser");
+    if (currentUser) {
+      const savedProfile = localStorage.getItem(`profile_${currentUser}`);
+      if (savedProfile) {
+        const parsedProfile = JSON.parse(savedProfile);
+        setProfile(parsedProfile);
+        setEditForm(parsedProfile);
+      } else if (currentUser !== "admin@ruralcommunity.org") {
+        const userName = currentUser.split("@")[0];
+        const displayName =
+          userName.charAt(0).toUpperCase() + userName.slice(1);
+        const newProfile = {
+          name: displayName,
+          email: currentUser,
+          role: "Staff",
+        };
+        setProfile(newProfile);
+        setEditForm(newProfile);
+        localStorage.setItem(
+          `profile_${currentUser}`,
+          JSON.stringify(newProfile),
+        );
+      }
+    }
+  }, []);
 
   // Notifications
   const [notifications, setNotifications] = useState<Notification[]>([
@@ -186,12 +282,17 @@ export default function DashboardPage() {
     setSettings((p) => ({ ...p, [key]: value }));
     setSettingsSaved(false);
     if (key === "darkMode" && typeof value === "boolean") {
-      document.documentElement.classList.toggle("dark", value);
+      if (value) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
     }
   };
 
   const saveSettings = () => {
     setSettingsSaved(true);
+    showToast("Settings saved successfully!", "success");
     setTimeout(() => setSettingsSaved(false), 2000);
   };
 
@@ -213,7 +314,13 @@ export default function DashboardPage() {
 
   const saveProfile = () => {
     setProfile(editForm);
+    // Save profile for this specific user
+    const currentUser = localStorage.getItem("currentUser");
+    if (currentUser) {
+      localStorage.setItem(`profile_${currentUser}`, JSON.stringify(editForm));
+    }
     setEditSaved(true);
+    showToast("Profile updated successfully!", "success");
     setTimeout(() => {
       setEditSaved(false);
       setPanel("profile");
@@ -229,6 +336,7 @@ export default function DashboardPage() {
     if (passwords.newPass !== passwords.confirm)
       return setPasswordError("Passwords do not match.");
     setPasswordSaved(true);
+    showToast("Password updated successfully!", "success");
     setPasswords({ current: "", newPass: "", confirm: "" });
     setTimeout(() => {
       setPasswordSaved(false);
@@ -237,10 +345,15 @@ export default function DashboardPage() {
   };
 
   const handleLogout = () => {
-    if (confirm("Are you sure you want to sign out?")) {
-      localStorage.removeItem("currentUser");
-      router.push("/login");
-    }
+    showConfirmModal(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      () => {
+        localStorage.removeItem("currentUser");
+        router.push("/login");
+      },
+      "warning",
+    );
   };
 
   // Team Notes
@@ -255,14 +368,6 @@ export default function DashboardPage() {
     },
     {
       id: 2,
-      author: "Lisa Thompson",
-      content:
-        "James Williams completed onboarding — ready to be matched with a mentor.",
-      time: "Today 8:30 AM",
-      pinned: false,
-    },
-    {
-      id: 3,
       author: "Michael Chen",
       content:
         "Reminder: Q1 outcome metrics review call is scheduled for Friday at 2pm.",
@@ -282,13 +387,32 @@ export default function DashboardPage() {
       },
       ...p,
     ]);
+    showToast("Note added successfully!", "success");
   };
-  const deleteNote = (id: number) =>
+  const deleteNote = (id: number) => {
     setNotes((p) => p.filter((n) => n.id !== id));
+    showToast("Note deleted", "info");
+  };
   const togglePin = (id: number) =>
     setNotes((p) =>
       p.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)),
     );
+
+  // Apply saved settings on load
+  useEffect(() => {
+    if (settings.darkMode) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    if (settings.dashboardLayout === "compact") {
+      document.body.style.zoom = "0.9";
+    } else if (settings.dashboardLayout === "spacious") {
+      document.body.style.zoom = "1.1";
+    } else {
+      document.body.style.zoom = "1";
+    }
+  }, []);
 
   // Show loading while checking authentication
   if (!isAuthenticated) {
@@ -308,6 +432,29 @@ export default function DashboardPage() {
         onNotifications={() => setPanel("notifications")}
         onSettings={() => setPanel("settings")}
         onProfile={() => setPanel("profile")}
+      />
+
+      {/* Toast Notification */}
+      {toast.visible && (
+        <ToastNotification
+          message={toast.message}
+          type={toast.type}
+          duration={toast.duration}
+          onClose={hideToast}
+        />
+      )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        onConfirm={() => {
+          confirmModal.onConfirm();
+          hideConfirmModal();
+        }}
+        onCancel={hideConfirmModal}
       />
 
       {/* Notifications Panel */}
@@ -357,7 +504,7 @@ export default function DashboardPage() {
         )}
       </SlidePanel>
 
-      {/* Settings Panel*/}
+      {/* Settings Panel */}
       <SlidePanel
         open={panel === "settings"}
         onClose={() => setPanel(null)}
@@ -419,6 +566,42 @@ export default function DashboardPage() {
 
           <div className="border-t border-gray-100" />
 
+          {/* Content Management - Admin Only */}
+          <div className="border-t border-gray-100" />
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              📝 Content Management
+            </h3>
+            <p className="text-xs text-gray-500 mb-3">
+              Central dashboard to manage all website content and data
+            </p>
+            <button
+              onClick={() => router.push("/admin/cms-editor")}
+              className="w-full text-left px-3 py-2 text-sm text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-medium">
+                  Manage All Dashboard Content (Admin Only) →
+                </span>
+              </div>
+            </button>
+          </div>
+
+          {/* User Activity - Login History (Admin Only) */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              👥 User Activity
+            </h3>
+            <button
+              onClick={() => router.push("/admin/login-history")}
+              className="w-full text-left px-3 py-2 text-sm text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              📊 View Login History (Admin Only) →
+            </button>
+          </div>
+
+          <div className="border-t border-gray-100" />
+
           {/* Notification Settings */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
@@ -470,7 +653,7 @@ export default function DashboardPage() {
 
           <div className="border-t border-gray-100" />
 
-          {/* Appearance Settings*/}
+          {/* Appearance Settings */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Appearance
@@ -481,27 +664,10 @@ export default function DashboardPage() {
                   <p className="text-sm font-medium text-gray-800">Dark mode</p>
                   <p className="text-xs text-gray-400">Switch to dark theme</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newDarkMode = !settings.darkMode;
-                    updateSetting("darkMode", newDarkMode);
-                    if (newDarkMode) {
-                      document.documentElement.classList.add("dark");
-                    } else {
-                      document.documentElement.classList.remove("dark");
-                    }
-                  }}
-                  className={`w-11 h-6 rounded-full flex items-center px-1 transition-colors duration-200 ${
-                    settings.darkMode ? "bg-emerald-500" : "bg-gray-300"
-                  }`}
-                >
-                  <div
-                    className={`w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
-                      settings.darkMode ? "translate-x-5" : "translate-x-0"
-                    }`}
-                  />
-                </button>
+                <Toggle
+                  value={settings.darkMode}
+                  onChange={(v) => updateSetting("darkMode", v)}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-2">
@@ -511,7 +677,6 @@ export default function DashboardPage() {
                   <button
                     onClick={() => {
                       updateSetting("dashboardLayout", "compact");
-                      // Apply layout change (you can add CSS classes or zoom levels)
                       document.body.style.zoom = "0.9";
                     }}
                     className={`flex-1 py-2 px-3 rounded-lg border text-sm transition-colors ${
@@ -520,8 +685,7 @@ export default function DashboardPage() {
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    <span className="text-lg mr-1">▦</span>
-                    Compact
+                    <span className="text-lg mr-1">▦</span>Compact
                   </button>
                   <button
                     onClick={() => {
@@ -534,8 +698,7 @@ export default function DashboardPage() {
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    <span className="text-lg mr-1">▣</span>
-                    Comfortable
+                    <span className="text-lg mr-1">▣</span>Comfortable
                   </button>
                   <button
                     onClick={() => {
@@ -548,8 +711,7 @@ export default function DashboardPage() {
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    <span className="text-lg mr-1">◧</span>
-                    Spacious
+                    <span className="text-lg mr-1">◧</span>Spacious
                   </button>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
@@ -561,6 +723,8 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          <div className="border-t border-gray-100" />
 
           {/* Security Settings */}
           <div>
@@ -600,45 +764,111 @@ export default function DashboardPage() {
             </h3>
             <div className="space-y-2">
               <button
-                onClick={() =>
-                  alert(
-                    "Exporting all data as CSV...\n\nThis feature will be available soon.",
-                  )
-                }
+                onClick={() => {
+                  const headers = [
+                    "Name",
+                    "Email",
+                    "Role",
+                    "Program",
+                    "County",
+                    "Stage",
+                  ];
+                  const csvData = participants.map((p) => [
+                    p.name,
+                    `${p.name.toLowerCase().replace(" ", ".")}@example.com`,
+                    "Participant",
+                    p.program,
+                    p.county,
+                    p.stage,
+                  ]);
+                  const csvContent = [headers, ...csvData]
+                    .map((row) => row.join(","))
+                    .join("\n");
+                  const blob = new Blob([csvContent], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `export_all_data_${new Date().toISOString().split("T")[0]}.csv`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  showToast(
+                    "Export complete! Your CSV file has been downloaded.",
+                    "success",
+                  );
+                }}
                 className="w-full text-left px-3 py-2 text-sm text-gray-700 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-between"
               >
                 <span>Export all data (CSV)</span>
                 <span className="text-xs text-gray-400">↓</span>
               </button>
               <button
-                onClick={() =>
-                  alert(
-                    "Export participant data...\n\nThis feature will be available soon.",
-                  )
-                }
+                onClick={() => {
+                  const headers = [
+                    "Name",
+                    "Program",
+                    "County",
+                    "Stage",
+                    "Mentor",
+                  ];
+                  const csvData = participants.map((p) => [
+                    p.name,
+                    p.program,
+                    p.county,
+                    p.stage,
+                    p.mentor,
+                  ]);
+                  const csvContent = [headers, ...csvData]
+                    .map((row) => row.join(","))
+                    .join("\n");
+                  const blob = new Blob([csvContent], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `participants_${new Date().toISOString().split("T")[0]}.csv`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  showToast(
+                    "Export complete! Participant list downloaded.",
+                    "success",
+                  );
+                }}
                 className="w-full text-left px-3 py-2 text-sm text-gray-700 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-between"
               >
                 <span>Export participant list</span>
                 <span className="text-xs text-gray-400">↓</span>
               </button>
+
               <button
                 onClick={() => {
-                  if (
-                    confirm(
-                      "Are you sure? This will reset all settings to default.",
-                    )
-                  ) {
-                    setSettings({
-                      emailNotifications: true,
-                      mentorAlerts: true,
-                      participantAlerts: true,
-                      reportAlerts: true,
-                      darkMode: false,
-                      twoFactorAuth: true,
-                      dashboardLayout: "comfortable",
-                    });
-                    alert("Settings reset to default!");
-                  }
+                  showConfirmModal(
+                    "Reset Settings",
+                    "Are you sure? This will reset all settings to their default values.",
+                    () => {
+                      setSettings({
+                        emailNotifications: true,
+                        mentorAlerts: true,
+                        participantAlerts: true,
+                        reportAlerts: true,
+                        darkMode: false,
+                        twoFactorAuth: true,
+                        dashboardLayout: "comfortable",
+                      });
+                      if (settings.darkMode) {
+                        document.documentElement.classList.remove("dark");
+                      }
+                      document.body.style.zoom = "1";
+                      showToast(
+                        "All settings have been reset to default!",
+                        "success",
+                      );
+                      setSettingsSaved(false);
+                    },
+                    "warning",
+                  );
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-amber-600 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors"
               >
@@ -656,13 +886,37 @@ export default function DashboardPage() {
             </h3>
             <button
               onClick={() => {
-                if (
-                  confirm(
-                    "WARNING: This will clear all mock data. This action cannot be undone. Are you absolutely sure?",
-                  )
-                ) {
-                  alert("Data cleared. Refresh to see changes.");
-                }
+                showConfirmModal(
+                  "⚠️ Danger Zone",
+                  "WARNING: This will clear all mock data. This action cannot be undone. Are you absolutely sure?",
+                  () => {
+                    showConfirmModal(
+                      "🔴 FINAL WARNING",
+                      "All participant and program data will be permanently deleted.",
+                      () => {
+                        const confirmation = window.prompt(
+                          'Type "DELETE" to confirm:',
+                        );
+                        if (confirmation === "DELETE") {
+                          localStorage.removeItem("users");
+                          localStorage.removeItem("currentUser");
+                          showToast(
+                            "All mock data has been cleared. The page will now refresh.",
+                            "warning",
+                          );
+                          setTimeout(() => window.location.reload(), 1500);
+                        } else {
+                          showToast(
+                            "Data clear cancelled. Incorrect confirmation text.",
+                            "error",
+                          );
+                        }
+                      },
+                      "danger",
+                    );
+                  },
+                  "danger",
+                );
               }}
               className="w-full text-left px-3 py-2 text-sm text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
             >
@@ -687,7 +941,7 @@ export default function DashboardPage() {
         </div>
       </SlidePanel>
 
-      {/* Profile Panel with Logout */}
+      {/* Profile Panel */}
       <SlidePanel
         open={panel === "profile"}
         onClose={() => setPanel(null)}
@@ -695,8 +949,51 @@ export default function DashboardPage() {
         icon={User}
       >
         <div className="flex flex-col items-center gap-2 py-4">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 text-2xl font-bold">
-            {profile.name.charAt(0)}
+          {/* Profile Picture */}
+          <div className="relative">
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-3xl font-bold overflow-hidden">
+              {profile.avatar ? (
+                <img
+                  src={profile.avatar}
+                  alt={profile.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                profile.name.charAt(0).toUpperCase()
+              )}
+            </div>
+            <button
+              onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = "image/*";
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      const avatarUrl = event.target?.result as string;
+                      const updatedProfile = { ...profile, avatar: avatarUrl };
+                      setProfile(updatedProfile);
+                      const currentUser = localStorage.getItem("currentUser");
+                      if (currentUser) {
+                        localStorage.setItem(
+                          `profile_${currentUser}`,
+                          JSON.stringify(updatedProfile),
+                        );
+                      }
+                      showToast("Profile picture updated!", "success");
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                };
+                input.click();
+              }}
+              className="absolute bottom-0 right-0 bg-white rounded-full p-1 shadow-md hover:bg-gray-50 transition-colors"
+              title="Change profile picture"
+            >
+              <Camera className="h-4 w-4 text-gray-600" />
+            </button>
           </div>
           <p className="font-semibold text-gray-800">{profile.name}</p>
           <p className="text-xs text-gray-400">{profile.role}</p>
@@ -722,6 +1019,25 @@ export default function DashboardPage() {
           >
             Change Password
           </button>
+          <button
+            onClick={() => {
+              if (profile.avatar) {
+                const updatedProfile = { ...profile, avatar: undefined };
+                setProfile(updatedProfile);
+                const currentUser = localStorage.getItem("currentUser");
+                if (currentUser) {
+                  localStorage.setItem(
+                    `profile_${currentUser}`,
+                    JSON.stringify(updatedProfile),
+                  );
+                }
+                showToast("Profile picture removed", "info");
+              }
+            }}
+            className="w-full text-left px-4 py-2.5 rounded-lg text-sm text-gray-500 hover:bg-gray-50"
+          >
+            Remove Profile Picture
+          </button>
           <div className="border-t border-gray-100 my-2"></div>
           <button
             onClick={handleLogout}
@@ -742,6 +1058,21 @@ export default function DashboardPage() {
         onBack={() => setPanel("profile")}
       >
         <div className="space-y-4">
+          {/* Avatar Preview */}
+          <div className="flex justify-center">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-2xl font-bold overflow-hidden">
+              {editForm.avatar ? (
+                <img
+                  src={editForm.avatar}
+                  alt={editForm.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                editForm.name.charAt(0).toUpperCase()
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
               Full Name
@@ -780,6 +1111,45 @@ export default function DashboardPage() {
               }
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Profile Picture
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file";
+                  input.accept = "image/*";
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const avatarUrl = event.target?.result as string;
+                        setEditForm({ ...editForm, avatar: avatarUrl });
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  };
+                  input.click();
+                }}
+                className="flex-1 px-3 py-2 text-sm text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+              >
+                Upload Picture
+              </button>
+              {editForm.avatar && (
+                <button
+                  onClick={() =>
+                    setEditForm({ ...editForm, avatar: undefined })
+                  }
+                  className="px-3 py-2 text-sm text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
           <button
             onClick={saveProfile}
@@ -863,6 +1233,8 @@ export default function DashboardPage() {
             setSelectedProgram={setSelectedProgram}
             selectedCounty={selectedCounty}
             setSelectedCounty={setSelectedCounty}
+            selectedDateRange={selectedDateRange}
+            setSelectedDateRange={setSelectedDateRange}
           />
         )}
         {activeTab === "Participants" && <ParticipantsTab />}
@@ -874,6 +1246,7 @@ export default function DashboardPage() {
             onOpenSignup={() => setPanel("leadership-signup")}
             isSignupOpen={panel === "leadership-signup"}
             onCloseSignup={() => setPanel(null)}
+            showToast={showToast}
           />
         )}
         {activeTab === "Resources" && <ResourcesTab />}
@@ -884,6 +1257,7 @@ export default function DashboardPage() {
             onAddNote={addNote}
             onDeleteNote={deleteNote}
             onTogglePin={togglePin}
+            showToast={showToast}
           />
         )}
       </main>

@@ -1,99 +1,41 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { loadCMSData } from "@/lib/cms-data";
+
 export function ResourcesTab() {
-  const financialResources = {
-    totalBudget: 245000,
-    grantsReceived: 187500,
-    donations: 32500,
-    sponsorships: 25000,
-  };
+  const [cmsData, setCmsData] = useState(loadCMSData());
 
-  const staffTime = {
-    totalHours: 1240,
-    facilitationHours: 420,
-    coordinationHours: 380,
-    adminHours: 440,
-  };
+  useEffect(() => {
+    setCmsData(loadCMSData());
 
-  // Signups by program data
-  const signupsByProgram = [
-    { name: "RCP Small Business Mentorship", signups: 14, change: "+8" },
-    { name: "SEED Micro-Grant Program", signups: 9, change: "+5" },
-    { name: "Business Technical Assistance Hub", signups: 7, change: "+3" },
-    { name: "Parker Dewey Micro-Internship", signups: 6, change: "+4" },
-    { name: "Workforce Development & Navigation", signups: 11, change: "+6" },
-    { name: "Local Health Equity Action Teams", signups: 8, change: "+2" },
-    { name: "Coalition Leadership Roundtable", signups: 5, change: "+1" },
-    { name: "Rural Connect Magazine", signups: 3, change: "+0" },
-    { name: "Park & Community Space Upgrades", signups: 2, change: "+2" },
-    { name: "Microloan Program", signups: 4, change: "+4" },
-    { name: "MAZK Initiative", signups: 3, change: "+1" },
-  ];
+    // Listen for updates from CMS Editor
+    const handleStorageChange = () => {
+      setCmsData(loadCMSData());
+    };
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("cmsDataUpdated", handleStorageChange);
 
-  // Resources by program data
-  const resourcesByProgram = [
-    {
-      name: "RCP Small Business Mentorship",
-      budget: 45000,
-      hours: 320,
-      participants: 45,
-    },
-    {
-      name: "SEED Micro-Grant Program",
-      budget: 35000,
-      hours: 180,
-      participants: 28,
-    },
-    {
-      name: "Business Technical Assistance Hub",
-      budget: 28000,
-      hours: 240,
-      participants: 32,
-    },
-    {
-      name: "Parker Dewey Micro-Internship",
-      budget: 25000,
-      hours: 120,
-      participants: 24,
-    },
-    {
-      name: "Workforce Development & Navigation",
-      budget: 32000,
-      hours: 200,
-      participants: 56,
-    },
-    {
-      name: "Local Health Equity Action Teams",
-      budget: 28000,
-      hours: 180,
-      participants: 45,
-    },
-    {
-      name: "Coalition Leadership Roundtable",
-      budget: 15000,
-      hours: 60,
-      participants: 24,
-    },
-    {
-      name: "Rural Connect Magazine",
-      budget: 18000,
-      hours: 80,
-      participants: 6000,
-    },
-    {
-      name: "Park & Community Space Upgrades",
-      budget: 75000,
-      hours: 40,
-      participants: 0,
-    },
-    { name: "Microloan Program", budget: 50000, hours: 100, participants: 0 },
-    { name: "MAZK Initiative", budget: 25000, hours: 80, participants: 12 },
-  ];
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("cmsDataUpdated", handleStorageChange);
+    };
+  }, []);
 
-  const totalBudget = resourcesByProgram.reduce((sum, p) => sum + p.budget, 0);
-  const totalHours = resourcesByProgram.reduce((sum, p) => sum + p.hours, 0);
+  // Get resources by program from CMS data
+  const resourcesByProgram = cmsData.resourcesByProgram?.programs || [];
+
+  // Calculate totals from the program data (these will update when CMS changes)
+  const totalBudget = resourcesByProgram.reduce(
+    (sum, p) => sum + (p.budget || 0),
+    0,
+  );
+  const totalHours = resourcesByProgram.reduce(
+    (sum, p) => sum + (p.hours || 0),
+    0,
+  );
   const totalParticipants = resourcesByProgram.reduce(
-    (sum, p) => sum + p.participants,
+    (sum, p) => sum + (p.participants || 0),
     0,
   );
 
@@ -107,7 +49,7 @@ export function ResourcesTab() {
         </p>
       </div>
 
-      {/* Summary Stats Row */}
+      {/* Summary Stats Row - These come from Resources by Program totals */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-slate-800 rounded-xl p-4">
           <p className="text-xs text-slate-300 uppercase tracking-wide">
@@ -135,57 +77,7 @@ export function ResourcesTab() {
         </div>
       </div>
 
-      {/* SIGNUPS BY PROGRAM - New Section for client */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-gray-800">
-            Signups by Program (This Month)
-          </h2>
-          <span className="text-xs text-gray-400">Last updated: May 2026</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {signupsByProgram.map((program, idx) => {
-            const colors = [
-              "bg-slate-700",
-              "bg-emerald-800",
-              "bg-blue-800",
-              "bg-purple-800",
-              "bg-teal-800",
-              "bg-rose-800",
-              "bg-amber-800",
-              "bg-indigo-800",
-              "bg-gray-700",
-              "bg-cyan-800",
-              "bg-lime-800",
-            ];
-            return (
-              <div
-                key={program.name}
-                className={`${colors[idx % colors.length]} rounded-xl p-4 hover:shadow-lg transition-shadow`}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-xs text-gray-300 uppercase tracking-wide">
-                      {program.name}
-                    </p>
-                    <p className="text-2xl font-bold text-white mt-1">
-                      {program.signups}
-                    </p>
-                  </div>
-                  <span className="text-xs text-emerald-300 bg-white/10 px-2 py-1 rounded-full">
-                    {program.change}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-300 mt-2">
-                  new signups this month
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Financial Resources Section */}
+      {/* Financial Resources Section - From CMS resources */}
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-3">
           Financial Resources
@@ -196,7 +88,7 @@ export function ResourcesTab() {
               Total Budget
             </p>
             <p className="text-xl font-bold text-white mt-1">
-              ${financialResources.totalBudget.toLocaleString()}
+              ${(cmsData.resources?.totalBudget || 0).toLocaleString()}
             </p>
             <p className="text-xs text-gray-400 mt-1">FY 2026</p>
           </div>
@@ -205,7 +97,7 @@ export function ResourcesTab() {
               Grants Received
             </p>
             <p className="text-xl font-bold text-white mt-1">
-              ${financialResources.grantsReceived.toLocaleString()}
+              ${(cmsData.resources?.grantsReceived || 0).toLocaleString()}
             </p>
             <p className="text-xs text-emerald-200 mt-1">76% of budget</p>
           </div>
@@ -214,7 +106,7 @@ export function ResourcesTab() {
               Donations
             </p>
             <p className="text-xl font-bold text-white mt-1">
-              ${financialResources.donations.toLocaleString()}
+              ${(cmsData.resources?.donations || 0).toLocaleString()}
             </p>
             <p className="text-xs text-blue-200 mt-1">Community support</p>
           </div>
@@ -223,14 +115,14 @@ export function ResourcesTab() {
               Sponsorships
             </p>
             <p className="text-xl font-bold text-white mt-1">
-              ${financialResources.sponsorships.toLocaleString()}
+              ${(cmsData.resources?.sponsorships || 0).toLocaleString()}
             </p>
             <p className="text-xs text-amber-200 mt-1">Corporate partners</p>
           </div>
         </div>
       </div>
 
-      {/* Staff Time Section */}
+      {/* Staff Time Section - From CMS resources */}
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-gray-800 mb-3">
           Staff & Volunteer Time
@@ -241,7 +133,7 @@ export function ResourcesTab() {
               Total Hours
             </p>
             <p className="text-xl font-bold text-white mt-1">
-              {staffTime.totalHours}
+              {cmsData.resources?.totalHours || 0}
             </p>
             <p className="text-xs text-slate-300 mt-1">YTD</p>
           </div>
@@ -250,7 +142,7 @@ export function ResourcesTab() {
               Facilitation
             </p>
             <p className="text-xl font-bold text-white mt-1">
-              {staffTime.facilitationHours}
+              {cmsData.resources?.facilitationHours || 0}
             </p>
             <p className="text-xs text-purple-200 mt-1">34% of total</p>
           </div>
@@ -259,7 +151,7 @@ export function ResourcesTab() {
               Coordination
             </p>
             <p className="text-xl font-bold text-white mt-1">
-              {staffTime.coordinationHours}
+              {cmsData.resources?.coordinationHours || 0}
             </p>
             <p className="text-xs text-teal-200 mt-1">31% of total</p>
           </div>
@@ -268,53 +160,142 @@ export function ResourcesTab() {
               Administrative
             </p>
             <p className="text-xl font-bold text-white mt-1">
-              {staffTime.adminHours}
+              {cmsData.resources?.adminHours || 0}
             </p>
             <p className="text-xs text-rose-200 mt-1">35% of total</p>
           </div>
         </div>
       </div>
 
-      {/* RESOURCES BY PROGRAM - New Section for client */}
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-3">
-          Resources by Program
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {resourcesByProgram.map((program) => (
-            <div
-              key={program.name}
-              className="bg-gray-800 rounded-xl p-4 hover:bg-gray-700 transition-colors"
-            >
-              <p className="text-sm font-medium text-white mb-2">
-                {program.name}
-              </p>
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Budget:</span>
-                  <span className="text-white font-medium">
-                    ${program.budget.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Staff Hours:</span>
-                  <span className="text-white">{program.hours}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Participants:</span>
-                  <span className="text-white">
-                    {program.participants.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
+      {/* Resources by Program Table - Connected to CMS */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 bg-gray-800">
+          <h2 className="text-sm font-semibold text-white">
+            Resources by Program
+          </h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-100 border-b border-gray-200">
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-600">
+                  Program
+                </th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-600">
+                  Type
+                </th>
+                <th className="text-right px-5 py-3 text-xs font-semibold text-gray-600">
+                  Budget
+                </th>
+                <th className="text-right px-5 py-3 text-xs font-semibold text-gray-600">
+                  Hours
+                </th>
+                <th className="text-right px-5 py-3 text-xs font-semibold text-gray-600">
+                  Participants
+                </th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-600">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {resourcesByProgram.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-5 py-8 text-center text-gray-400"
+                  >
+                    No program data available. Add programs in the CMS Resources
+                    tab.
+                  </td>
+                </tr>
+              ) : (
+                resourcesByProgram.map((program, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-5 py-3 font-medium text-gray-800">
+                      {program.name}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${
+                          program.type === "Business Support"
+                            ? "bg-blue-100 text-blue-700"
+                            : program.type === "Workforce"
+                              ? "bg-purple-100 text-purple-700"
+                              : program.type === "Community"
+                                ? "bg-green-100 text-green-700"
+                                : program.type === "Media"
+                                  ? "bg-pink-100 text-pink-700"
+                                  : program.type === "Infrastructure"
+                                    ? "bg-amber-100 text-amber-700"
+                                    : program.type === "Planning"
+                                      ? "bg-cyan-100 text-cyan-700"
+                                      : program.type === "Capital"
+                                        ? "bg-yellow-100 text-yellow-700"
+                                        : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {program.type}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right font-medium text-gray-800">
+                      ${(program.budget || 0).toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3 text-right text-gray-600">
+                      {program.hours || 0}
+                    </td>
+                    <td className="px-5 py-3 text-right text-gray-600">
+                      {(program.participants || 0).toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${
+                          program.status === "Active"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : program.status === "Capital"
+                              ? "bg-blue-100 text-blue-700"
+                              : program.status === "Development"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {program.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            {resourcesByProgram.length > 0 && (
+              <tfoot className="bg-gray-50 border-t border-gray-200">
+                <tr>
+                  <td className="px-5 py-3 font-semibold text-gray-800">
+                    Total
+                  </td>
+                  <td className="px-5 py-3"></td>
+                  <td className="px-5 py-3 text-right font-bold text-gray-800">
+                    ${totalBudget.toLocaleString()}
+                  </td>
+                  <td className="px-5 py-3 text-right font-bold text-gray-800">
+                    {totalHours}
+                  </td>
+                  <td className="px-5 py-3 text-right font-bold text-gray-800">
+                    {totalParticipants.toLocaleString()}
+                  </td>
+                  <td className="px-5 py-3"></td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
         </div>
       </div>
 
       {/* Footer note */}
       <div className="mt-4 text-center text-xs text-gray-400">
-        Data updated quarterly • Last updated: May 2026
+        Data updated quarterly • Last updated:{" "}
+        {new Date(
+          cmsData.resources?.lastUpdated || Date.now(),
+        ).toLocaleDateString()}
       </div>
     </>
   );

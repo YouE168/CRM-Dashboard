@@ -3,23 +3,19 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { clientsByCountyChart } from "@/lib/mock-data";
 
-const COLORS = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#ef4444"];
+interface ClientsByCountyChartProps {
+  selectedCounty?: string;
+}
 
-const data = [
-  { name: "Linn", value: 24 },
-  { name: "Bourbon", value: 31 },
-  { name: "Crawford", value: 18 },
-  { name: "Cherokee", value: 27 },
-  { name: "Labette", value: 24 },
-  { name: "Montgomery", value: 15 },
-  { name: "Woodson", value: 12 },
-  { name: "Wilson", value: 20 },
-  { name: "Allen", value: 19 },
-  { name: "Neosho", value: 22 },
-  { name: "Greenwood", value: 16 },
-];
+const COLORS = ["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#14b8a6", "#a855f7"];
 
-export function ClientsByCountyChart() {
+export function ClientsByCountyChart({ selectedCounty = "All Counties" }: ClientsByCountyChartProps) {
+  // Filter data based on selected county
+  let data = clientsByCountyChart;
+  if (selectedCounty !== "All Counties") {
+    data = data.filter(item => item.county === selectedCounty);
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
       <h3 className="text-sm font-semibold text-gray-900 mb-2">
@@ -28,7 +24,7 @@ export function ClientsByCountyChart() {
       <ResponsiveContainer width="100%" height={180}>
         <PieChart>
           <Pie
-            data={clientsByCountyChart}
+            data={data}
             cx="50%"
             cy="50%"
             innerRadius={48}
@@ -37,7 +33,7 @@ export function ClientsByCountyChart() {
             dataKey="clients"
             nameKey="county"
           >
-            {clientsByCountyChart.map((_, i) => (
+            {data.map((_, i) => (
               <Cell key={i} fill={COLORS[i % COLORS.length]} />
             ))}
           </Pie>
@@ -52,7 +48,7 @@ export function ClientsByCountyChart() {
         </PieChart>
       </ResponsiveContainer>
       <div className="flex flex-wrap gap-3 mt-1 justify-center">
-        {clientsByCountyChart.map((item, i) => (
+        {data.map((item, i) => (
           <div
             key={item.county}
             className="flex items-center gap-1.5 text-xs text-gray-500"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -10,39 +10,56 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Calendar, ChevronDown } from "lucide-react";
-import { programs, counties } from "@/lib/mock-data";
+import { loadCMSData } from "@/lib/cms-data";
 
 interface FiltersProps {
   selectedProgram: string;
   setSelectedProgram: (value: string) => void;
   selectedCounty: string;
   setSelectedCounty: (value: string) => void;
+  selectedDateRange: string;
+  setSelectedDateRange: (value: string) => void;
 }
-
-const dateRanges = [
-  "Last 30 days",
-  "Last 3 months",
-  "Last 6 months",
-  "Last 12 months",
-  "All time",
-];
 
 export function Filters({
   selectedProgram,
   setSelectedProgram,
   selectedCounty,
   setSelectedCounty,
+  selectedDateRange,
+  setSelectedDateRange,
 }: FiltersProps) {
-  const [selectedDateRange, setSelectedDateRange] = useState("Last 12 months");
+  const [cmsData, setCmsData] = useState(loadCMSData());
   const [showDateMenu, setShowDateMenu] = useState(false);
+
+  useEffect(() => {
+    setCmsData(loadCMSData());
+  }, []);
+
+  const programs = cmsData.programs || [];
+  const counties = cmsData.counties || [];
+  const dateRanges = cmsData.dateRanges || [
+    "Last 30 days",
+    "Last 3 months",
+    "Last 6 months",
+    "Last 12 months",
+    "All time",
+  ];
 
   return (
     <div className="flex flex-wrap items-center gap-3">
+      {/* Program Filter */}
       <Select value={selectedProgram} onValueChange={setSelectedProgram}>
-        <SelectTrigger className="w-[160px] bg-white border-gray-200 text-gray-700 rounded-lg shadow-sm hover:border-gray-300 focus:ring-emerald-500">
+        <SelectTrigger className="w-[180px] bg-white border-gray-200 text-gray-700 rounded-lg shadow-sm hover:border-gray-300 focus:ring-emerald-500">
           <SelectValue placeholder="All Programs" />
         </SelectTrigger>
         <SelectContent className="bg-white border-gray-200 shadow-lg">
+          <SelectItem
+            value="All Programs"
+            className="text-gray-700 hover:bg-gray-50"
+          >
+            All Programs
+          </SelectItem>
           {programs.map((program) => (
             <SelectItem
               key={program}
@@ -55,11 +72,18 @@ export function Filters({
         </SelectContent>
       </Select>
 
+      {/* County Filter */}
       <Select value={selectedCounty} onValueChange={setSelectedCounty}>
         <SelectTrigger className="w-[160px] bg-white border-gray-200 text-gray-700 rounded-lg shadow-sm hover:border-gray-300 focus:ring-emerald-500">
           <SelectValue placeholder="All Counties" />
         </SelectTrigger>
         <SelectContent className="bg-white border-gray-200 shadow-lg">
+          <SelectItem
+            value="All Counties"
+            className="text-gray-700 hover:bg-gray-50"
+          >
+            All Counties
+          </SelectItem>
           {counties.map((county) => (
             <SelectItem
               key={county}
@@ -72,7 +96,7 @@ export function Filters({
         </SelectContent>
       </Select>
 
-      {/* Date range button with dropdown */}
+      {/* Date Range Filter */}
       <div className="relative">
         <Button
           variant="outline"
