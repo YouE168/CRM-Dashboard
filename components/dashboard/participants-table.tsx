@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search } from "lucide-react";
+import { loadCMSData } from "@/lib/cms-data";
 
 interface Participant {
   id: string;
@@ -10,10 +11,11 @@ interface Participant {
   county: string;
   stage: string;
   mentor: string;
+  enrolledDate?: string;
 }
 
 interface ParticipantsTableProps {
-  participants: Participant[];
+  participants?: Participant[];
 }
 
 const stageBadge: Record<string, string> = {
@@ -37,8 +39,30 @@ function initials(name: string) {
   return p.length >= 2 ? p[0][0] + p[1][0] : p[0][0];
 }
 
-export function ParticipantsTable({ participants }: ParticipantsTableProps) {
+export function ParticipantsTable({
+  participants: propParticipants,
+}: ParticipantsTableProps) {
+  const [cmsData, setCmsData] = useState(loadCMSData());
   const [q, setQ] = useState("");
+
+  useEffect(() => {
+    setCmsData(loadCMSData());
+    const handleStorageChange = () => {
+      setCmsData(loadCMSData());
+    };
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("cmsDataUpdated", handleStorageChange);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("cmsDataUpdated", handleStorageChange);
+    };
+  }, []);
+
+  // Use participants from CMS if available, otherwise use propParticipants
+  const participants =
+    cmsData.participantsList?.length > 0
+      ? cmsData.participantsList
+      : propParticipants || [];
 
   const filtered = participants.filter((p) =>
     p.name.toLowerCase().includes(q.toLowerCase()),
@@ -46,7 +70,6 @@ export function ParticipantsTable({ participants }: ParticipantsTableProps) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-gray-100">
         <h2 className="text-sm font-semibold text-gray-900">Participants</h2>
         <div className="relative w-full sm:w-60">
@@ -61,7 +84,6 @@ export function ParticipantsTable({ participants }: ParticipantsTableProps) {
         </div>
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
