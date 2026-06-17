@@ -67,6 +67,17 @@ export interface CMSData {
     programmingCost: number;
     operationsCost: number;
     marketingCost: number;
+    // ADD THE NEXT MEETING PROPERTY HERE
+    nextMeeting: {
+      date: string;
+      day: number;
+      month: string;
+      time: string;
+      title: string;
+      description: string;
+      attendees: number;
+      zoomPlaceholder: string;
+    };
     lastUpdated: string;
   };
   resources: {
@@ -91,8 +102,6 @@ export interface CMSData {
     }>;
     lastUpdated: string;
   };
-
-  //participants list
   participantsList: Array<{
     id: string;
     name: string;
@@ -104,7 +113,6 @@ export interface CMSData {
     phone?: string;
     enrolledDate?: string;
   }>;
-
 }
 
 // Generate default analytics data for all combinations
@@ -235,6 +243,17 @@ export const defaultCMSData: CMSData = {
     programmingCost: 32500,
     operationsCost: 28300,
     marketingCost: 18500,
+    // ADD THE DEFAULT NEXT MEETING VALUES HERE
+    nextMeeting: {
+      date: "May 15, 2026",
+      day: 15,
+      month: "May",
+      time: "2:00 PM",
+      title: "Q2 Strategy & Impact Review",
+      description: "Join us to review Q1 outcomes, discuss Q2 initiatives, and share best practices across programs.",
+      attendees: 12,
+      zoomPlaceholder: "123 456 7890"
+    },
     lastUpdated: new Date().toISOString(),
   },
   resources: {
@@ -265,25 +284,23 @@ export const defaultCMSData: CMSData = {
     ],
     lastUpdated: new Date().toISOString(),
   },
-
   participantsList: [
-    { id: "1", name: "Sarah Johnson", program: "Business Catalyst", county: "Bourbon", stage: "Active", mentor: "Michael Chen", enrolledDate: "2025-01-15" },
-    { id: "2", name: "James Williams", program: "Youth Mentorship", county: "Linn", stage: "Onboarding", mentor: "Lisa Thompson", enrolledDate: "2025-02-01" },
-    { id: "3", name: "Maria Garcia", program: "Women Entrepreneurs", county: "Crawford", stage: "Active", mentor: "David Park", enrolledDate: "2025-01-20" },
-    { id: "4", name: "Robert Davis", program: "Veterans Initiative", county: "Cherokee", stage: "Completing", mentor: "Jennifer Lee", enrolledDate: "2024-11-10" },
-    { id: "5", name: "Emily Brown", program: "Business Catalyst", county: "Labette", stage: "Active", mentor: "Tom Anderson", enrolledDate: "2025-01-25" },
-    { id: "6", name: "Michael Martinez", program: "Youth Mentorship", county: "Montgomery", stage: "Matched", mentor: "Susan White", enrolledDate: "2025-02-10" },
-    { id: "7", name: "Amanda Wilson", program: "Women Entrepreneurs", county: "Woodson", stage: "Active", mentor: "Chris Taylor", enrolledDate: "2025-01-18" },
-    { id: "8", name: "Kevin Thomas", program: "Veterans Initiative", county: "Wilson", stage: "Alumni", mentor: "Rachel Green", enrolledDate: "2024-10-05" },
-    { id: "9", name: "Jessica Rodriguez", program: "Business Catalyst", county: "Allen", stage: "Active", mentor: "Mark Johnson", enrolledDate: "2025-01-22" },
-    { id: "10", name: "Daniel Lee", program: "Youth Mentorship", county: "Neosho", stage: "Onboarding", mentor: "Amy Chen", enrolledDate: "2025-02-05" },
-    { id: "11", name: "Patricia Smith", program: "Business Catalyst", county: "Greenwood", stage: "Active", mentor: "Michael Chen", enrolledDate: "2025-01-28" },
-    { id: "12", name: "Thomas Brown", program: "Veterans Initiative", county: "Bourbon", stage: "Active", mentor: "Jennifer Lee", enrolledDate: "2025-01-12" },
-    { id: "13", name: "Jennifer Wilson", program: "Women Entrepreneurs", county: "Cherokee", stage: "Onboarding", mentor: "David Park", enrolledDate: "2025-02-08" },
-    { id: "14", name: "Charles Jones", program: "Youth Mentorship", county: "Linn", stage: "Active", mentor: "Lisa Thompson", enrolledDate: "2025-01-30" },
-    { id: "15", name: "Linda Garcia", program: "Business Catalyst", county: "Neosho", stage: "Completing", mentor: "Tom Anderson", enrolledDate: "2024-12-15" },
+    { id: "1", name: "Sarah Johnson", program: "RCP Small Business Mentorship Program", county: "Bourbon", stage: "Active", mentor: "Michael Chen", enrolledDate: "2025-01-15" },
+    { id: "2", name: "James Williams", program: "Workforce Development & Navigation", county: "Linn", stage: "Onboarding", mentor: "Lisa Thompson", enrolledDate: "2025-02-01" },
+    { id: "3", name: "Maria Garcia", program: "SEED Micro-Grant Program", county: "Crawford", stage: "Active", mentor: "David Park", enrolledDate: "2025-01-20" },
+    { id: "4", name: "Robert Davis", program: "MAZK Initiative", county: "Cherokee", stage: "Completing", mentor: "Jennifer Lee", enrolledDate: "2024-11-10" },
+    { id: "5", name: "Emily Brown", program: "RCP Small Business Mentorship Program", county: "Labette", stage: "Active", mentor: "Tom Anderson", enrolledDate: "2025-01-25" },
+    { id: "6", name: "Michael Martinez", program: "Workforce Development & Navigation", county: "Montgomery", stage: "Matched", mentor: "Susan White", enrolledDate: "2025-02-10" },
+    { id: "7", name: "Amanda Wilson", program: "SEED Micro-Grant Program", county: "Woodson", stage: "Active", mentor: "Chris Taylor", enrolledDate: "2025-01-18" },
+    { id: "8", name: "Kevin Thomas", program: "MAZK Initiative", county: "Wilson", stage: "Alumni", mentor: "Rachel Green", enrolledDate: "2024-10-05" },
+    { id: "9", name: "Jessica Rodriguez", program: "RCP Small Business Mentorship Program", county: "Allen", stage: "Active", mentor: "Mark Johnson", enrolledDate: "2025-01-22" },
+    { id: "10", name: "Daniel Lee", program: "Workforce Development & Navigation", county: "Neosho", stage: "Onboarding", mentor: "Amy Chen", enrolledDate: "2025-02-05" },
+    { id: "11", name: "Patricia Smith", program: "RCP Small Business Mentorship Program", county: "Greenwood", stage: "Active", mentor: "Michael Chen", enrolledDate: "2025-01-28" },
+    { id: "12", name: "Thomas Brown", program: "MAZK Initiative", county: "Bourbon", stage: "Active", mentor: "Jennifer Lee", enrolledDate: "2025-01-12" },
+    { id: "13", name: "Jennifer Wilson", program: "SEED Micro-Grant Program", county: "Cherokee", stage: "Onboarding", mentor: "David Park", enrolledDate: "2025-02-08" },
+    { id: "14", name: "Charles Jones", program: "Workforce Development & Navigation", county: "Linn", stage: "Active", mentor: "Lisa Thompson", enrolledDate: "2025-01-30" },
+    { id: "15", name: "Linda Garcia", program: "RCP Small Business Mentorship Program", county: "Neosho", stage: "Completing", mentor: "Tom Anderson", enrolledDate: "2024-12-15" },
   ],
-  
 };
 
 export function loadCMSData(): CMSData {

@@ -216,6 +216,19 @@ export default function CMSEditorPage() {
   const counties = cmsData.counties || [];
   const dateRanges = cmsData.dateRanges || [];
 
+  // Helper to safely get nextMeeting data
+  const nextMeeting = cmsData.leadership?.nextMeeting || {
+    date: "May 15, 2026",
+    day: 15,
+    month: "May",
+    time: "2:00 PM",
+    title: "Q2 Strategy & Impact Review",
+    description:
+      "Join us to review Q1 outcomes, discuss Q2 initiatives, and share best practices across programs.",
+    attendees: 12,
+    zoomPlaceholder: "123 456 7890",
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-6xl mx-auto">
@@ -1074,7 +1087,7 @@ export default function CMSEditorPage() {
           </div>
         )}
 
-        {/* Leadership Tab */}
+        {/* Leadership Tab - WITH MEETING EDITOR FIELDS */}
         {activeTab === "leadership" && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -1233,6 +1246,203 @@ export default function CMSEditorPage() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg"
                 />
               </div>
+            </div>
+
+            {/* Next Meeting Section - NEW EDITABLE FIELDS */}
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <h3 className="text-md font-semibold text-gray-900 mb-4">
+                📅 Next Meeting Details
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Meeting Title
+                  </label>
+                  <input
+                    type="text"
+                    value={nextMeeting.title}
+                    onChange={(e) =>
+                      setCmsData({
+                        ...cmsData,
+                        leadership: {
+                          ...cmsData.leadership,
+                          nextMeeting: {
+                            ...nextMeeting,
+                            title: e.target.value,
+                          },
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    placeholder="e.g., Q2 Strategy & Impact Review"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Meeting Date
+                  </label>
+                  <input
+                    type="text"
+                    value={nextMeeting.date}
+                    onChange={(e) =>
+                      setCmsData({
+                        ...cmsData,
+                        leadership: {
+                          ...cmsData.leadership,
+                          nextMeeting: {
+                            ...nextMeeting,
+                            date: e.target.value,
+                          },
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    placeholder="e.g., May 15, 2026"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Day Number
+                  </label>
+                  <input
+                    type="number"
+                    value={nextMeeting.day}
+                    onChange={(e) =>
+                      setCmsData({
+                        ...cmsData,
+                        leadership: {
+                          ...cmsData.leadership,
+                          nextMeeting: {
+                            ...nextMeeting,
+                            day: parseInt(e.target.value) || 15,
+                          },
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    placeholder="e.g., 15"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Month
+                  </label>
+                  <input
+                    type="text"
+                    value={nextMeeting.month}
+                    onChange={(e) =>
+                      setCmsData({
+                        ...cmsData,
+                        leadership: {
+                          ...cmsData.leadership,
+                          nextMeeting: {
+                            ...nextMeeting,
+                            month: e.target.value,
+                          },
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    placeholder="e.g., May"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Time
+                  </label>
+                  <input
+                    type="text"
+                    value={nextMeeting.time}
+                    onChange={(e) =>
+                      setCmsData({
+                        ...cmsData,
+                        leadership: {
+                          ...cmsData.leadership,
+                          nextMeeting: {
+                            ...nextMeeting,
+                            time: e.target.value,
+                          },
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    placeholder="e.g., 2:00 PM"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Zoom Placeholder ID
+                  </label>
+                  <input
+                    type="text"
+                    value={nextMeeting.zoomPlaceholder}
+                    onChange={(e) =>
+                      setCmsData({
+                        ...cmsData,
+                        leadership: {
+                          ...cmsData.leadership,
+                          nextMeeting: {
+                            ...nextMeeting,
+                            zoomPlaceholder: e.target.value,
+                          },
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    placeholder="e.g., 123 456 7890"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Attendees Count
+                  </label>
+                  <input
+                    type="number"
+                    value={nextMeeting.attendees}
+                    onChange={(e) =>
+                      setCmsData({
+                        ...cmsData,
+                        leadership: {
+                          ...cmsData.leadership,
+                          nextMeeting: {
+                            ...nextMeeting,
+                            attendees: parseInt(e.target.value) || 0,
+                          },
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    placeholder="e.g., 12"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Meeting Description
+                  </label>
+                  <textarea
+                    value={nextMeeting.description}
+                    onChange={(e) =>
+                      setCmsData({
+                        ...cmsData,
+                        leadership: {
+                          ...cmsData.leadership,
+                          nextMeeting: {
+                            ...nextMeeting,
+                            description: e.target.value,
+                          },
+                        },
+                      })
+                    }
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    placeholder="Describe what will be discussed at the meeting..."
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-4">
+                These meeting details will appear on the Leadership Roundtable
+                tab.
+              </p>
             </div>
           </div>
         )}
@@ -1635,18 +1845,863 @@ export default function CMSEditorPage() {
           </div>
         )}
 
-        {/* Reports Tab - Simplified version */}
+        {/* Reports Tab - Full Report Data Editor */}
         {activeTab === "reports" && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Report Data
             </h2>
-            <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-              <p className="text-sm text-yellow-700">
-                Report editing is available. Use the CMS to manage all report
-                data including monthly reports, participant progress, mentor
-                activity, financial summaries, outcome metrics, and county
-                distribution.
+
+            {/* Monthly Program Report */}
+            <div className="mb-8 pb-6 border-b border-gray-200">
+              <h3 className="text-md font-semibold text-gray-800 mb-3">
+                📊 Monthly Program Report
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Total Participants
+                  </label>
+                  <input
+                    type="number"
+                    value={reportData?.monthlyReport?.totalParticipants ?? 0}
+                    onChange={(e) =>
+                      setReportData({
+                        ...reportData,
+                        monthlyReport: {
+                          ...reportData.monthlyReport,
+                          totalParticipants: parseInt(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Sessions
+                  </label>
+                  <input
+                    type="number"
+                    value={reportData?.monthlyReport?.sessions ?? 0}
+                    onChange={(e) =>
+                      setReportData({
+                        ...reportData,
+                        monthlyReport: {
+                          ...reportData.monthlyReport,
+                          sessions: parseInt(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Satisfaction (%)
+                  </label>
+                  <input
+                    type="number"
+                    value={reportData?.monthlyReport?.satisfaction ?? 0}
+                    onChange={(e) =>
+                      setReportData({
+                        ...reportData,
+                        monthlyReport: {
+                          ...reportData.monthlyReport,
+                          satisfaction: parseInt(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Key Highlights (one per line)
+                </label>
+                <textarea
+                  value={
+                    reportData?.monthlyReport?.highlights?.join("\n") ?? ""
+                  }
+                  onChange={(e) =>
+                    setReportData({
+                      ...reportData,
+                      monthlyReport: {
+                        ...reportData.monthlyReport,
+                        highlights: e.target.value
+                          .split("\n")
+                          .filter((h) => h.trim()),
+                      },
+                    })
+                  }
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                />
+              </div>
+            </div>
+
+            {/* Participant Progress Report */}
+            <div className="mb-8 pb-6 border-b border-gray-200">
+              <h3 className="text-md font-semibold text-gray-800 mb-3">
+                👥 Participant Progress Report
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-3 py-2">Name</th>
+                      <th className="text-left px-3 py-2">Program</th>
+                      <th className="text-left px-3 py-2">Stage</th>
+                      <th className="text-left px-3 py-2">Progress (%)</th>
+                      <th className="text-center px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(reportData?.participantReport?.participants || []).map(
+                      (participant, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={participant?.name ?? ""}
+                              onChange={(e) => {
+                                const newParticipants = [
+                                  ...(reportData.participantReport
+                                    ?.participants || []),
+                                ];
+                                newParticipants[idx] = {
+                                  ...newParticipants[idx],
+                                  name: e.target.value,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  participantReport: {
+                                    ...reportData.participantReport,
+                                    participants: newParticipants,
+                                  },
+                                });
+                              }}
+                              className="w-full px-2 py-1 border border-gray-200 rounded"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={
+                                participant?.program ?? "Business Catalyst"
+                              }
+                              onChange={(e) => {
+                                const newParticipants = [
+                                  ...(reportData.participantReport
+                                    ?.participants || []),
+                                ];
+                                newParticipants[idx] = {
+                                  ...newParticipants[idx],
+                                  program: e.target.value,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  participantReport: {
+                                    ...reportData.participantReport,
+                                    participants: newParticipants,
+                                  },
+                                });
+                              }}
+                              className="w-full px-2 py-1 border border-gray-200 rounded"
+                            >
+                              <option>Business Catalyst</option>
+                              <option>Youth Mentorship</option>
+                              <option>Women Entrepreneurs</option>
+                              <option>Veterans Initiative</option>
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={participant?.stage ?? "Active"}
+                              onChange={(e) => {
+                                const newParticipants = [
+                                  ...(reportData.participantReport
+                                    ?.participants || []),
+                                ];
+                                newParticipants[idx] = {
+                                  ...newParticipants[idx],
+                                  stage: e.target.value,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  participantReport: {
+                                    ...reportData.participantReport,
+                                    participants: newParticipants,
+                                  },
+                                });
+                              }}
+                              className="w-full px-2 py-1 border border-gray-200 rounded"
+                            >
+                              <option>Active</option>
+                              <option>Onboarding</option>
+                              <option>Completing</option>
+                              <option>Alumni</option>
+                              <option>Matched</option>
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              value={participant?.progress ?? 0}
+                              onChange={(e) => {
+                                const newParticipants = [
+                                  ...(reportData.participantReport
+                                    ?.participants || []),
+                                ];
+                                newParticipants[idx] = {
+                                  ...newParticipants[idx],
+                                  progress: parseInt(e.target.value) || 0,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  participantReport: {
+                                    ...reportData.participantReport,
+                                    participants: newParticipants,
+                                  },
+                                });
+                              }}
+                              className="w-20 px-2 py-1 border border-gray-200 rounded"
+                            />
+                          </td>
+                          <td className="text-center">
+                            <button
+                              onClick={() => {
+                                const newParticipants = (
+                                  reportData.participantReport?.participants ||
+                                  []
+                                ).filter((_, i) => i !== idx);
+                                setReportData({
+                                  ...reportData,
+                                  participantReport: {
+                                    ...reportData.participantReport,
+                                    participants: newParticipants,
+                                  },
+                                });
+                              }}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              🗑️
+                            </button>
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                onClick={() => {
+                  const newParticipants = [
+                    ...(reportData.participantReport?.participants || []),
+                    {
+                      name: "New Participant",
+                      program: "Business Catalyst",
+                      stage: "Active",
+                      progress: 0,
+                    },
+                  ];
+                  setReportData({
+                    ...reportData,
+                    participantReport: {
+                      ...reportData.participantReport,
+                      participants: newParticipants,
+                    },
+                  });
+                }}
+                className="mt-3 text-sm text-emerald-600 hover:text-emerald-700"
+              >
+                + Add Participant
+              </button>
+            </div>
+
+            {/* Mentor Activity Report */}
+            <div className="mb-8 pb-6 border-b border-gray-200">
+              <h3 className="text-md font-semibold text-gray-800 mb-3">
+                👨‍🏫 Mentor Activity Report
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-3 py-2">Name</th>
+                      <th className="text-left px-3 py-2">Sessions</th>
+                      <th className="text-left px-3 py-2">Hours</th>
+                      <th className="text-left px-3 py-2">Rating</th>
+                      <th className="text-left px-3 py-2">Mentees</th>
+                      <th className="text-center px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(reportData?.mentorReport?.mentors || []).map(
+                      (mentor, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={mentor?.name ?? ""}
+                              onChange={(e) => {
+                                const newMentors = [
+                                  ...(reportData.mentorReport?.mentors || []),
+                                ];
+                                newMentors[idx] = {
+                                  ...newMentors[idx],
+                                  name: e.target.value,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  mentorReport: {
+                                    ...reportData.mentorReport,
+                                    mentors: newMentors,
+                                  },
+                                });
+                              }}
+                              className="w-full px-2 py-1 border border-gray-200 rounded"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              value={mentor?.sessions ?? 0}
+                              onChange={(e) => {
+                                const newMentors = [
+                                  ...(reportData.mentorReport?.mentors || []),
+                                ];
+                                newMentors[idx] = {
+                                  ...newMentors[idx],
+                                  sessions: parseInt(e.target.value) || 0,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  mentorReport: {
+                                    ...reportData.mentorReport,
+                                    mentors: newMentors,
+                                  },
+                                });
+                              }}
+                              className="w-20 px-2 py-1 border border-gray-200 rounded"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              value={mentor?.hours ?? 0}
+                              onChange={(e) => {
+                                const newMentors = [
+                                  ...(reportData.mentorReport?.mentors || []),
+                                ];
+                                newMentors[idx] = {
+                                  ...newMentors[idx],
+                                  hours: parseInt(e.target.value) || 0,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  mentorReport: {
+                                    ...reportData.mentorReport,
+                                    mentors: newMentors,
+                                  },
+                                });
+                              }}
+                              className="w-20 px-2 py-1 border border-gray-200 rounded"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={mentor?.rating ?? 0}
+                              onChange={(e) => {
+                                const newMentors = [
+                                  ...(reportData.mentorReport?.mentors || []),
+                                ];
+                                newMentors[idx] = {
+                                  ...newMentors[idx],
+                                  rating: parseFloat(e.target.value) || 0,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  mentorReport: {
+                                    ...reportData.mentorReport,
+                                    mentors: newMentors,
+                                  },
+                                });
+                              }}
+                              className="w-20 px-2 py-1 border border-gray-200 rounded"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              value={mentor?.mentees ?? 0}
+                              onChange={(e) => {
+                                const newMentors = [
+                                  ...(reportData.mentorReport?.mentors || []),
+                                ];
+                                newMentors[idx] = {
+                                  ...newMentors[idx],
+                                  mentees: parseInt(e.target.value) || 0,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  mentorReport: {
+                                    ...reportData.mentorReport,
+                                    mentors: newMentors,
+                                  },
+                                });
+                              }}
+                              className="w-20 px-2 py-1 border border-gray-200 rounded"
+                            />
+                          </td>
+                          <td className="text-center">
+                            <button
+                              onClick={() => {
+                                const newMentors = (
+                                  reportData.mentorReport?.mentors || []
+                                ).filter((_, i) => i !== idx);
+                                setReportData({
+                                  ...reportData,
+                                  mentorReport: {
+                                    ...reportData.mentorReport,
+                                    mentors: newMentors,
+                                  },
+                                });
+                              }}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              🗑️
+                            </button>
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                onClick={() => {
+                  const newMentors = [
+                    ...(reportData.mentorReport?.mentors || []),
+                    {
+                      name: "New Mentor",
+                      sessions: 0,
+                      hours: 0,
+                      rating: 0,
+                      mentees: 0,
+                    },
+                  ];
+                  setReportData({
+                    ...reportData,
+                    mentorReport: {
+                      ...reportData.mentorReport,
+                      mentors: newMentors,
+                    },
+                  });
+                }}
+                className="mt-3 text-sm text-emerald-600 hover:text-emerald-700"
+              >
+                + Add Mentor
+              </button>
+            </div>
+
+            {/* Financial Summary */}
+            <div className="mb-8 pb-6 border-b border-gray-200">
+              <h3 className="text-md font-semibold text-gray-800 mb-3">
+                💰 Financial Summary
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">
+                    Revenue
+                  </h4>
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Grants ($)
+                    </label>
+                    <input
+                      type="number"
+                      value={reportData?.financialReport?.grants ?? 0}
+                      onChange={(e) =>
+                        setReportData({
+                          ...reportData,
+                          financialReport: {
+                            ...reportData.financialReport,
+                            grants: parseInt(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Donations ($)
+                    </label>
+                    <input
+                      type="number"
+                      value={reportData?.financialReport?.donations ?? 0}
+                      onChange={(e) =>
+                        setReportData({
+                          ...reportData,
+                          financialReport: {
+                            ...reportData.financialReport,
+                            donations: parseInt(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">
+                    Expenses
+                  </h4>
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Personnel ($)
+                    </label>
+                    <input
+                      type="number"
+                      value={reportData?.financialReport?.personnel ?? 0}
+                      onChange={(e) =>
+                        setReportData({
+                          ...reportData,
+                          financialReport: {
+                            ...reportData.financialReport,
+                            personnel: parseInt(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Programming ($)
+                    </label>
+                    <input
+                      type="number"
+                      value={reportData?.financialReport?.programming ?? 0}
+                      onChange={(e) =>
+                        setReportData({
+                          ...reportData,
+                          financialReport: {
+                            ...reportData.financialReport,
+                            programming: parseInt(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Operations ($)
+                    </label>
+                    <input
+                      type="number"
+                      value={reportData?.financialReport?.operations ?? 0}
+                      onChange={(e) =>
+                        setReportData({
+                          ...reportData,
+                          financialReport: {
+                            ...reportData.financialReport,
+                            operations: parseInt(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Pending Invoices (count)
+                  </label>
+                  <input
+                    type="number"
+                    value={reportData?.financialReport?.pendingInvoices ?? 0}
+                    onChange={(e) =>
+                      setReportData({
+                        ...reportData,
+                        financialReport: {
+                          ...reportData.financialReport,
+                          pendingInvoices: parseInt(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Pending Amount ($)
+                  </label>
+                  <input
+                    type="number"
+                    value={reportData?.financialReport?.pendingAmount ?? 0}
+                    onChange={(e) =>
+                      setReportData({
+                        ...reportData,
+                        financialReport: {
+                          ...reportData.financialReport,
+                          pendingAmount: parseInt(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Outcome Metrics Report */}
+            <div className="mb-8 pb-6 border-b border-gray-200">
+              <h3 className="text-md font-semibold text-gray-800 mb-3">
+                📈 Outcome Metrics Report
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Business Launches
+                  </label>
+                  <input
+                    type="number"
+                    value={reportData?.outcomeReport?.businessLaunches ?? 0}
+                    onChange={(e) =>
+                      setReportData({
+                        ...reportData,
+                        outcomeReport: {
+                          ...reportData.outcomeReport,
+                          businessLaunches: parseInt(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Satisfaction (%)
+                  </label>
+                  <input
+                    type="number"
+                    value={reportData?.outcomeReport?.satisfaction ?? 0}
+                    onChange={(e) =>
+                      setReportData({
+                        ...reportData,
+                        outcomeReport: {
+                          ...reportData.outcomeReport,
+                          satisfaction: parseInt(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Mentor Matches
+                  </label>
+                  <input
+                    type="number"
+                    value={reportData?.outcomeReport?.mentorMatches ?? 0}
+                    onChange={(e) =>
+                      setReportData({
+                        ...reportData,
+                        outcomeReport: {
+                          ...reportData.outcomeReport,
+                          mentorMatches: parseInt(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Referrals
+                  </label>
+                  <input
+                    type="number"
+                    value={reportData?.outcomeReport?.referrals ?? 0}
+                    onChange={(e) =>
+                      setReportData({
+                        ...reportData,
+                        outcomeReport: {
+                          ...reportData.outcomeReport,
+                          referrals: parseInt(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Success Story Text
+                </label>
+                <textarea
+                  value={reportData?.outcomeReport?.successStory ?? ""}
+                  onChange={(e) =>
+                    setReportData({
+                      ...reportData,
+                      outcomeReport: {
+                        ...reportData.outcomeReport,
+                        successStory: e.target.value,
+                      },
+                    })
+                  }
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                />
+              </div>
+            </div>
+
+            {/* County Distribution Report */}
+            <div className="mb-8 pb-6 border-b border-gray-200">
+              <h3 className="text-md font-semibold text-gray-800 mb-3">
+                🗺️ County Distribution Report
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-3 py-2">County</th>
+                      <th className="text-left px-3 py-2">Participants</th>
+                      <th className="text-left px-3 py-2">Percentage (%)</th>
+                      <th className="text-center px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(reportData?.countyReport?.counties || []).map(
+                      (county, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={county?.name ?? ""}
+                              onChange={(e) => {
+                                const newCounties = [
+                                  ...(reportData.countyReport?.counties || []),
+                                ];
+                                newCounties[idx] = {
+                                  ...newCounties[idx],
+                                  name: e.target.value,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  countyReport: {
+                                    ...reportData.countyReport,
+                                    counties: newCounties,
+                                  },
+                                });
+                              }}
+                              className="w-full px-2 py-1 border border-gray-200 rounded"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              value={county?.count ?? 0}
+                              onChange={(e) => {
+                                const newCounties = [
+                                  ...(reportData.countyReport?.counties || []),
+                                ];
+                                newCounties[idx] = {
+                                  ...newCounties[idx],
+                                  count: parseInt(e.target.value) || 0,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  countyReport: {
+                                    ...reportData.countyReport,
+                                    counties: newCounties,
+                                  },
+                                });
+                              }}
+                              className="w-24 px-2 py-1 border border-gray-200 rounded"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              value={county?.percentage ?? 0}
+                              onChange={(e) => {
+                                const newCounties = [
+                                  ...(reportData.countyReport?.counties || []),
+                                ];
+                                newCounties[idx] = {
+                                  ...newCounties[idx],
+                                  percentage: parseInt(e.target.value) || 0,
+                                };
+                                setReportData({
+                                  ...reportData,
+                                  countyReport: {
+                                    ...reportData.countyReport,
+                                    counties: newCounties,
+                                  },
+                                });
+                              }}
+                              className="w-20 px-2 py-1 border border-gray-200 rounded"
+                            />
+                          </td>
+                          <td className="text-center">
+                            <button
+                              onClick={() => {
+                                const newCounties = (
+                                  reportData.countyReport?.counties || []
+                                ).filter((_, i) => i !== idx);
+                                setReportData({
+                                  ...reportData,
+                                  countyReport: {
+                                    ...reportData.countyReport,
+                                    counties: newCounties,
+                                  },
+                                });
+                              }}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              🗑️
+                            </button>
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                onClick={() => {
+                  const newCounties = [
+                    ...(reportData.countyReport?.counties || []),
+                    { name: "New County", count: 0, percentage: 0 },
+                  ];
+                  setReportData({
+                    ...reportData,
+                    countyReport: {
+                      ...reportData.countyReport,
+                      counties: newCounties,
+                    },
+                  });
+                }}
+                className="mt-3 text-sm text-emerald-600 hover:text-emerald-700"
+              >
+                + Add County
+              </button>
+            </div>
+
+            <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-xs text-green-700">
+                ✅ All reports are fully editable! Changes will appear on the
+                Reports page after saving.
               </p>
             </div>
           </div>

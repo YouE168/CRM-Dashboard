@@ -12,6 +12,15 @@ import {
   Trophy,
   Trash2,
   TrendingUp,
+  X,
+  BookOpen,
+  Target,
+  Lightbulb,
+  MessageCircle,
+  ArrowRight,
+  Video,
+  Copy,
+  Plus,
 } from "lucide-react";
 
 interface ActionItemType {
@@ -32,6 +41,153 @@ interface LeadershipTabProps {
     type: "success" | "error" | "info" | "warning",
     duration?: number,
   ) => void;
+}
+
+// Learn More Modal Component
+function LearnMoreModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white p-5 border-b border-gray-100 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-emerald-100 rounded-xl">
+              <BookOpen className="h-5 w-5 text-emerald-600" />
+            </div>
+            <h2 className="text-xl font-semibold text-gray-900">
+              About the Leadership Roundtable
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-xl"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-6 space-y-6">
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-5">
+            <p className="text-gray-700 leading-relaxed">
+              Leadership Roundtable is a regional learning and action space for
+              coalition leaders, community partners, and local changemakers
+              across Southeast Kansas.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Target className="h-5 w-5 text-emerald-600" />
+              The Purpose
+            </h3>
+            <p className="text-gray-600 leading-relaxed">
+              To help local leaders strengthen their coalitions, better
+              understand community needs, share what is working, and solve
+              barriers together across county lines.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Lightbulb className="h-5 w-5 text-emerald-600" />
+              Key Questions Explored
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-gray-50 rounded-xl p-3">
+                <p className="text-sm text-gray-700">👥 Who are we serving?</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3">
+                <p className="text-sm text-gray-700">
+                  📊 What are the real needs and barriers?
+                </p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3">
+                <p className="text-sm text-gray-700">
+                  🤝 How do we build trust and engagement?
+                </p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3">
+                <p className="text-sm text-gray-700">
+                  🔧 What resources, partners, and strategies are needed?
+                </p>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Users className="h-5 w-5 text-emerald-600" />
+              Who Should Attend
+            </h3>
+            <p className="text-gray-600 leading-relaxed">
+              The roundtable is designed for people leading or supporting
+              community coalitions, health equity teams, nonprofit initiatives,
+              economic mobility efforts, and other local change work.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Award className="h-5 w-5 text-emerald-600" />
+              What to Expect
+            </h3>
+            <div className="space-y-2">
+              <div className="flex items-start gap-2">
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold mt-0.5">
+                  ✓
+                </div>
+                <span className="text-gray-600">
+                  Monthly learning and discussion sessions
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold mt-0.5">
+                  ✓
+                </div>
+                <span className="text-gray-600">
+                  Peer problem-solving with leaders from other counties
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold mt-0.5">
+                  ✓
+                </div>
+                <span className="text-gray-600">
+                  Practical tools for coalition planning and strategy
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold mt-0.5">
+                  ✓
+                </div>
+                <span className="text-gray-600">
+                  Space to share barriers, lessons learned, and community wins
+                </span>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold mt-0.5">
+                  ✓
+                </div>
+                <span className="text-gray-600">
+                  Support connecting local work to regional opportunities
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+            <p className="text-sm text-amber-700 flex items-center gap-2">
+              <MessageCircle className="h-4 w-4" />
+              Each session blends practical tools like the Business Model Canvas
+              with adaptive leadership concepts from the Kansas Leadership
+              Center.
+            </p>
+          </div>
+        </div>
+        <div className="p-5 border-t border-gray-100 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function LeadershipTab({
@@ -71,6 +227,7 @@ export function LeadershipTab({
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [cmsData, setCmsData] = useState(loadCMSData());
+  const [showLearnMore, setShowLearnMore] = useState(false);
 
   useEffect(() => {
     setCmsData(loadCMSData());
@@ -165,6 +322,19 @@ export function LeadershipTab({
     },
   ];
 
+  // Get meeting data from CMS
+  const meeting = cmsData.leadership?.nextMeeting || {
+    date: "May 15, 2026",
+    day: 15,
+    month: "May",
+    time: "2:00 PM",
+    title: "Q2 Strategy & Impact Review",
+    description:
+      "Join us to review Q1 outcomes, discuss Q2 initiatives, and share best practices across programs.",
+    attendees: 12,
+    zoomPlaceholder: "123 456 7890",
+  };
+
   return (
     <>
       <div className="mb-6">
@@ -177,7 +347,7 @@ export function LeadershipTab({
         </p>
       </div>
 
-      {/* PROMINENT JOIN CTA AT TOP */}
+      {/* JOIN CTA */}
       <div className="mb-8 bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl shadow-lg overflow-hidden">
         <div className="px-6 py-8 md:py-6 md:flex md:items-center md:justify-between">
           <div className="mb-4 md:mb-0">
@@ -204,27 +374,21 @@ export function LeadershipTab({
           <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={onOpenSignup}
-              className="px-6 py-3 bg-white text-emerald-700 font-semibold rounded-xl hover:bg-gray-50 transition-all shadow-md hover:shadow-lg text-sm"
+              className="px-6 py-3 bg-white text-emerald-700 font-semibold rounded-xl hover:bg-gray-50 transition-all shadow-md text-sm"
             >
               Apply to Join →
             </button>
             <button
-              onClick={() => {
-                showToast(
-                  "The Leadership Roundtable is where leaders across Southeast Kansas come together to take on adaptive challenges. By combining the Business Model Canvas with Kansas Leadership Center principles, we're aligning strategy, building leadership capacity, and creating real momentum across communities.",
-                  "info",
-                  8000,
-                );
-              }}
-              className="px-6 py-3 bg-emerald-500/30 text-white font-medium rounded-xl hover:bg-emerald-500/40 transition-all text-sm border border-white/20"
+              onClick={() => setShowLearnMore(true)}
+              className="px-6 py-3 bg-emerald-500/30 text-white font-medium rounded-xl hover:bg-emerald-500/40 transition-all text-sm border border-white/20 flex items-center gap-2"
             >
-              Learn More
+              Learn More <ArrowRight className="h-4 w-4" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* SIGNUPS STATS ROW - Using CMS Data */}
+      {/* STATS ROW */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <KPICard
           title="Total Members"
@@ -271,7 +435,7 @@ export function LeadershipTab({
         />
       </div>
 
-      {/* RESOURCES INVESTED SECTION - Using CMS Data */}
+      {/* RESOURCES INVESTED */}
       <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white">
           <div className="flex items-center gap-2">
@@ -288,34 +452,26 @@ export function LeadershipTab({
                 ${cmsData.leadership.grantFunding.toLocaleString()}
               </div>
               <div className="text-xs text-gray-500 mt-1">Grant Funding</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">FY 2026</div>
             </div>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-emerald-600">
                 {cmsData.leadership.mentorHours}
               </div>
               <div className="text-xs text-gray-500 mt-1">Mentor Hours</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">YTD</div>
             </div>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-emerald-600">
                 {cmsData.leadership.staffMembers}
               </div>
               <div className="text-xs text-gray-500 mt-1">Staff Members</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">Dedicated</div>
             </div>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-emerald-600">
                 ${cmsData.leadership.inKindSupport.toLocaleString()}
               </div>
               <div className="text-xs text-gray-500 mt-1">In-Kind Support</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">
-                Venue + Materials
-              </div>
             </div>
           </div>
-
-          {/* Budget Utilization Bar */}
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="text-gray-600">Budget Utilization</span>
@@ -359,11 +515,11 @@ export function LeadershipTab({
         </div>
       </div>
 
-      {/* Two-column layout */}
+      {/* TWO COLUMN LAYOUT */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column */}
+        {/* LEFT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Upcoming Meeting */}
+          {/* NEXT MEETING - READ FROM CMS */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-white">
               <div className="flex items-center justify-between">
@@ -374,57 +530,139 @@ export function LeadershipTab({
                   </h2>
                 </div>
                 <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
-                  May 15, 2026
+                  {meeting.date}
                 </span>
               </div>
             </div>
             <div className="p-5">
-              <div className="flex items-start gap-4 flex-wrap md:flex-nowrap">
-                <div className="bg-gray-50 rounded-lg p-3 text-center min-w-[80px]">
-                  <div className="text-2xl font-bold text-emerald-600">15</div>
-                  <div className="text-xs text-gray-500">May</div>
-                  <div className="text-xs text-gray-400">2:00 PM</div>
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">
-                    Q2 Strategy & Impact Review
-                  </h3>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Join us to review Q1 outcomes, discuss Q2 initiatives, and
-                    share best practices across programs.
-                  </p>
-                  <div className="flex items-center gap-3 mt-3">
-                    <div className="flex -space-x-2">
-                      {["MC", "LT", "DP", "JL"].map((init, i) => (
-                        <div
-                          key={i}
-                          className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex items-center justify-center ring-2 ring-white"
-                        >
-                          {init}
-                        </div>
-                      ))}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-start gap-4 flex-wrap md:flex-nowrap">
+                  <div className="bg-gradient-to-br from-emerald-100 to-teal-100 rounded-xl p-3 text-center min-w-[100px] shadow-sm">
+                    <div className="text-2xl font-bold text-emerald-700">
+                      {meeting.day}
                     </div>
-                    <span className="text-xs text-gray-400">
-                      +12 confirmed attendees
-                    </span>
+                    <div className="text-xs font-medium text-gray-600">
+                      {meeting.month}
+                    </div>
+                    <div className="text-xs text-gray-500">{meeting.time}</div>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 text-lg">
+                      {meeting.title}
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+                      {meeting.description}
+                    </p>
+                    <div className="flex items-center gap-3 mt-3">
+                      <div className="flex -space-x-2">
+                        {["MC", "LT", "DP", "JL"].map((init, i) => (
+                          <div
+                            key={i}
+                            className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex items-center justify-center ring-2 ring-white shadow-sm"
+                          >
+                            {init}
+                          </div>
+                        ))}
+                        <div className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
+                          +{meeting.attendees}
+                        </div>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        confirmed attendees
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <button
-                  onClick={() =>
-                    showToast(
-                      "Meeting link will be available on May 15, 2026. You will receive an email with the Zoom link 1 hour before the meeting.",
-                      "info",
-                    )
-                  }
-                  className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
-                >
-                  Join Meeting
-                </button>
+                <div className="border-t border-gray-100 pt-4">
+                  <div className="bg-blue-50 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Video className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm font-medium text-gray-700">
+                          Join via Zoom
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(
+                            meeting.zoomPlaceholder,
+                          );
+                          showToast(
+                            "Meeting ID copied to clipboard!",
+                            "success",
+                          );
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                      >
+                        <Copy className="h-3 w-3" />
+                        Copy ID
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                      <input
+                        type="text"
+                        id="leadershipZoomId"
+                        placeholder={`Zoom Meeting ID (e.g., ${meeting.zoomPlaceholder})`}
+                        className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        id="leadershipZoomPassword"
+                        placeholder="Passcode (if required)"
+                        className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        const meetingId = (
+                          document.getElementById(
+                            "leadershipZoomId",
+                          ) as HTMLInputElement
+                        )?.value;
+                        const password = (
+                          document.getElementById(
+                            "leadershipZoomPassword",
+                          ) as HTMLInputElement
+                        )?.value;
+                        if (!meetingId || meetingId.trim() === "") {
+                          showToast("Please enter the Zoom Meeting ID", "info");
+                          return;
+                        }
+                        const cleanMeetingId = meetingId
+                          .trim()
+                          .replace(/\s/g, "");
+                        let zoomUrl = `https://zoom.us/j/${cleanMeetingId}`;
+                        if (password && password.trim() !== "")
+                          zoomUrl += `?pwd=${encodeURIComponent(password.trim())}`;
+                        window.open(zoomUrl, "_blank");
+                      }}
+                      className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
+                    >
+                      <Video className="h-4 w-4" />
+                      Join Zoom Meeting
+                    </button>
+                    <div className="flex items-center justify-between mt-3">
+                      <p className="text-xs text-gray-500">
+                        💡 The meeting ID will be sent via email
+                      </p>
+                      <button
+                        onClick={() => {
+                          const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(meeting.title)}&dates=20260515T140000/20260515T153000&details=${encodeURIComponent(meeting.description)}`;
+                          window.open(calendarUrl, "_blank");
+                        }}
+                        className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                      >
+                        <CalendarDays className="h-3 w-3" />
+                        Add to Calendar
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Action Items */}
+          {/* ACTION ITEMS */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">
@@ -474,7 +712,7 @@ export function LeadershipTab({
             </div>
           </div>
 
-          {/* Past Meetings */}
+          {/* PAST MEETINGS */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">
@@ -508,7 +746,7 @@ export function LeadershipTab({
                   <button
                     onClick={() =>
                       showToast(
-                        `📄 ${meeting.title}\n\nMeeting minutes and presentation slides are available. Contact the coordinator for access.`,
+                        `📄 ${meeting.title}\n\nMeeting minutes available. Contact coordinator for access.`,
                         "info",
                       )
                     }
@@ -522,9 +760,8 @@ export function LeadershipTab({
           </div>
         </div>
 
-        {/* Right column */}
+        {/* RIGHT COLUMN */}
         <div className="space-y-6">
-          {/* Member Spotlight */}
           <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100 p-5">
             <div className="flex items-center gap-2 mb-3">
               <Trophy className="h-4 w-4 text-amber-500" />
@@ -552,7 +789,6 @@ export function LeadershipTab({
             </div>
           </div>
 
-          {/* Core Members */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">
@@ -588,10 +824,7 @@ export function LeadershipTab({
             <div className="px-5 py-3 border-t border-gray-100">
               <button
                 onClick={() =>
-                  showToast(
-                    "Full member directory coming soon! You'll be able to view all Leadership Roundtable members and their contact information.",
-                    "info",
-                  )
+                  showToast("Full member directory coming soon!", "info")
                 }
                 className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
               >
@@ -600,7 +833,6 @@ export function LeadershipTab({
             </div>
           </div>
 
-          {/* Resources */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-900 mb-3">
               Resources
@@ -629,12 +861,14 @@ export function LeadershipTab({
         </div>
       </div>
 
-      {/* Add Action Modal */}
       <AddActionModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAdd={addActionItem}
       />
+      {showLearnMore && (
+        <LearnMoreModal onClose={() => setShowLearnMore(false)} />
+      )}
     </>
   );
 }
