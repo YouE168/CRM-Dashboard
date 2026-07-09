@@ -42,16 +42,59 @@ export default function RequestAccessPage() {
       return;
     }
 
-    // Add new request
+    // Check if user already has an approved request
+    const existingApproved = requests.find(
+      (r: any) => r.email === formData.email && r.status === "approved",
+    );
+
+    if (existingApproved) {
+      alert(
+        "Your access has already been approved. Please check your email for login instructions.",
+      );
+      return;
+    }
+
+    // Generate a unique verification token
+    const verificationToken =
+      Math.random().toString(36).substring(2, 15) +
+      Math.random().toString(36).substring(2, 15);
+
+    // Add new request with verification token
     const newRequest = {
       ...formData,
       submittedAt: new Date().toISOString(),
       status: "pending",
+      verificationToken: verificationToken,
+      passwordSet: false,
     };
     requests.push(newRequest);
     localStorage.setItem("access_requests", JSON.stringify(requests));
 
-    // Also open email to Jody as backup
+    // Also create a user account with pending status (no password yet)
+    const users = JSON.parse(localStorage.getItem("users") || "[]");
+    const existingUser = users.find((u: any) => u.email === formData.email);
+
+    if (!existingUser) {
+      users.push({
+        email: formData.email,
+        password: "", // No password yet - will be set during activation
+        fullName: formData.name,
+        roles: [formData.requestedRole],
+        roleLabels: [
+          formData.requestedRole === "program_manager"
+            ? "Program Manager"
+            : "Staff",
+        ],
+        primaryRole: formData.requestedRole,
+        status: "pending_approval",
+        createdAt: new Date().toISOString(),
+        verificationToken: verificationToken,
+        passwordSet: false,
+      });
+      localStorage.setItem("users", JSON.stringify(users));
+    }
+
+    // Also open email to Jody with the verification link
     const subject = `Access Request: ${formData.name} - ${formData.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"}`;
     const body = `
 Access Request Details:
@@ -61,8 +104,17 @@ Email: ${formData.email}
 Requested Role: ${formData.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"}
 Reason: ${formData.reason}
 Submitted: ${new Date().toLocaleString()}
+Verification Token: ${verificationToken}
 
 Please review this request at: ${window.location.origin}/admin/dashboard
+
+After approval, the user will need to set their password at:
+${window.location.origin}/set-password?token=${verificationToken}
+
+Instructions for Admin:
+1. Go to Admin Dashboard → Access Requests
+2. Click "Approve" for ${formData.name}
+3. Copy the password setup link and send it to the user
     `;
 
     window.location.href = `mailto:jody@hbcat.org?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -78,8 +130,8 @@ Please review this request at: ${window.location.origin}/admin/dashboard
           </div>
           <h2 className="text-2xl font-bold text-gray-900">Request Sent!</h2>
           <p className="text-gray-500 mt-2">
-            Your request has been sent to Jody. You will receive an email once
-            your account has been upgraded.
+            Your request has been sent to Jody. You will receive an email with
+            instructions to set your password once approved.
           </p>
           <button
             onClick={() => router.push("/")}
@@ -192,7 +244,7 @@ Please review this request at: ${window.location.origin}/admin/dashboard
 
         <p className="text-xs text-gray-400 text-center mt-4">
           Your request will be sent to Jody for review. You'll receive an email
-          once approved.
+          with instructions to set your password once approved.
         </p>
       </div>
     </div>

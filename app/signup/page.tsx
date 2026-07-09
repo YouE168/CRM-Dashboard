@@ -28,10 +28,21 @@ interface Role {
   programs: string[];
 }
 
-// User Roles
-// In app/signup/page.tsx, update the USER_ROLES array:
-
+// User Roles - Updated with Mentee
 const USER_ROLES = [
+  {
+    id: "mentee",
+    label: "Mentee / Program Participant",
+    icon: User,
+    description:
+      "Access mentorship, business programs, and entrepreneurial support",
+    programs: [
+      "RCP Small Business Mentorship",
+      "SEED Micro-Grant",
+      "Business Professional Services",
+      "Microloan Program",
+    ],
+  },
   {
     id: "entrepreneur",
     label: "Entrepreneur / Business Owner",
@@ -40,7 +51,7 @@ const USER_ROLES = [
     programs: [
       "RCP Small Business Mentorship",
       "SEED Micro-Grant",
-      "Business Technical Assistance",
+      "Business Professional Services",
       "Microloan Program",
     ],
   },

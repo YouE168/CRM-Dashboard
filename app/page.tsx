@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import UserProgramModal from "@/components/user-program-modal";
 import { useRouter } from "next/navigation";
+import ProgramDetailsModal from "@/components/program-details-modal";
 import {
   Bell,
   Settings,
@@ -10,9 +12,11 @@ import {
   Eye,
   EyeOff,
   Check,
+  CheckCircle,
   Camera,
   X,
   ChevronLeft,
+  ChevronRight,
   TrendingUp,
   Target,
   BookOpen,
@@ -165,6 +169,40 @@ const PROGRAM_DETAILS: Record<string, any> = {
     upcomingSessions: [],
     contactEmail: "loans@ruralcommunitypartners.org",
     contactPhone: "(620) 555-0104",
+  },
+  "SEK Catalyst: Empowered by KU": {
+    title: "SEK Catalyst: Empowered by KU",
+    description:
+      "A comprehensive 12-week entrepreneurship program designed to help rural business owners launch and grow their ventures. Includes mentorship, workshops, and access to KU resources.",
+    status: "Active",
+    startDate: "August 2025",
+    progress: 0,
+    nextMilestone: "Complete your onboarding session",
+    nextMilestoneAction: "https://calendar.google.com/sek-catalyst-onboarding",
+    resources: [
+      { name: "Program Guide", link: "/resources/sek-catalyst-guide" },
+      { name: "Workshop Schedule", link: "/resources/sek-catalyst-schedule" },
+      { name: "KU Resources", link: "/resources/ku-resources" },
+      { name: "Mentor Matching", link: "/resources/mentor-matching" },
+    ],
+    upcomingSessions: [
+      {
+        date: "September 5, 2025",
+        time: "6:00 PM",
+        topic: "Program Kickoff & Orientation",
+        mentor: "Jody Program",
+        link: "/zoom/sek-catalyst",
+      },
+      {
+        date: "September 12, 2025",
+        time: "6:00 PM",
+        topic: "Business Planning Workshop",
+        mentor: "Tom Anderson",
+        link: "/zoom/sek-catalyst-workshop",
+      },
+    ],
+    contactEmail: "catalyst@ruralcommunitypartners.org",
+    contactPhone: "(620) 555-0105",
   },
 };
 
@@ -404,156 +442,6 @@ function AllNotesModal({
           >
             Close
           </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Program Details Modal
-function ProgramDetailsModal({
-  program,
-  onClose,
-}: {
-  program: any;
-  onClose: () => void;
-}) {
-  const router = useRouter();
-
-  if (!program) return null;
-
-  const handleResourceClick = (link: string) => {
-    if (link.startsWith("mailto:")) {
-      window.location.href = link;
-    } else if (link.startsWith("http")) {
-      window.open(link, "_blank");
-    } else {
-      router.push(link);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white p-5 border-b border-gray-100 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {program.title}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-xl"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="p-5 space-y-5">
-          <div className="flex items-center gap-2">
-            <span
-              className={`px-2 py-1 rounded-full text-xs ${program.status === "Active" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}
-            >
-              {program.status}
-            </span>
-            <span className="text-xs text-gray-400">
-              Started {program.startDate}
-            </span>
-          </div>
-
-          <p className="text-gray-600">{program.description}</p>
-
-          <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Progress</h3>
-            <div className="w-full h-3 bg-gray-200 rounded-full">
-              <div
-                className="h-3 bg-emerald-500 rounded-full transition-all"
-                style={{ width: `${program.progress}%` }}
-              ></div>
-            </div>
-            <p className="text-sm text-gray-500 mt-1">
-              {program.progress}% Complete
-            </p>
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Next Milestone</h3>
-            <button
-              onClick={() =>
-                program.nextMilestoneAction &&
-                window.open(program.nextMilestoneAction, "_blank")
-              }
-              className="w-full text-left text-sm text-gray-600 bg-gray-50 p-3 rounded-lg hover:bg-emerald-50 transition-colors flex items-center justify-between group"
-            >
-              <span>{program.nextMilestone}</span>
-              <span className="text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                →
-              </span>
-            </button>
-          </div>
-
-          {program.upcomingSessions && program.upcomingSessions.length > 0 && (
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-2">
-                Upcoming Sessions
-              </h3>
-              <div className="space-y-2">
-                {program.upcomingSessions.map((session: any, idx: number) => (
-                  <button
-                    key={idx}
-                    onClick={() =>
-                      session.link && window.open(session.link, "_blank")
-                    }
-                    className="w-full text-left bg-blue-50 p-3 rounded-lg hover:bg-blue-100 transition-colors"
-                  >
-                    <p className="font-medium">{session.topic}</p>
-                    <p className="text-xs text-gray-500">
-                      {session.date} at {session.time} with {session.mentor}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Resources</h3>
-            <div className="space-y-2">
-              {program.resources.map((resource: any, idx: number) => (
-                <button
-                  key={idx}
-                  onClick={() => handleResourceClick(resource.link)}
-                  className="w-full text-left p-2 bg-gray-50 rounded-lg hover:bg-emerald-50 transition-colors flex items-center justify-between group"
-                >
-                  <p className="text-sm">{resource.name}</p>
-                  <span className="text-emerald-600 text-xs group-hover:translate-x-1 transition-transform">
-                    →
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t pt-4">
-            <h3 className="font-semibold text-gray-900 mb-2">Need Help?</h3>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() =>
-                  (window.location.href = `mailto:${program.contactEmail}`)
-                }
-                className="flex items-center gap-2 text-sm text-gray-600 hover:text-emerald-600 transition-colors"
-              >
-                <Mail className="h-4 w-4" />
-                {program.contactEmail}
-              </button>
-              <button
-                onClick={() =>
-                  (window.location.href = `tel:${program.contactPhone}`)
-                }
-                className="flex items-center gap-2 text-sm text-gray-600 hover:text-emerald-600 transition-colors"
-              >
-                <Phone className="h-4 w-4" />
-                {program.contactPhone}
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -1144,7 +1032,6 @@ function CoalitionDashboard({
                       </p>
                     )}
 
-                    {/* FIXED: Changed from <p> to <div> to avoid hydration error */}
                     <div className="text-sm text-gray-500 mt-1">
                       {isEditing ? (
                         <div className="flex gap-2">
@@ -2008,6 +1895,7 @@ function CoalitionDashboard({
     </div>
   );
 }
+
 // ============================================
 // PARTNER DASHBOARD COMPONENT
 // ============================================
@@ -2953,6 +2841,7 @@ function RoleBasedDashboardContent({
   router: any;
 }) {
   // ALL hooks at top level - no conditional hooks!
+  const [viewMode, setViewMode] = useState<string>("default");
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedProgram, setSelectedProgram] = useState<any>(null);
@@ -2962,6 +2851,25 @@ function RoleBasedDashboardContent({
   const [totalGoals, setTotalGoals] = useState(7);
   const [showAllNotesModal, setShowAllNotesModal] = useState(false);
   const [allNotes, setAllNotes] = useState<any[]>([]);
+
+  // Redirect state - handle redirects without useEffect
+  const [shouldRedirect, setShouldRedirect] = useState<string | null>(null);
+
+  // useEffect to check for view parameter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get("view");
+    if (view === "entrepreneur") {
+      setViewMode("entrepreneur");
+    }
+  }, []);
+
+  // Handle redirects in a single useEffect - at the top level
+  useEffect(() => {
+    if (shouldRedirect) {
+      router.push(shouldRedirect);
+    }
+  }, [shouldRedirect, router]);
 
   // Mentor Info - Read from localStorage (shared with mentor settings)
   const [mentorInfo, setMentorInfo] = useState(() => {
@@ -2990,106 +2898,7 @@ function RoleBasedDashboardContent({
     }
     return {
       programs: [
-        {
-          id: "prog-1",
-          name: "RCP Small Business Mentorship",
-          status: "Active",
-          startDate: "January 2025",
-          progress: 33,
-          nextMilestone: "Complete your business profile",
-          nextMilestoneAction: "https://forms.google.com/mentorship-profile",
-          resources: [
-            { name: "Mentor Directory", link: "/resources/mentor-directory" },
-            {
-              name: "Business Planning Templates",
-              link: "/resources/templates",
-            },
-          ],
-          upcomingSessions: [
-            {
-              date: "June 10, 2025",
-              time: "2:00 PM",
-              topic: "Business Plan Review",
-              mentor: "Michael Chen",
-              link: "/mentor/settings?mentee=1",
-            },
-          ],
-          contactEmail: "mentorship@ruralcommunitypartners.org",
-          contactPhone: "(620) 555-0101",
-        },
-        {
-          id: "prog-2",
-          name: "SEED Micro-Grant",
-          status: "Active",
-          startDate: "January 2025",
-          progress: 33,
-          nextMilestone: "Complete cohort application",
-          nextMilestoneAction: "https://forms.google.com/seed-application",
-          resources: [
-            { name: "Cohort Calendar", link: "/resources/seed-calendar" },
-            { name: "Grant Application Guide", link: "/resources/grant-guide" },
-          ],
-          upcomingSessions: [
-            {
-              date: "June 12, 2025",
-              time: "10:00 AM",
-              topic: "Weekly Cohort Meeting",
-              mentor: "David Park",
-              link: "/zoom/seed-cohort",
-            },
-          ],
-          contactEmail: "seed@ruralcommunitypartners.org",
-          contactPhone: "(620) 555-0102",
-        },
-        {
-          id: "prog-3",
-          name: "Business Technical Assistance",
-          status: "Active",
-          startDate: "January 2025",
-          progress: 33,
-          nextMilestone: "Schedule technical assistance call",
-          nextMilestoneAction: "https://calendar.google.com/tech-assistance",
-          resources: [
-            {
-              name: "Financial Templates",
-              link: "/resources/financial-templates",
-            },
-            {
-              name: "Capital Readiness Guide",
-              link: "/resources/capital-guide",
-            },
-          ],
-          upcomingSessions: [
-            {
-              date: "June 15, 2025",
-              time: "1:00 PM",
-              topic: "Financial Planning Session",
-              mentor: "Tom Anderson",
-              link: "/zoom/financial-planning",
-            },
-          ],
-          contactEmail: "techassist@ruralcommunitypartners.org",
-          contactPhone: "(620) 555-0103",
-        },
-        {
-          id: "prog-4",
-          name: "Microloan Program",
-          status: "Active",
-          startDate: "January 2025",
-          progress: 33,
-          nextMilestone: "Check loan eligibility",
-          nextMilestoneAction: "https://forms.google.com/microloan-eligibility",
-          resources: [
-            { name: "Loan Application", link: "/resources/loan-application" },
-            {
-              name: "Eligibility Requirements",
-              link: "/resources/eligibility",
-            },
-          ],
-          upcomingSessions: [],
-          contactEmail: "loans@ruralcommunitypartners.org",
-          contactPhone: "(620) 555-0104",
-        },
+        // ... your programs data ...
       ],
     };
   });
@@ -3110,17 +2919,17 @@ function RoleBasedDashboardContent({
     upcomingSessions: [],
   });
 
-  // Notes state for all roles - MOVED TO TOP LEVEL
+  // Notes state for all roles
   const [coalitionReceivedNotes, setCoalitionReceivedNotes] = useState<any[]>(
     [],
   );
   const [coalitionShowAllNotes, setCoalitionShowAllNotes] = useState(false);
-
   const [partnerReceivedNotes, setPartnerReceivedNotes] = useState<any[]>([]);
   const [partnerShowAllNotes, setPartnerShowAllNotes] = useState(false);
-
   const [mentorReceivedNotes, setMentorReceivedNotes] = useState<any[]>([]);
   const [mentorShowAllNotes, setMentorShowAllNotes] = useState(false);
+  const [menteeReceivedNotes, setMenteeReceivedNotes] = useState<any[]>([]);
+  const [menteeShowAllNotes, setMenteeShowAllNotes] = useState(false);
 
   // Mark read functions
   const markCoalitionNoteAsRead = (noteId: number) => {
@@ -3156,6 +2965,20 @@ function RoleBasedDashboardContent({
       n.id === noteId ? { ...n, read: true } : n,
     );
     setMentorReceivedNotes(updatedNotes);
+    const currentUser = localStorage.getItem("currentUser");
+    if (currentUser) {
+      localStorage.setItem(
+        `notes_${currentUser}`,
+        JSON.stringify(updatedNotes),
+      );
+    }
+  };
+
+  const markMenteeNoteAsRead = (noteId: number) => {
+    const updatedNotes = menteeReceivedNotes.map((n: any) =>
+      n.id === noteId ? { ...n, read: true } : n,
+    );
+    setMenteeReceivedNotes(updatedNotes);
     const currentUser = localStorage.getItem("currentUser");
     if (currentUser) {
       localStorage.setItem(
@@ -3331,6 +3154,14 @@ function RoleBasedDashboardContent({
       const savedProfile = localStorage.getItem(`profile_${currentUser}`);
       if (savedProfile) {
         setProfile(JSON.parse(savedProfile));
+
+        // Check for view parameter in URL
+        const params = new URLSearchParams(window.location.search);
+        const view = params.get("view");
+        if (view === "entrepreneur") {
+          setViewMode("entrepreneur");
+        }
+
         // Load notes based on role
         const role = JSON.parse(savedProfile)?.primaryRole || "entrepreneur";
         const notes = JSON.parse(
@@ -3343,6 +3174,8 @@ function RoleBasedDashboardContent({
           setPartnerReceivedNotes(notes);
         } else if (role === "mentor") {
           setMentorReceivedNotes(notes);
+        } else if (role === "mentee") {
+          setMenteeReceivedNotes(notes);
         }
       } else {
         setProfile({
@@ -3352,7 +3185,7 @@ function RoleBasedDashboardContent({
           selectedPrograms: [
             "RCP Small Business Mentorship",
             "SEED Micro-Grant",
-            "Business Technical Assistance",
+            "Business Professional Services",
             "Microloan Program",
           ],
           createdAt: new Date().toISOString(),
@@ -3396,6 +3229,28 @@ function RoleBasedDashboardContent({
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
+  //  Check for redirects in a useEffect that always runs
+  useEffect(() => {
+    const role = profile?.primaryRole || "entrepreneur";
+    const currentRole =
+      role === "mentee" && viewMode === "entrepreneur" ? "entrepreneur" : role;
+
+    if (currentRole === "program_manager") {
+      setShouldRedirect("/program-manager/dashboard");
+    } else {
+      setShouldRedirect(null);
+    }
+  }, [profile, viewMode]);
+
+  // Handle the redirect in the render
+  if (shouldRedirect) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600" />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -3404,10 +3259,15 @@ function RoleBasedDashboardContent({
     );
   }
 
-  const role = profile?.primaryRole || "entrepreneur";
+  // Get the role from profile
+  let role = profile?.primaryRole || "entrepreneur";
+
+  // If user is mentee and viewMode is entrepreneur, show entrepreneur view
+  const effectiveRole =
+    role === "mentee" && viewMode === "entrepreneur" ? "entrepreneur" : role;
 
   // Coalition Dashboard
-  if (role === "coalition") {
+  if (effectiveRole === "coalition") {
     return (
       <CoalitionDashboard
         showToast={showToast}
@@ -3422,7 +3282,7 @@ function RoleBasedDashboardContent({
   }
 
   // Partner Dashboard
-  if (role === "partner") {
+  if (effectiveRole === "partner") {
     return (
       <PartnerDashboard
         showToast={showToast}
@@ -3435,797 +3295,24 @@ function RoleBasedDashboardContent({
       />
     );
   }
-
-  // ============================================
-  // ENTREPRENEUR DASHBOARD
-  // ============================================
-  if (role === "entrepreneur") {
-    const programs = profile?.selectedPrograms || [
-      "RCP Small Business Mentorship",
-      "SEED Micro-Grant",
-      "Business Technical Assistance",
-      "Microloan Program",
-    ];
-
+  //================================
+  // Program Manager Dashboard
+  //================================
+  if (effectiveRole === "program_manager") {
+    // ✅ CORRECT: No hooks here, just show loading
+    // The redirect is handled by the useEffect above
     return (
-      <>
-        <div className="space-y-6">
-          {/* Hero Section */}
-          <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl p-8 text-white">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32"></div>
-            <div className="relative z-10">
-              <h2 className="text-3xl font-bold">
-                Welcome back, {profile?.name?.split(" ")[0] || "User"}! 🎉
-              </h2>
-              <p className="text-emerald-100 mt-2">
-                Your entrepreneurial journey is making progress
-              </p>
-              <div className="flex flex-wrap gap-4 mt-6">
-                <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
-                  <p className="text-sm opacity-90">Active Programs</p>
-                  <p className="text-2xl font-bold">
-                    {programsData.programs.length}
-                  </p>
-                </div>
-                <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
-                  <p className="text-sm opacity-90">Completion Rate</p>
-                  <p className="text-2xl font-bold">
-                    {programsData.programs.length > 0
-                      ? Math.round(
-                          programsData.programs.reduce(
-                            (acc: number, p: any) => acc + p.progress,
-                            0,
-                          ) / programsData.programs.length,
-                        )
-                      : 0}
-                    %
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between">
-                <div className="p-3 bg-emerald-50 rounded-xl">
-                  <TrendingUp className="h-6 w-6 text-emerald-600" />
-                </div>
-                <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">
-                  +15%
-                </span>
-              </div>
-              <p className="text-2xl font-bold text-gray-900 mt-3">4</p>
-              <p className="text-sm text-gray-500">Mentoring Sessions</p>
-            </div>
-
-            <div
-              onClick={() => router.push("/goals")}
-              className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
-            >
-              <div className="flex items-center justify-between">
-                <div className="p-3 bg-blue-50 rounded-xl">
-                  <Target className="h-6 w-6 text-blue-600" />
-                </div>
-                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-                  {totalGoals - goalsCompleted} left
-                </span>
-              </div>
-              <p className="text-2xl font-bold text-gray-900 mt-3">
-                {goalsCompleted}
-              </p>
-              <p className="text-sm text-gray-500">Goals Completed</p>
-            </div>
-
-            <div
-              onClick={() => router.push("/feedback")}
-              className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
-            >
-              <div className="flex items-center justify-between">
-                <div className="p-3 bg-purple-50 rounded-xl">
-                  <Star className="h-6 w-6 text-purple-600" />
-                </div>
-                <div className="flex gap-0.5">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                      key={star}
-                      className={`h-4 w-4 ${
-                        star <= satisfactionRate
-                          ? "fill-yellow-400 text-yellow-400"
-                          : "text-gray-300"
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
-              <p className="text-2xl font-bold text-gray-900 mt-3">
-                {satisfactionRate}/5
-              </p>
-              <p className="text-sm text-gray-500">Satisfaction Rating</p>
-            </div>
-          </div>
-
-          {/* Your Active Programs - WITH CRUD */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 flex justify-between items-center">
-              <div>
-                <h3 className="font-semibold text-gray-900">
-                  📋 Your Active Programs
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  Programs you're enrolled in
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setIsProgramEditing(!isProgramEditing)}
-                  className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                    isProgramEditing
-                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  {isProgramEditing ? "✓ Done" : "✎ Edit"}
-                </button>
-                {isProgramEditing && (
-                  <button
-                    onClick={() => {
-                      setEditingProgramId(null);
-                      setProgramFormData({
-                        name: "",
-                        status: "Active",
-                        startDate: "",
-                        progress: 0,
-                        nextMilestone: "",
-                        nextMilestoneAction: "",
-                        contactEmail: "",
-                        contactPhone: "",
-                        resources: [],
-                        upcomingSessions: [],
-                      });
-                      setShowProgramAddModal(true);
-                    }}
-                    className="px-3 py-1 text-xs bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200"
-                  >
-                    + Add
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {programsData.programs.length === 0 ? (
-                <div className="p-8 text-center text-gray-400">
-                  <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No programs yet</p>
-                  {isProgramEditing && (
-                    <p className="text-xs mt-1">
-                      Click "Add" to create a program
-                    </p>
-                  )}
-                </div>
-              ) : (
-                programsData.programs.map((program: any) => (
-                  <div
-                    key={program.id}
-                    className="p-5 hover:bg-gray-50 transition-colors group relative"
-                  >
-                    {isProgramEditing && (
-                      <div className="absolute right-2 top-2 flex gap-1">
-                        <button
-                          onClick={() => openEditProgram(program)}
-                          className="text-xs text-blue-500 hover:text-blue-700 p-1 hover:bg-blue-50 rounded"
-                          title="Edit program"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          onClick={() => deleteProgram(program.id)}
-                          className="text-xs text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded"
-                          title="Delete program"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    )}
-                    <div>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            {isProgramEditing ? (
-                              <input
-                                type="text"
-                                value={program.name}
-                                onChange={(e) =>
-                                  updateProgram(
-                                    program.id,
-                                    "name",
-                                    e.target.value,
-                                  )
-                                }
-                                className="font-semibold text-gray-800 border rounded px-2 py-1 text-sm w-64"
-                              />
-                            ) : (
-                              <p className="font-semibold text-gray-800">
-                                {program.name}
-                              </p>
-                            )}
-                            {isProgramEditing ? (
-                              <select
-                                value={program.status}
-                                onChange={(e) =>
-                                  updateProgram(
-                                    program.id,
-                                    "status",
-                                    e.target.value,
-                                  )
-                                }
-                                className="text-xs border rounded px-2 py-0.5"
-                              >
-                                <option value="Active">Active</option>
-                                <option value="Completed">Completed</option>
-                                <option value="On Hold">On Hold</option>
-                              </select>
-                            ) : (
-                              <span
-                                className={`text-xs px-2 py-0.5 rounded-full ${
-                                  program.status === "Active"
-                                    ? "bg-green-100 text-green-700"
-                                    : program.status === "Completed"
-                                      ? "bg-purple-100 text-purple-700"
-                                      : "bg-yellow-100 text-yellow-700"
-                                }`}
-                              >
-                                {program.status}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-4 mt-2">
-                            {isProgramEditing ? (
-                              <input
-                                type="text"
-                                value={program.startDate}
-                                onChange={(e) =>
-                                  updateProgram(
-                                    program.id,
-                                    "startDate",
-                                    e.target.value,
-                                  )
-                                }
-                                className="text-xs text-gray-500 border rounded px-2 py-0.5 w-32"
-                                placeholder="Start date"
-                              />
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <Clock className="h-3 w-3 text-gray-400" />
-                                <span className="text-xs text-gray-500">
-                                  Started {program.startDate}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="mt-3">
-                            <div className="flex justify-between text-xs mb-1">
-                              <span className="text-gray-500">
-                                Overall Progress
-                              </span>
-                              {isProgramEditing ? (
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="range"
-                                    min="0"
-                                    max="100"
-                                    value={program.progress}
-                                    onChange={(e) =>
-                                      updateProgramProgress(
-                                        program.id,
-                                        parseInt(e.target.value),
-                                      )
-                                    }
-                                    className="w-32 h-1"
-                                  />
-                                  <span className="text-emerald-600 font-medium w-8 text-right">
-                                    {program.progress}%
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="text-emerald-600 font-medium">
-                                  {program.progress}%
-                                </span>
-                              )}
-                            </div>
-                            <div className="w-full h-2 bg-gray-200 rounded-full">
-                              <div
-                                className="h-2 bg-emerald-500 rounded-full transition-all"
-                                style={{ width: `${program.progress}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                          {isProgramEditing &&
-                            program.nextMilestone !== undefined && (
-                              <div className="mt-2">
-                                <input
-                                  type="text"
-                                  value={program.nextMilestone || ""}
-                                  onChange={(e) =>
-                                    updateProgram(
-                                      program.id,
-                                      "nextMilestone",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Next milestone"
-                                  className="text-xs text-gray-500 border rounded px-2 py-0.5 w-full"
-                                />
-                              </div>
-                            )}
-                          {!isProgramEditing && program.nextMilestone && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              📌 Next: {program.nextMilestone}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Join Your Next Session Board */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 transition-all">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="p-3 bg-blue-100 rounded-full">
-                <Video className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">
-                  Join Your Mentoring Session
-                </h3>
-                <p className="text-sm text-gray-600">
-                  Enter your Zoom meeting ID and passcode to join your session
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Zoom Meeting ID
-                </label>
-                <input
-                  type="text"
-                  id="zoomMeetingId"
-                  placeholder="e.g., 123 456 7890"
-                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Passcode (optional)
-                </label>
-                <input
-                  type="text"
-                  id="zoomPassword"
-                  placeholder="Enter Zoom passcode"
-                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                const meetingId = (
-                  document.getElementById("zoomMeetingId") as HTMLInputElement
-                )?.value;
-                const password = (
-                  document.getElementById("zoomPassword") as HTMLInputElement
-                )?.value;
-
-                if (!meetingId || meetingId.trim() === "") {
-                  alert("Please enter your Zoom Meeting ID");
-                  return;
-                }
-
-                const cleanMeetingId = meetingId.trim().replace(/\s/g, "");
-                let zoomUrl = `https://zoom.us/j/${cleanMeetingId}`;
-                if (password && password.trim() !== "") {
-                  zoomUrl += `?pwd=${encodeURIComponent(password.trim())}`;
-                }
-
-                window.open(zoomUrl, "_blank");
-              }}
-              className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-            >
-              <Video className="h-4 w-4" />
-              Join Zoom Meeting
-            </button>
-            <p className="text-xs text-gray-400 text-center mt-3">
-              💡 Tip: Your mentor should provide the Meeting ID and passcode
-            </p>
-          </div>
-
-          {/* Mentor Notes Section */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MessageCircle className="h-5 w-5 text-amber-600" />
-                  <h3 className="font-semibold text-gray-900">
-                    Notes from Your Mentor
-                  </h3>
-                </div>
-                <button
-                  onClick={() => {
-                    const currentUser = localStorage.getItem("currentUser");
-                    if (currentUser) {
-                      const notes = JSON.parse(
-                        localStorage.getItem(`mentee_notes_${currentUser}`) ||
-                          "[]",
-                      );
-                      if (notes.length > 0) {
-                        setAllNotes(notes);
-                        setShowAllNotesModal(true);
-                      } else {
-                        showToast("No notes yet from your mentor", "info");
-                      }
-                    }
-                  }}
-                  className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
-                >
-                  View All →
-                </button>
-              </div>
-            </div>
-            <div className="p-5 space-y-3">
-              {(() => {
-                const currentUser = localStorage.getItem("currentUser");
-                if (!currentUser) return null;
-
-                let notes = JSON.parse(
-                  localStorage.getItem(`mentee_notes_${currentUser}`) || "[]",
-                );
-
-                notes = notes.sort((a: any, b: any) => {
-                  if (a.pinned && !b.pinned) return -1;
-                  if (!a.pinned && b.pinned) return 1;
-                  return (
-                    new Date(b.date).getTime() - new Date(a.date).getTime()
-                  );
-                });
-
-                const displayNotes = notes.slice(0, 3);
-
-                if (notes.length === 0) {
-                  return (
-                    <div className="text-center py-6">
-                      <MessageCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                      <p className="text-gray-400 text-sm">No notes yet.</p>
-                      <p className="text-xs text-gray-400">
-                        Your mentor will leave feedback here.
-                      </p>
-                    </div>
-                  );
-                }
-
-                return (
-                  <>
-                    {displayNotes.map((note: any) => (
-                      <div
-                        key={note.id}
-                        className="bg-amber-50 rounded-xl p-3 border border-amber-100 group"
-                      >
-                        <div className="flex justify-between items-start mb-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-amber-700">
-                              {note.author}
-                            </span>
-                            <span className="text-xs text-gray-400">
-                              {new Date(note.date).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => {
-                              const currentUser =
-                                localStorage.getItem("currentUser");
-                              if (currentUser) {
-                                const allNotes = JSON.parse(
-                                  localStorage.getItem(
-                                    `mentee_notes_${currentUser}`,
-                                  ) || "[]",
-                                );
-                                const updatedNotes = allNotes.map((n: any) =>
-                                  n.id === note.id
-                                    ? { ...n, pinned: !n.pinned }
-                                    : n,
-                                );
-                                localStorage.setItem(
-                                  `mentee_notes_${currentUser}`,
-                                  JSON.stringify(updatedNotes),
-                                );
-                                window.location.reload();
-                              }
-                            }}
-                            className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg ${
-                              note.pinned
-                                ? "text-yellow-500"
-                                : "text-gray-400 hover:text-gray-500"
-                            }`}
-                            title={note.pinned ? "Unpin note" : "Pin note"}
-                          >
-                            📌
-                          </button>
-                        </div>
-                        <p className="text-sm text-gray-700">{note.note}</p>
-                        {note.pinned && (
-                          <div className="mt-2 text-xs text-yellow-600 flex items-center gap-1">
-                            📌 Pinned note
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {notes.length > 3 && (
-                      <button
-                        onClick={() => {
-                          const currentUser =
-                            localStorage.getItem("currentUser");
-                          if (currentUser) {
-                            const allNotes = JSON.parse(
-                              localStorage.getItem(
-                                `mentee_notes_${currentUser}`,
-                              ) || "[]",
-                            );
-                            setAllNotes(allNotes);
-                            setShowAllNotesModal(true);
-                          }
-                        }}
-                        className="w-full text-center text-sm text-emerald-600 hover:text-emerald-700 py-2"
-                      >
-                        View all {notes.length} notes →
-                      </button>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-
-          {/* Support Section */}
-          <div
-            onClick={() =>
-              (window.location.href =
-                "mailto:jody@hbcat.org?subject=Support Request from Rural Community Partners Dashboard")
-            }
-            className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-6 border border-emerald-100 cursor-pointer hover:shadow-md transition-all group"
-          >
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-emerald-100 rounded-full group-hover:bg-emerald-200 transition-colors">
-                  <MessageCircle className="h-6 w-6 text-emerald-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">
-                    Need personalized support?
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Click here to email Jody directly
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-emerald-600 group-hover:translate-x-1 transition-transform">
-                <span>jody@hbcat.org</span>
-                <Mail className="h-4 w-4" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Add/Edit Program Modal */}
-        {showProgramAddModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-5 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  {editingProgramId ? "Edit Program" : "Add New Program"}
-                </h2>
-                <button
-                  onClick={closeProgramModal}
-                  className="p-2 hover:bg-gray-100 rounded-xl"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="p-5 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Program Name *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Small Business Mentorship"
-                    value={programFormData.name || ""}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        name: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={programFormData.status || "Active"}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        status: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Completed">Completed</option>
-                    <option value="On Hold">On Hold</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Start Date
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., January 2025"
-                    value={programFormData.startDate || ""}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        startDate: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Progress (%)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    placeholder="0"
-                    value={programFormData.progress || 0}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        progress: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Next Milestone
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Complete business profile"
-                    value={programFormData.nextMilestone || ""}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        nextMilestone: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact Email
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="program@example.com"
-                    value={programFormData.contactEmail || ""}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        contactEmail: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact Phone
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="(555) 123-4567"
-                    value={programFormData.contactPhone || ""}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        contactPhone: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-              </div>
-              <div className="p-5 border-t border-gray-100 flex gap-3 sticky bottom-0 bg-white">
-                <button
-                  onClick={closeProgramModal}
-                  className="flex-1 py-2 border rounded-xl hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    if (editingProgramId) {
-                      saveEditProgram();
-                    } else {
-                      addProgram();
-                    }
-                  }}
-                  disabled={!programFormData.name}
-                  className="flex-1 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {editingProgramId ? "Save Changes" : "Add Program"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Program Details Modal */}
-        {showProgramModal && selectedProgram && (
-          <ProgramDetailsModal
-            program={selectedProgram}
-            onClose={() => setShowProgramModal(false)}
-          />
-        )}
-
-        {/* All Notes Modal */}
-        {showAllNotesModal && (
-          <AllNotesModal
-            notes={allNotes}
-            onClose={() => setShowAllNotesModal(false)}
-            onTogglePin={(noteId) => {
-              const currentUser = localStorage.getItem("currentUser");
-              if (currentUser) {
-                const notes = JSON.parse(
-                  localStorage.getItem(`mentee_notes_${currentUser}`) || "[]",
-                );
-                const updatedNotes = notes.map((n: any) =>
-                  n.id === noteId ? { ...n, pinned: !n.pinned } : n,
-                );
-                localStorage.setItem(
-                  `mentee_notes_${currentUser}`,
-                  JSON.stringify(updatedNotes),
-                );
-                setAllNotes(updatedNotes);
-                window.location.reload();
-              }
-            }}
-          />
-        )}
-      </>
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600" />
+        <p className="text-sm text-gray-500 ml-3">
+          Redirecting to Program Manager Dashboard...
+        </p>
+      </div>
     );
   }
 
-  // ============================================
-  // MENTOR DASHBOARD
-  // ============================================
-  if (role === "mentor") {
+  // Mentor Dashboard
+  if (effectiveRole === "mentor") {
     const mentees = [
       {
         id: "1",
@@ -4580,6 +3667,966 @@ function RoleBasedDashboardContent({
       </div>
     );
   }
+
+  // ============================================
+  // MENTEE & ENTREPRENEUR DASHBOARD
+  // (Shared dashboard - both get mentor features)
+  // ============================================
+  if (effectiveRole === "mentee" || effectiveRole === "entrepreneur") {
+    const isMentee = effectiveRole === "mentee";
+    const welcomeMessage = isMentee
+      ? "Your mentorship and entrepreneurial journey is making progress"
+      : "Your entrepreneurial journey is making progress";
+
+    return (
+      <>
+        <div className="space-y-6">
+          {/* Hero Section */}
+          <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl p-8 text-white">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32"></div>
+            <div className="relative z-10">
+              <h2 className="text-3xl font-bold">
+                Welcome back, {profile?.name?.split(" ")[0] || "User"}! 🎉
+              </h2>
+              <p className="text-emerald-100 mt-2">{welcomeMessage}</p>
+              <div className="flex flex-wrap gap-4 mt-6">
+                <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
+                  <p className="text-sm opacity-90">Active Programs</p>
+                  <p className="text-2xl font-bold">
+                    {programsData.programs.length}
+                  </p>
+                </div>
+                <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
+                  <p className="text-sm opacity-90">Completion Rate</p>
+                  <p className="text-2xl font-bold">
+                    {programsData.programs.length > 0
+                      ? Math.round(
+                          programsData.programs.reduce(
+                            (acc: number, p: any) => acc + p.progress,
+                            0,
+                          ) / programsData.programs.length,
+                        )
+                      : 0}
+                    %
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Cards */}
+          <div
+            className={`grid grid-cols-1 ${isMentee ? "md:grid-cols-3" : "md:grid-cols-2"} gap-4`}
+          >
+            {/* Goals Card */}
+            <div
+              onClick={() => router.push("/goals")}
+              className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Target className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {goalsCompleted}
+                  </p>
+                  <p className="text-sm text-gray-500">Goals Completed</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Feedback Card */}
+            <div
+              onClick={() => router.push("/feedback")}
+              className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Star className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {satisfactionRate}/5
+                  </p>
+                  <p className="text-sm text-gray-500">Satisfaction Rating</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Third Card - Only for Mentees */}
+            {isMentee && (
+              <div
+                onClick={() => {
+                  window.location.href = "/?view=entrepreneur";
+                }}
+                className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-100 rounded-lg">
+                    <Briefcase className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      Entrepreneur Hub
+                    </p>
+                    <p className="text-xs text-gray-500">Access all programs</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-gray-400 ml-auto" />
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Your Active Programs - WITH CRUD */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 flex justify-between items-center">
+              <div>
+                <h3 className="font-semibold text-gray-900">
+                  📋 Your Active Programs
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  {!isProgramEditing
+                    ? "Click on a program to view details"
+                    : "Edit mode - click Done to exit"}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsProgramEditing(!isProgramEditing)}
+                  className={`px-3 py-1 text-xs rounded-lg transition-colors ${
+                    isProgramEditing
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {isProgramEditing ? "✓ Done" : "✎ Edit"}
+                </button>
+                {isProgramEditing && (
+                  <button
+                    onClick={() => {
+                      setEditingProgramId(null);
+                      setProgramFormData({
+                        name: "",
+                        status: "Active",
+                        startDate: "",
+                        progress: 0,
+                        nextMilestone: "",
+                        nextMilestoneAction: "",
+                        contactEmail: "",
+                        contactPhone: "",
+                        resources: [],
+                        upcomingSessions: [],
+                      });
+                      setShowProgramAddModal(true);
+                    }}
+                    className="px-3 py-1 text-xs bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200"
+                  >
+                    + Add
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {programsData.programs.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">
+                  <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No programs yet</p>
+                  {isProgramEditing && (
+                    <p className="text-xs mt-1">
+                      Click "Add" to create a program
+                    </p>
+                  )}
+                </div>
+              ) : (
+                programsData.programs.map((program: any) => (
+                  <div
+                    key={program.id}
+                    onClick={() => {
+                      if (!isProgramEditing) {
+                        console.log("🎯 Program clicked:", program.name);
+                        setSelectedProgram(program);
+                        setShowProgramModal(true);
+                      }
+                    }}
+                    className={`p-5 hover:bg-gray-50 transition-colors group relative ${
+                      !isProgramEditing ? "cursor-pointer" : ""
+                    }`}
+                  >
+                    {isProgramEditing && (
+                      <div className="absolute right-2 top-2 flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditProgram(program);
+                          }}
+                          className="text-xs text-blue-500 hover:text-blue-700 p-1 hover:bg-blue-50 rounded"
+                          title="Edit program"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteProgram(program.id);
+                          }}
+                          className="text-xs text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded"
+                          title="Delete program"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            {isProgramEditing ? (
+                              <input
+                                type="text"
+                                value={program.name}
+                                onChange={(e) =>
+                                  updateProgram(
+                                    program.id,
+                                    "name",
+                                    e.target.value,
+                                  )
+                                }
+                                className="font-semibold text-gray-800 border rounded px-2 py-1 text-sm w-64"
+                              />
+                            ) : (
+                              <p className="font-semibold text-gray-800 group-hover:text-emerald-600 transition-colors">
+                                {program.name}
+                              </p>
+                            )}
+                            {isProgramEditing ? (
+                              <select
+                                value={program.status}
+                                onChange={(e) =>
+                                  updateProgram(
+                                    program.id,
+                                    "status",
+                                    e.target.value,
+                                  )
+                                }
+                                className="text-xs border rounded px-2 py-0.5"
+                              >
+                                <option value="Active">Active</option>
+                                <option value="Completed">Completed</option>
+                                <option value="On Hold">On Hold</option>
+                              </select>
+                            ) : (
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-full ${
+                                  program.status === "Active"
+                                    ? "bg-green-100 text-green-700"
+                                    : program.status === "Completed"
+                                      ? "bg-purple-100 text-purple-700"
+                                      : "bg-yellow-100 text-yellow-700"
+                                }`}
+                              >
+                                {program.status}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 mt-2">
+                            {isProgramEditing ? (
+                              <input
+                                type="text"
+                                value={program.startDate}
+                                onChange={(e) =>
+                                  updateProgram(
+                                    program.id,
+                                    "startDate",
+                                    e.target.value,
+                                  )
+                                }
+                                className="text-xs text-gray-500 border rounded px-2 py-0.5 w-32"
+                                placeholder="Start date"
+                              />
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3 text-gray-400" />
+                                <span className="text-xs text-gray-500">
+                                  Started {program.startDate}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="mt-3">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-gray-500">
+                                Overall Progress
+                              </span>
+                              {isProgramEditing ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    value={program.progress}
+                                    onChange={(e) =>
+                                      updateProgramProgress(
+                                        program.id,
+                                        parseInt(e.target.value),
+                                      )
+                                    }
+                                    className="w-32 h-1"
+                                  />
+                                  <span className="text-emerald-600 font-medium w-8 text-right">
+                                    {program.progress}%
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-emerald-600 font-medium">
+                                  {program.progress}%
+                                </span>
+                              )}
+                            </div>
+                            <div className="w-full h-2 bg-gray-200 rounded-full">
+                              <div
+                                className="h-2 bg-emerald-500 rounded-full transition-all"
+                                style={{ width: `${program.progress}%` }}
+                              />
+                            </div>
+                          </div>
+                          {isProgramEditing &&
+                            program.nextMilestone !== undefined && (
+                              <div className="mt-2">
+                                <input
+                                  type="text"
+                                  value={program.nextMilestone || ""}
+                                  onChange={(e) =>
+                                    updateProgram(
+                                      program.id,
+                                      "nextMilestone",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Next milestone"
+                                  className="text-xs text-gray-500 border rounded px-2 py-0.5 w-full"
+                                />
+                              </div>
+                            )}
+                          {!isProgramEditing && program.nextMilestone && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              📌 Next: {program.nextMilestone}
+                            </p>
+                          )}
+                        </div>
+                        {!isProgramEditing && (
+                          <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all flex-shrink-0 ml-4" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* JOIN YOUR MENTORING SESSION - ZOOM MEETING */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 transition-all">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="p-3 bg-blue-100 rounded-full">
+                <Video className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">
+                  Join Your Mentoring Session
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Enter your Zoom meeting ID and passcode to join your session
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Zoom Meeting ID
+                </label>
+                <input
+                  type="text"
+                  id="zoomMeetingId"
+                  placeholder="e.g., 123 456 7890"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Passcode (optional)
+                </label>
+                <input
+                  type="text"
+                  id="zoomPassword"
+                  placeholder="Enter Zoom passcode"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                const meetingId = (
+                  document.getElementById("zoomMeetingId") as HTMLInputElement
+                )?.value;
+                const password = (
+                  document.getElementById("zoomPassword") as HTMLInputElement
+                )?.value;
+
+                if (!meetingId || meetingId.trim() === "") {
+                  alert("Please enter your Zoom Meeting ID");
+                  return;
+                }
+
+                const cleanMeetingId = meetingId.trim().replace(/\s/g, "");
+                let zoomUrl = `https://zoom.us/j/${cleanMeetingId}`;
+                if (password && password.trim() !== "") {
+                  zoomUrl += `?pwd=${encodeURIComponent(password.trim())}`;
+                }
+
+                window.open(zoomUrl, "_blank");
+              }}
+              className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Video className="h-4 w-4" />
+              Join Zoom Meeting
+            </button>
+            <p className="text-xs text-gray-400 text-center mt-3">
+              💡 Tip: Your mentor should provide the Meeting ID and passcode
+            </p>
+          </div>
+
+          {/* TWO COLUMN LAYOUT - Mentor Info & Goals */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Mentor Card */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-white">
+                <div className="flex items-center gap-2">
+                  <User className="h-5 w-5 text-purple-600" />
+                  <h3 className="font-semibold text-gray-900">Your Mentor</h3>
+                </div>
+              </div>
+              <div className="p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xl font-bold">
+                    {mentorInfo?.name?.charAt(0) || "M"}
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900">
+                      {mentorInfo?.name || "Billi Hawk"}
+                    </h4>
+                    <p className="text-sm text-gray-500">
+                      {mentorInfo?.email || "Billi@gmail.com"}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {mentorInfo?.phone || "920-234-2345"}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  {mentorInfo?.bio ||
+                    "Experienced business mentor helping entrepreneurs succeed."}
+                </p>
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-gray-500 mb-2">
+                    Expertise
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      mentorInfo?.expertise || [
+                        "Business Strategy",
+                        "Marketing",
+                        "Financial Planning",
+                      ]
+                    ).map((exp: string, idx: number) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-1 bg-purple-50 text-purple-600 rounded-full text-xs"
+                      >
+                        {exp}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={() =>
+                    (window.location.href = `mailto:${mentorInfo?.email || "Billi@gmail.com"}`)
+                  }
+                  className="w-full py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
+                >
+                  Message Mentor
+                </button>
+              </div>
+            </div>
+
+            {/* Goals Progress */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-white">
+                <div className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-emerald-600" />
+                  <h3 className="font-semibold text-gray-900">Your Goals</h3>
+                </div>
+              </div>
+              <div className="p-5">
+                <div className="mb-4">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-600">Overall Progress</span>
+                    <span className="text-emerald-600 font-medium">
+                      {totalGoals > 0
+                        ? Math.round((goalsCompleted / totalGoals) * 100)
+                        : 0}
+                      %
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-200 rounded-full">
+                    <div
+                      className="h-2 bg-emerald-500 rounded-full"
+                      style={{
+                        width: `${totalGoals > 0 ? Math.round((goalsCompleted / totalGoals) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {(() => {
+                    // Load goals from localStorage
+                    const currentUser = localStorage.getItem("currentUser");
+                    if (!currentUser) return null;
+                    const savedGoals = JSON.parse(
+                      localStorage.getItem(`goals_${currentUser}`) || "[]",
+                    );
+                    const displayGoals = savedGoals.slice(0, 3);
+                    if (savedGoals.length === 0) {
+                      return (
+                        <div className="text-center py-4 text-gray-400">
+                          <Target className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No goals set yet</p>
+                          <p className="text-xs">
+                            Click "Goals" above to create some
+                          </p>
+                        </div>
+                      );
+                    }
+                    return displayGoals.map((goal: any) => (
+                      <div
+                        key={goal.id}
+                        className="flex items-start gap-2 p-2 hover:bg-gray-50 rounded-lg"
+                      >
+                        {goal.completed ? (
+                          <CheckCircle className="h-5 w-5 text-emerald-500 mt-0.5 flex-shrink-0" />
+                        ) : (
+                          <div className="h-5 w-5 border-2 border-gray-300 rounded-full mt-0.5 flex-shrink-0" />
+                        )}
+                        <div>
+                          <p
+                            className={`text-sm ${goal.completed ? "text-gray-400 line-through" : "text-gray-700"}`}
+                          >
+                            {goal.title}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            Due: {new Date(goal.dueDate).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                <button
+                  onClick={() => router.push("/goals")}
+                  className="mt-3 text-sm text-emerald-600 hover:text-emerald-700 w-full text-center"
+                >
+                  View All Goals →
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Mentor Notes Section - For both Entrepreneur and Mentee */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="h-5 w-5 text-amber-600" />
+                  <h3 className="font-semibold text-gray-900">
+                    📝 Notes from Your Mentor
+                  </h3>
+                </div>
+                <button
+                  onClick={() => {
+                    const currentUser = localStorage.getItem("currentUser");
+                    if (currentUser) {
+                      const notes = JSON.parse(
+                        localStorage.getItem(`mentee_notes_${currentUser}`) ||
+                          "[]",
+                      );
+                      if (notes.length > 0) {
+                        setAllNotes(notes);
+                        setShowAllNotesModal(true);
+                      } else {
+                        showToast("No notes yet from your mentor", "info");
+                      }
+                    }
+                  }}
+                  className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                >
+                  View All →
+                </button>
+              </div>
+            </div>
+            <div className="p-5 space-y-3">
+              {(() => {
+                const currentUser = localStorage.getItem("currentUser");
+                if (!currentUser) return null;
+
+                let notes = JSON.parse(
+                  localStorage.getItem(`mentee_notes_${currentUser}`) || "[]",
+                );
+
+                notes = notes.sort((a: any, b: any) => {
+                  if (a.pinned && !b.pinned) return -1;
+                  if (!a.pinned && b.pinned) return 1;
+                  return (
+                    new Date(b.date).getTime() - new Date(a.date).getTime()
+                  );
+                });
+
+                const displayNotes = notes.slice(0, 3);
+
+                if (notes.length === 0) {
+                  return (
+                    <div className="text-center py-6">
+                      <MessageCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-gray-400 text-sm">No notes yet.</p>
+                      <p className="text-xs text-gray-400">
+                        Your mentor will leave feedback here.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    {displayNotes.map((note: any) => (
+                      <div
+                        key={note.id}
+                        className="bg-amber-50 rounded-xl p-3 border border-amber-100 group"
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium text-amber-700">
+                              {note.author}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {new Date(note.date).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              const currentUser =
+                                localStorage.getItem("currentUser");
+                              if (currentUser) {
+                                const allNotes = JSON.parse(
+                                  localStorage.getItem(
+                                    `mentee_notes_${currentUser}`,
+                                  ) || "[]",
+                                );
+                                const updatedNotes = allNotes.map((n: any) =>
+                                  n.id === note.id
+                                    ? { ...n, pinned: !n.pinned }
+                                    : n,
+                                );
+                                localStorage.setItem(
+                                  `mentee_notes_${currentUser}`,
+                                  JSON.stringify(updatedNotes),
+                                );
+                                window.location.reload();
+                              }
+                            }}
+                            className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg ${
+                              note.pinned
+                                ? "text-yellow-500"
+                                : "text-gray-400 hover:text-gray-500"
+                            }`}
+                            title={note.pinned ? "Unpin note" : "Pin note"}
+                          >
+                            📌
+                          </button>
+                        </div>
+                        <p className="text-sm text-gray-700">{note.note}</p>
+                        {note.pinned && (
+                          <div className="mt-2 text-xs text-yellow-600 flex items-center gap-1">
+                            📌 Pinned note
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {notes.length > 3 && (
+                      <button
+                        onClick={() => {
+                          const currentUser =
+                            localStorage.getItem("currentUser");
+                          if (currentUser) {
+                            const allNotes = JSON.parse(
+                              localStorage.getItem(
+                                `mentee_notes_${currentUser}`,
+                              ) || "[]",
+                            );
+                            setAllNotes(allNotes);
+                            setShowAllNotesModal(true);
+                          }
+                        }}
+                        className="w-full text-center text-sm text-emerald-600 hover:text-emerald-700 py-2"
+                      >
+                        View all {notes.length} notes →
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Support Section */}
+          <div
+            onClick={() =>
+              (window.location.href =
+                "mailto:jody@hbcat.org?subject=Support Request from Rural Community Partners Dashboard")
+            }
+            className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-6 border border-emerald-100 cursor-pointer hover:shadow-md transition-all group"
+          >
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-emerald-100 rounded-full group-hover:bg-emerald-200 transition-colors">
+                  <MessageCircle className="h-6 w-6 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">
+                    Need personalized support?
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    Click here to email Jody directly
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-600 group-hover:translate-x-1 transition-transform">
+                <span>jody@hbcat.org</span>
+                <Mail className="h-4 w-4" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Add/Edit Program Modal */}
+        {showProgramAddModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-5 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {editingProgramId ? "Edit Program" : "Add New Program"}
+                </h2>
+                <button
+                  onClick={closeProgramModal}
+                  className="p-2 hover:bg-gray-100 rounded-xl"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Program Name *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Small Business Mentorship"
+                    value={programFormData.name || ""}
+                    onChange={(e) =>
+                      setProgramFormData({
+                        ...programFormData,
+                        name: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={programFormData.status || "Active"}
+                    onChange={(e) =>
+                      setProgramFormData({
+                        ...programFormData,
+                        status: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Completed">Completed</option>
+                    <option value="On Hold">On Hold</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Start Date
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., January 2025"
+                    value={programFormData.startDate || ""}
+                    onChange={(e) =>
+                      setProgramFormData({
+                        ...programFormData,
+                        startDate: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Progress (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="0"
+                    value={programFormData.progress || 0}
+                    onChange={(e) =>
+                      setProgramFormData({
+                        ...programFormData,
+                        progress: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Next Milestone
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Complete business profile"
+                    value={programFormData.nextMilestone || ""}
+                    onChange={(e) =>
+                      setProgramFormData({
+                        ...programFormData,
+                        nextMilestone: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Contact Email
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="program@example.com"
+                    value={programFormData.contactEmail || ""}
+                    onChange={(e) =>
+                      setProgramFormData({
+                        ...programFormData,
+                        contactEmail: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Contact Phone
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="(555) 123-4567"
+                    value={programFormData.contactPhone || ""}
+                    onChange={(e) =>
+                      setProgramFormData({
+                        ...programFormData,
+                        contactPhone: e.target.value,
+                      })
+                    }
+                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+              <div className="p-5 border-t border-gray-100 flex gap-3 sticky bottom-0 bg-white">
+                <button
+                  onClick={closeProgramModal}
+                  className="flex-1 py-2 border rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (editingProgramId) {
+                      saveEditProgram();
+                    } else {
+                      addProgram();
+                    }
+                  }}
+                  disabled={!programFormData.name}
+                  className="flex-1 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {editingProgramId ? "Save Changes" : "Add Program"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Program Details Modal */}
+        {showProgramModal && selectedProgram && (
+          <UserProgramModal
+            program={selectedProgram}
+            onClose={() => {
+              setShowProgramModal(false);
+              setSelectedProgram(null);
+            }}
+            userEmail={profile?.email}
+            userRole={profile?.primaryRole}
+            isJody={
+              profile?.email === "jody@hbcat.org" ||
+              profile?.email === "admin@ruralcommunity.org"
+            }
+          />
+        )}
+
+        {/* All Notes Modal - For Mentor Notes */}
+        {showAllNotesModal && (
+          <AllNotesModal
+            notes={allNotes}
+            onClose={() => setShowAllNotesModal(false)}
+            onTogglePin={(noteId) => {
+              const currentUser = localStorage.getItem("currentUser");
+              if (currentUser) {
+                const notes = JSON.parse(
+                  localStorage.getItem(`mentee_notes_${currentUser}`) || "[]",
+                );
+                const updatedNotes = notes.map((n: any) =>
+                  n.id === noteId ? { ...n, pinned: !n.pinned } : n,
+                );
+                localStorage.setItem(
+                  `mentee_notes_${currentUser}`,
+                  JSON.stringify(updatedNotes),
+                );
+                setAllNotes(updatedNotes);
+                window.location.reload();
+              }
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
   // Default fallback
   return (
     <div className="bg-white rounded-xl p-8 text-center">
@@ -4638,6 +4685,7 @@ export default function DashboardPage() {
   const [passwordError, setPasswordError] = useState("");
   const [passwordSaved, setPasswordSaved] = useState(false);
 
+  // ✅ showToast defined BEFORE the useEffect that uses it
   const showToast = (
     message: string,
     type: "success" | "error" | "info" | "warning" = "success",
@@ -4648,6 +4696,15 @@ export default function DashboardPage() {
       3000,
     );
   };
+
+  // ✅ This useEffect can now use showToast because it's defined above
+  useEffect(() => {
+    const error = localStorage.getItem("route_error");
+    if (error) {
+      showToast(error, "error");
+      localStorage.removeItem("route_error");
+    }
+  }, []);
 
   const checkForUpcomingSessions = () => {
     const user = localStorage.getItem("currentUser");

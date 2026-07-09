@@ -1,6 +1,12 @@
 "use client";
 
+import { ApprovalPopup } from "@/components/admin/approval-popup";
 import { useState, useEffect } from "react";
+import { NotificationPanel } from "@/components/dashboard/notification-panel";
+import {
+  notificationService,
+  NotificationHelpers,
+} from "@/lib/notification-service";
 import { participants } from "@/lib/mock-data";
 import { ToastNotification } from "@/components/ui/toast-notification";
 import { useRouter } from "next/navigation";
@@ -102,6 +108,8 @@ interface AccessRequest {
   requestedRole: string;
   submittedAt: string;
   status: "pending" | "approved" | "rejected";
+  verificationToken?: string;
+  passwordSet?: boolean;
 }
 
 // Get user role from profile
@@ -109,18 +117,18 @@ const getUserRole = (profile: any): string => {
   if (profile?.email === "admin@ruralcommunity.org") return "admin";
   const role = profile?.userType || profile?.primaryRole || "staff";
 
-  // Map roles correctly
+  // Map roles
   if (role === "program_manager") return "program_manager";
   if (role === "staff") return "staff";
   if (role === "coalition") return "coalition";
   if (role === "partner") return "partner";
   if (role === "mentor") return "mentor";
+  if (role === "mentee") return "mentee";
   if (role === "entrepreneur") return "entrepreneur";
 
   return "staff";
 };
 
-// Check if user has permission
 const hasPermission = (userRole: string, requiredRole: string): boolean => {
   const roleLevel: Record<string, number> = {
     admin: 5,
@@ -128,7 +136,8 @@ const hasPermission = (userRole: string, requiredRole: string): boolean => {
     program_manager: 3,
     coalition: 2,
     partner: 2,
-    mentor: 1,
+    mentor: 2,
+    mentee: 1,
     entrepreneur: 1,
   };
   return (roleLevel[userRole] || 0) >= (roleLevel[requiredRole] || 0);
@@ -225,6 +234,21 @@ export default function AdminDashboardPage() {
   );
   const [showRequestDetails, setShowRequestDetails] = useState(false);
 
+  // Approval Popup
+  const [approvalPopup, setApprovalPopup] = useState<{
+    isOpen: boolean;
+    userName: string;
+    userEmail: string;
+    userRole: string;
+    token: string;
+  }>({
+    isOpen: false,
+    userName: "",
+    userEmail: "",
+    userRole: "",
+    token: "",
+  });
+
   // Toast notification state
   const [toast, setToast] = useState<ToastState>({
     message: "",
@@ -240,6 +264,20 @@ export default function AdminDashboardPage() {
     message: "",
     onConfirm: () => {},
   });
+
+  // ✅ REAL-TIME NOTIFICATIONS - Replace the hardcoded notifications
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Subscribe to real-time notifications
+  useEffect(() => {
+    const unsubscribe = notificationService.subscribe((updated) => {
+      setUnreadCount(notificationService.getUnreadCount());
+    });
+
+    setUnreadCount(notificationService.getUnreadCount());
+
+    return () => unsubscribe();
+  }, []);
 
   const showToast = (
     message: string,
@@ -394,6 +432,9 @@ export default function AdminDashboardPage() {
               Date.now() - 2 * 24 * 60 * 60 * 1000,
             ).toISOString(),
             status: "pending",
+            verificationToken:
+              "sarah_token_" + Math.random().toString(36).substring(2, 15),
+            passwordSet: false,
           },
           {
             name: "Michael Chen",
@@ -405,6 +446,9 @@ export default function AdminDashboardPage() {
               Date.now() - 5 * 24 * 60 * 60 * 1000,
             ).toISOString(),
             status: "pending",
+            verificationToken:
+              "michael_token_" + Math.random().toString(36).substring(2, 15),
+            passwordSet: false,
           },
           {
             name: "Emily Rodriguez",
@@ -416,6 +460,9 @@ export default function AdminDashboardPage() {
               Date.now() - 1 * 24 * 60 * 60 * 1000,
             ).toISOString(),
             status: "pending",
+            verificationToken:
+              "emily_token_" + Math.random().toString(36).substring(2, 15),
+            passwordSet: false,
           },
         ];
         localStorage.setItem("access_requests", JSON.stringify(sampleRequests));
@@ -436,15 +483,23 @@ export default function AdminDashboardPage() {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
-  // Handle Approve Request
+  // ============================================
+  // HANDLE APPROVE REQUEST - Updated with Modern Popup
+  // ============================================
   const handleApproveRequest = (request: AccessRequest) => {
     showConfirmModal(
       "Approve Access Request",
       `Are you sure you want to approve ${request.name} for ${request.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"} access?\n\nThey will be able to ${request.requestedRole === "program_manager" ? "manage specific programs" : "access CMS, reports, and all programs"}.`,
       () => {
+        // Generate a proper token if one doesn't exist
+        const token =
+          request.verificationToken ||
+          Math.random().toString(36).substring(2, 15) +
+            Math.random().toString(36).substring(2, 15);
+
         const updatedRequests = accessRequests.map((r) =>
           r.email === request.email && r.submittedAt === request.submittedAt
-            ? { ...r, status: "approved" as const }
+            ? { ...r, status: "approved" as const, verificationToken: token }
             : r,
         );
         localStorage.setItem(
@@ -473,14 +528,52 @@ export default function AdminDashboardPage() {
           );
         }
 
-        showToast(
-          `${request.name}'s access has been approved! They now have ${request.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"} permissions.`,
-          "success",
+        // Update user status in users list
+        const users = JSON.parse(localStorage.getItem("users") || "[]");
+        const userIndex = users.findIndex(
+          (u: any) => u.email === request.email,
         );
+        if (userIndex !== -1) {
+          users[userIndex].status = "approved";
+          localStorage.setItem("users", JSON.stringify(users));
+        }
+
+        // Show the modern popup with proper token
+        setApprovalPopup({
+          isOpen: true,
+          userName: request.name,
+          userEmail: request.email,
+          userRole: request.requestedRole,
+          token: token, // Use the proper token
+        });
+
+        // ✅ Add real-time notification
+        notificationService.addNotification(
+          "inapp",
+          "general",
+          `✅ Access Approved: ${request.name}`,
+          `${request.name} was approved for ${request.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"} access.`,
+          { user: request },
+        );
+
+        // Also show toast notification
+        showToast(`${request.name}'s access has been approved!`, "success");
+
         setShowRequestDetails(false);
       },
       "info",
     );
+  };
+
+  // Add this function to close the popup
+  const closeApprovalPopup = () => {
+    setApprovalPopup({
+      isOpen: false,
+      userName: "",
+      userEmail: "",
+      userRole: "",
+      token: "",
+    });
   };
 
   // Handle Reject Request
@@ -499,6 +592,16 @@ export default function AdminDashboardPage() {
           JSON.stringify(updatedRequests),
         );
         setAccessRequests(updatedRequests);
+
+        // ✅ Add real-time notification
+        notificationService.addNotification(
+          "inapp",
+          "general",
+          `❌ Access Rejected: ${request.name}`,
+          `${request.name}'s access request was rejected.`,
+          { user: request },
+        );
+
         showToast(
           `Access request from ${request.name} has been rejected.`,
           "info",
@@ -543,38 +646,6 @@ export default function AdminDashboardPage() {
       }
     }
   }, []);
-
-  // Notifications
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: 1,
-      msg: "James Williams completed onboarding",
-      time: "2h ago",
-      read: false,
-    },
-    {
-      id: 2,
-      msg: "3 surveys overdue for follow-up",
-      time: "5h ago",
-      read: false,
-    },
-    {
-      id: 3,
-      msg: "Invoice #INV-042 awaiting approval",
-      time: "1d ago",
-      read: false,
-    },
-    {
-      id: 4,
-      msg: "New mentor match: Susan White → Michael Martinez",
-      time: "2d ago",
-      read: false,
-    },
-  ]);
-  const unreadCount = notifications.filter((n) => !n.read).length;
-  const markAllRead = () =>
-    setNotifications((p) => p.map((n) => ({ ...n, read: true })));
-  const clearAll = () => setNotifications([]);
 
   // Settings
   const [settings, setSettings] = useState<SettingsData>({
@@ -868,54 +939,30 @@ export default function AdminDashboardPage() {
         onCancel={hideConfirmModal}
       />
 
-      {/* Notifications Panel */}
+      {/* Approval Popup */}
+      <ApprovalPopup
+        isOpen={approvalPopup.isOpen}
+        onClose={closeApprovalPopup}
+        userName={approvalPopup.userName}
+        userEmail={approvalPopup.userEmail}
+        userRole={approvalPopup.userRole}
+        token={approvalPopup.token}
+        onEmailSent={() => {
+          showToast("Password setup link sent to user's email!", "success");
+        }}
+      />
+
+      {/* Notifications Panel - Slide Panel */}
       <SlidePanel
         open={panel === "notifications"}
         onClose={() => setPanel(null)}
         title="Notifications"
         icon={Bell}
       >
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-xs text-gray-400">{unreadCount} unread</span>
-          <div className="flex gap-2">
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllRead}
-                className="text-xs text-emerald-600 hover:underline"
-              >
-                Mark all read
-              </button>
-            )}
-            {notifications.length > 0 && (
-              <button
-                onClick={clearAll}
-                className="text-xs text-red-400 hover:underline"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-        </div>
-        {notifications.length === 0 ? (
-          <div className="text-center text-gray-400 text-sm py-12">
-            No notifications
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {notifications.map((n) => (
-              <div
-                key={n.id}
-                className={`p-3 rounded-lg border ${n.read ? "bg-white border-gray-100 opacity-60" : "bg-emerald-50 border-emerald-100"}`}
-              >
-                <p className="text-sm text-gray-700">{n.msg}</p>
-                <p className="text-xs text-gray-400 mt-1">{n.time}</p>
-              </div>
-            ))}
-          </div>
-        )}
+        <NotificationPanel />
       </SlidePanel>
 
-      {/* Settings Panel - With Access Requests Section */}
+      {/* Settings Panel*/}
       <SlidePanel
         open={panel === "settings"}
         onClose={() => setPanel(null)}
@@ -991,7 +1038,7 @@ export default function AdminDashboardPage() {
               onClick={() => router.push("/admin/program-signups")}
               className="w-full text-left px-3 py-2 text-sm text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors flex items-center justify-between mb-2"
             >
-              <span>📋 View All Program Signups</span>
+              <span>📋 View All Program Signups →</span>
               <span className="text-xs bg-emerald-200 px-2 py-0.5 rounded-full">
                 {signupsCount}
               </span>
@@ -1004,7 +1051,7 @@ export default function AdminDashboardPage() {
             >
               <div className="flex items-center gap-2">
                 <Shield className="h-4 w-4" />
-                <span>Review Access Requests</span>
+                <span>Review Access Requests →</span>
               </div>
               {pendingRequestsCount > 0 && (
                 <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse">
@@ -1040,13 +1087,42 @@ export default function AdminDashboardPage() {
                   📊 View Login History →
                 </button>
               </div>
+
+              {/* Program Management */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  📋 Program Management
+                </h3>
+                <button
+                  onClick={() => router.push("/admin/program-management")}
+                  className="w-full text-left px-3 py-2 text-sm text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors flex items-center justify-between"
+                >
+                  <span>📊 Manage All Programs →</span>
+                </button>
+              </div>
+
+              {/* ✅ Email Logs */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                  📧 Email Logs
+                </h3>
+                <button
+                  onClick={() => router.push("/admin/emails")}
+                  className="w-full text-left px-3 py-2 text-sm text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors flex items-center justify-between"
+                >
+                  <span>📧 View Sent Emails →</span>
+                </button>
+              </div>
             </>
           )}
 
           {/* Notification Settings */}
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
-              Notifications
+              Notification Settings
+              <span className="text-xs font-normal text-gray-400 ml-2">
+                Real-time
+              </span>
             </h3>
             <div className="space-y-3">
               {[
@@ -1054,42 +1130,203 @@ export default function AdminDashboardPage() {
                   key: "emailNotifications",
                   label: "Email notifications",
                   desc: "Receive email alerts for key events",
+                  action: async (value: boolean) => {
+                    localStorage.setItem(
+                      "email_notifications_enabled",
+                      String(value),
+                    );
+                    if (value) {
+                      await notificationService.sendEmail({
+                        to: profile.email || "admin@ruralcommunity.org",
+                        subject: "Email Notifications Enabled",
+                        body: "You will now receive email notifications for important events.",
+                        type: "general",
+                      });
+                      showToast(
+                        "Email notifications enabled! Test email sent.",
+                        "success",
+                      );
+                    } else {
+                      showToast("Email notifications disabled", "info");
+                    }
+                  },
                 },
                 {
                   key: "mentorAlerts",
                   label: "Mentor activity alerts",
                   desc: "Get notified when mentors log hours or update status",
+                  action: async (value: boolean) => {
+                    localStorage.setItem(
+                      "mentor_alerts_enabled",
+                      String(value),
+                    );
+                    if (value) {
+                      await NotificationHelpers.notifyMentorActivity(
+                        "Test Mentor",
+                        "logged_hours",
+                        "2 hours logged",
+                      );
+                      showToast(
+                        "Mentor alerts enabled! Test notification sent.",
+                        "success",
+                      );
+                    } else {
+                      showToast("Mentor alerts disabled", "info");
+                    }
+                  },
                 },
                 {
                   key: "participantAlerts",
                   label: "Participant milestone alerts",
                   desc: "Get notified when participants complete stages",
+                  action: async (value: boolean) => {
+                    localStorage.setItem(
+                      "participant_alerts_enabled",
+                      String(value),
+                    );
+                    if (value) {
+                      await NotificationHelpers.notifyParticipantMilestone(
+                        "Test Participant",
+                        "Onboarding Complete",
+                        "Business Catalyst",
+                      );
+                      showToast(
+                        "Participant alerts enabled! Test notification sent.",
+                        "success",
+                      );
+                    } else {
+                      showToast("Participant alerts disabled", "info");
+                    }
+                  },
                 },
                 {
                   key: "reportAlerts",
                   label: "Monthly report reminders",
                   desc: "Reminders when reports are due",
-                },
-              ].map((item) => (
-                <div
-                  key={item.key}
-                  className="flex items-center justify-between py-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">
-                      {item.label}
-                    </p>
-                    <p className="text-xs text-gray-400">{item.desc}</p>
-                  </div>
-                  <Toggle
-                    value={settings[item.key as keyof SettingsData] as boolean}
-                    onChange={(v) =>
-                      updateSetting(item.key as keyof SettingsData, v)
+                  action: async (value: boolean) => {
+                    localStorage.setItem(
+                      "report_alerts_enabled",
+                      String(value),
+                    );
+                    if (value) {
+                      const nextMonth = new Date();
+                      nextMonth.setMonth(nextMonth.getMonth() + 1);
+                      await NotificationHelpers.sendReportReminder(
+                        nextMonth.toLocaleString("default", {
+                          month: "long",
+                          year: "numeric",
+                        }),
+                        "5th of the month",
+                      );
+                      showToast(
+                        "Report alerts enabled! Test notification sent.",
+                        "success",
+                      );
+                    } else {
+                      showToast("Report alerts disabled", "info");
                     }
-                  />
-                </div>
-              ))}
+                  },
+                },
+              ].map((item) => {
+                const currentValue =
+                  localStorage.getItem(item.key) === "true" ||
+                  settings[item.key as keyof SettingsData] === true;
+
+                return (
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">
+                        {item.label}
+                      </p>
+                      <p className="text-xs text-gray-400">{item.desc}</p>
+                    </div>
+                    <Toggle
+                      value={currentValue}
+                      onChange={async (v) => {
+                        updateSetting(item.key as keyof SettingsData, v);
+                        await item.action(v);
+                        setUnreadCount(notificationService.getUnreadCount());
+                      }}
+                    />
+                  </div>
+                );
+              })}
             </div>
+          </div>
+
+          {/* Test Notifications */}
+          <div className="border-t pt-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              Test Notifications
+              <span className="text-xs font-normal text-gray-400 ml-2">
+                Send a test alert
+              </span>
+            </h3>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={async () => {
+                  await NotificationHelpers.notifyMentorActivity(
+                    "Sarah Johnson",
+                    "logged_hours",
+                    "3 hours logged",
+                  );
+                  showToast("Test mentor notification sent.", "success");
+                }}
+                className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm"
+              >
+                Mentor Alert
+              </button>
+              <button
+                onClick={async () => {
+                  await NotificationHelpers.notifyParticipantMilestone(
+                    "Michael Chen",
+                    "Business Plan Complete",
+                    "SEED Micro-Grant",
+                  );
+                  showToast("Test milestone notification sent.", "success");
+                }}
+                className="px-3 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors text-sm"
+              >
+                Milestone
+              </button>
+              <button
+                onClick={async () => {
+                  const nextMonth = new Date();
+                  nextMonth.setMonth(nextMonth.getMonth() + 1);
+                  await NotificationHelpers.sendReportReminder(
+                    nextMonth.toLocaleString("default", {
+                      month: "long",
+                      year: "numeric",
+                    }),
+                    "5th of the month",
+                  );
+                  showToast("Test report reminder sent.", "success");
+                }}
+                className="px-3 py-2 bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors text-sm"
+              >
+                Report Reminder
+              </button>
+              <button
+                onClick={async () => {
+                  await notificationService.sendEmail({
+                    to: profile.email || "admin@ruralcommunity.org",
+                    subject: "Test Email Notification",
+                    body: "This is a test email from the notification system.",
+                    type: "general",
+                  });
+                  showToast("Test email sent.", "success");
+                }}
+                className="px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors text-sm"
+              >
+                Test Email
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-2 text-center">
+              Click a button to send a test notification
+            </p>
           </div>
 
           {/* Appearance Settings */}
