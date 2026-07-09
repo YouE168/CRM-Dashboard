@@ -1,10 +1,11 @@
 "use client";
-export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 
-export default function SetPasswordPage() {
+// Disable SSR for the entire page by using a dynamic import with ssr: false.
+const SetPasswordPageContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
@@ -19,17 +20,21 @@ export default function SetPasswordPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
-    // Only run on client side
-    if (typeof window === 'undefined') return;
-    
+    // Only run on the client side
+    if (typeof window === "undefined") return;
+
     if (!token) {
-      setError("Invalid or missing verification token. Please contact Jody for a new link.");
+      setError(
+        "Invalid or missing verification token. Please contact Jody for a new link.",
+      );
       setValidToken(false);
       return;
     }
 
     // Check if token exists and is valid
-    const requests = JSON.parse(localStorage.getItem("access_requests") || "[]");
+    const requests = JSON.parse(
+      localStorage.getItem("access_requests") || "[]",
+    );
     const request = requests.find((r: any) => r.verificationToken === token);
 
     if (request && request.status === "approved" && !request.passwordSet) {
@@ -39,7 +44,9 @@ export default function SetPasswordPage() {
       setError("Your password has already been set. Please login.");
       setValidToken(false);
     } else {
-      setError("Invalid verification token. Please contact Jody for a new link.");
+      setError(
+        "Invalid verification token. Please contact Jody for a new link.",
+      );
       setValidToken(false);
     }
   }, [token]);
@@ -63,24 +70,21 @@ export default function SetPasswordPage() {
     }
 
     try {
-      // Get all users
       const users = JSON.parse(localStorage.getItem("users") || "[]");
-      
-      // Find the user with this token
-      const requests = JSON.parse(localStorage.getItem("access_requests") || "[]");
+      const requests = JSON.parse(
+        localStorage.getItem("access_requests") || "[]",
+      );
       const request = requests.find((r: any) => r.verificationToken === token);
-      
+
       if (!request) {
         setError("Invalid request. Please contact Jody.");
         setLoading(false);
         return;
       }
 
-      // Find and update the user
       const userIndex = users.findIndex((u: any) => u.email === request.email);
-      
+
       if (userIndex === -1) {
-        // Create the user if they don't exist
         users.push({
           email: request.email,
           name: request.name,
@@ -91,24 +95,21 @@ export default function SetPasswordPage() {
           createdAt: new Date().toISOString(),
         });
       } else {
-        // Update existing user
         users[userIndex].password = password;
         users[userIndex].passwordSet = true;
         users[userIndex].status = "active";
       }
-      
+
       localStorage.setItem("users", JSON.stringify(users));
 
-      // Mark request as passwordSet
       const updatedRequests = requests.map((r: any) =>
-        r.verificationToken === token ? { ...r, passwordSet: true } : r
+        r.verificationToken === token ? { ...r, passwordSet: true } : r,
       );
       localStorage.setItem("access_requests", JSON.stringify(updatedRequests));
 
       setSuccess(true);
       setLoading(false);
 
-      // Redirect to login after 2 seconds
       setTimeout(() => {
         router.push("/login");
       }, 2000);
@@ -135,10 +136,12 @@ export default function SetPasswordPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Set Your Password</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Set Your Password
+          </h1>
           <p className="text-sm text-gray-500 mt-2">
-            {success 
-              ? "Your password has been set successfully!" 
+            {success
+              ? "Your password has been set successfully!"
               : "Create a secure password for your account"}
           </p>
         </div>
@@ -235,4 +238,11 @@ export default function SetPasswordPage() {
       </div>
     </div>
   );
-}
+};
+
+// This is the key part for disables SSR for the entire page.
+const SetPasswordPage = dynamic(() => Promise.resolve(SetPasswordPageContent), {
+  ssr: false,
+});
+
+export default SetPasswordPage;
