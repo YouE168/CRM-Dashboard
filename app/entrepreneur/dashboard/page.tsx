@@ -1,5 +1,6 @@
 // app/entrepreneur/dashboard/page.tsx
 "use client";
+export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -33,6 +34,8 @@ function EntrepreneurDashboardContent() {
   const [goals, setGoals] = useState<any[]>([]);
   const [satisfactionRate, setSatisfactionRate] = useState(5);
   const [mentorInfo, setMentorInfo] = useState<any>(null);
+  const [selectedProgram, setSelectedProgram] = useState<any>(null);
+  const [showProgramModal, setShowProgramModal] = useState(false);
 
   useEffect(() => {
     const currentUser = localStorage.getItem("currentUser");
@@ -47,167 +50,181 @@ function EntrepreneurDashboardContent() {
       setProfile(parsed);
     }
 
-    // Load entrepreneur programs - ensure SEK Catalyst is included
-    const programData = JSON.parse(
-      localStorage.getItem("entrepreneur_programs_data") ||
-        JSON.stringify({
-          programs: [
+    // ✅ FIX: Load programs from admin program management data
+    let programsData = [];
+
+    // Try to load from entrepreneur_programs_data
+    const entrepreneurData = localStorage.getItem("entrepreneur_programs_data");
+    if (entrepreneurData) {
+      try {
+        const parsed = JSON.parse(entrepreneurData);
+        programsData = parsed.programs || [];
+      } catch (e) {
+        programsData = [];
+      }
+    }
+
+    // ✅ If no data, try to load from admin program management
+    if (programsData.length === 0) {
+      const adminData = localStorage.getItem("program_management_data");
+      if (adminData) {
+        try {
+          const parsed = JSON.parse(adminData);
+          programsData = parsed.programs || [];
+        } catch (e) {
+          programsData = [];
+        }
+      }
+    }
+
+    // ✅ If still no data, use default programs with all configured programs
+    if (programsData.length === 0) {
+      programsData = [
+        {
+          id: "prog-1",
+          name: "RCP Small Business Mentorship",
+          description:
+            "Connect with experienced local mentors for one-on-one guidance.",
+          status: "Active",
+          startDate: "January 2025",
+          progress: 33,
+          nextMilestone: "Complete your business profile",
+          nextMilestoneAction: "https://forms.google.com/mentorship-profile",
+          resources: [
+            { name: "Mentor Directory", link: "/resources/mentor-directory" },
             {
-              id: "prog-1",
-              name: "RCP Small Business Mentorship",
-              status: "Active",
-              startDate: "January 2025",
-              progress: 33,
-              nextMilestone: "Complete your business profile",
-              nextMilestoneAction:
-                "https://forms.google.com/mentorship-profile",
-              resources: [
-                {
-                  name: "Mentor Directory",
-                  link: "/resources/mentor-directory",
-                },
-                {
-                  name: "Business Planning Templates",
-                  link: "/resources/templates",
-                },
-              ],
-              upcomingSessions: [
-                {
-                  date: "June 10, 2025",
-                  time: "2:00 PM",
-                  topic: "Business Plan Review",
-                  mentor: "Michael Chen",
-                  link: "/mentor/settings?mentee=1",
-                },
-              ],
-              contactEmail: "mentorship@ruralcommunitypartners.org",
-              contactPhone: "(620) 555-0101",
-            },
-            {
-              id: "prog-2",
-              name: "SEED Micro-Grant",
-              status: "Active",
-              startDate: "January 2025",
-              progress: 33,
-              nextMilestone: "Complete cohort application",
-              nextMilestoneAction: "https://forms.google.com/seed-application",
-              resources: [
-                { name: "Cohort Calendar", link: "/resources/seed-calendar" },
-                {
-                  name: "Grant Application Guide",
-                  link: "/resources/grant-guide",
-                },
-              ],
-              upcomingSessions: [
-                {
-                  date: "June 12, 2025",
-                  time: "10:00 AM",
-                  topic: "Weekly Cohort Meeting",
-                  mentor: "David Park",
-                  link: "/zoom/seed-cohort",
-                },
-              ],
-              contactEmail: "seed@ruralcommunitypartners.org",
-              contactPhone: "(620) 555-0102",
-            },
-            {
-              id: "prog-3",
-              name: "Business Professional Services",
-              status: "Active",
-              startDate: "January 2025",
-              progress: 33,
-              nextMilestone: "Schedule professional services call",
-              nextMilestoneAction:
-                "https://calendar.google.com/professional-services",
-              resources: [
-                {
-                  name: "Financial Templates",
-                  link: "/resources/financial-templates",
-                },
-                {
-                  name: "Capital Readiness Guide",
-                  link: "/resources/capital-guide",
-                },
-              ],
-              upcomingSessions: [
-                {
-                  date: "June 15, 2025",
-                  time: "1:00 PM",
-                  topic: "Financial Planning Session",
-                  mentor: "Jody Program",
-                  link: "/zoom/financial-planning",
-                },
-              ],
-              contactEmail: "jody@hbcat.org",
-              contactPhone: "(620) 555-0103",
-            },
-            {
-              id: "prog-4",
-              name: "Microloan Program",
-              status: "Active",
-              startDate: "January 2025",
-              progress: 33,
-              nextMilestone: "Check loan eligibility",
-              nextMilestoneAction:
-                "https://forms.google.com/microloan-eligibility",
-              resources: [
-                {
-                  name: "Loan Application",
-                  link: "/resources/loan-application",
-                },
-                {
-                  name: "Eligibility Requirements",
-                  link: "/resources/eligibility",
-                },
-              ],
-              upcomingSessions: [],
-              contactEmail: "loans@ruralcommunitypartners.org",
-              contactPhone: "(620) 555-0104",
-            },
-            {
-              id: "prog-5",
-              name: "SEK Catalyst: Empowered by KU",
-              status: "Active",
-              startDate: "August 2025",
-              progress: 0,
-              nextMilestone: "Complete your onboarding session",
-              nextMilestoneAction:
-                "https://calendar.google.com/sek-catalyst-onboarding",
-              resources: [
-                {
-                  name: "Program Guide",
-                  link: "/resources/sek-catalyst-guide",
-                },
-                {
-                  name: "Workshop Schedule",
-                  link: "/resources/sek-catalyst-schedule",
-                },
-                { name: "KU Resources", link: "/resources/ku-resources" },
-                { name: "Mentor Matching", link: "/resources/mentor-matching" },
-              ],
-              upcomingSessions: [
-                {
-                  date: "September 5, 2025",
-                  time: "6:00 PM",
-                  topic: "Program Kickoff & Orientation",
-                  mentor: "Jody Program",
-                  link: "/zoom/sek-catalyst",
-                },
-                {
-                  date: "September 12, 2025",
-                  time: "6:00 PM",
-                  topic: "Business Planning Workshop",
-                  mentor: "Tom Anderson",
-                  link: "/zoom/sek-catalyst-workshop",
-                },
-              ],
-              contactEmail: "catalyst@ruralcommunitypartners.org",
-              contactPhone: "(620) 555-0105",
+              name: "Business Planning Templates",
+              link: "/resources/templates",
             },
           ],
-        }),
-    );
-    setPrograms(programData.programs || []);
+          upcomingSessions: [
+            {
+              date: "June 10, 2025",
+              time: "2:00 PM",
+              topic: "Business Plan Review",
+              mentor: "Michael Chen",
+            },
+          ],
+          contactEmail: "mentorship@ruralcommunitypartners.org",
+          contactPhone: "(620) 555-0101",
+        },
+        {
+          id: "prog-2",
+          name: "SEED Micro-Grant",
+          description:
+            "10-week SEK Catalyst cohort with mentorship and grant opportunities.",
+          status: "Active",
+          startDate: "January 2025",
+          progress: 33,
+          nextMilestone: "Complete cohort application",
+          nextMilestoneAction: "https://forms.google.com/seed-application",
+          resources: [
+            { name: "Cohort Calendar", link: "/resources/seed-calendar" },
+            { name: "Grant Application Guide", link: "/resources/grant-guide" },
+          ],
+          upcomingSessions: [
+            {
+              date: "June 12, 2025",
+              time: "10:00 AM",
+              topic: "Weekly Cohort Meeting",
+              mentor: "David Park",
+            },
+          ],
+          contactEmail: "seed@ruralcommunitypartners.org",
+          contactPhone: "(620) 555-0102",
+        },
+        {
+          id: "prog-3",
+          name: "Business Professional Services",
+          description:
+            "Financial modeling, startup support, and capital connection.",
+          status: "Active",
+          startDate: "January 2025",
+          progress: 33,
+          nextMilestone: "Schedule professional services call",
+          nextMilestoneAction:
+            "https://calendar.google.com/professional-services",
+          resources: [
+            {
+              name: "Financial Templates",
+              link: "/resources/financial-templates",
+            },
+            {
+              name: "Capital Readiness Guide",
+              link: "/resources/capital-guide",
+            },
+          ],
+          upcomingSessions: [
+            {
+              date: "June 15, 2025",
+              time: "1:00 PM",
+              topic: "Financial Planning Session",
+              mentor: "Jody Program",
+            },
+          ],
+          contactEmail: "jody@hbcat.org",
+          contactPhone: "(620) 555-0103",
+        },
+        {
+          id: "prog-4",
+          name: "Microloan Program",
+          description: "Access to capital for rural businesses.",
+          status: "Active",
+          startDate: "January 2025",
+          progress: 33,
+          nextMilestone: "Check loan eligibility",
+          nextMilestoneAction: "https://forms.google.com/microloan-eligibility",
+          resources: [
+            { name: "Loan Application", link: "/resources/loan-application" },
+            {
+              name: "Eligibility Requirements",
+              link: "/resources/eligibility",
+            },
+          ],
+          upcomingSessions: [],
+          contactEmail: "loans@ruralcommunitypartners.org",
+          contactPhone: "(620) 555-0104",
+        },
+        {
+          id: "prog-5",
+          name: "SEK Catalyst: Empowered by KU",
+          description: "12-week entrepreneurship program with KU resources.",
+          status: "Active",
+          startDate: "August 2025",
+          progress: 0,
+          nextMilestone: "Complete your onboarding session",
+          nextMilestoneAction:
+            "https://calendar.google.com/sek-catalyst-onboarding",
+          resources: [
+            { name: "Program Guide", link: "/resources/sek-catalyst-guide" },
+            {
+              name: "Workshop Schedule",
+              link: "/resources/sek-catalyst-schedule",
+            },
+            { name: "KU Resources", link: "/resources/ku-resources" },
+            { name: "Mentor Matching", link: "/resources/mentor-matching" },
+          ],
+          upcomingSessions: [
+            {
+              date: "September 5, 2025",
+              time: "6:00 PM",
+              topic: "Program Kickoff & Orientation",
+              mentor: "Jody Program",
+            },
+            {
+              date: "September 12, 2025",
+              time: "6:00 PM",
+              topic: "Business Planning Workshop",
+              mentor: "Tom Anderson",
+            },
+          ],
+          contactEmail: "catalyst@ruralcommunitypartners.org",
+          contactPhone: "(620) 555-0105",
+        },
+      ];
+    }
+
+    setPrograms(programsData);
 
     // Load goals
     const savedGoals = JSON.parse(
@@ -231,6 +248,11 @@ function EntrepreneurDashboardContent() {
 
     setLoading(false);
   }, [router]);
+
+  const handleProgramClick = (program: any) => {
+    setSelectedProgram(program);
+    setShowProgramModal(true);
+  };
 
   if (loading) {
     return (
@@ -352,7 +374,7 @@ function EntrepreneurDashboardContent() {
               📋 Your Active Programs
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              Programs you're enrolled in
+              Click on a program to view details
             </p>
           </div>
           <div className="divide-y divide-gray-100">
@@ -366,7 +388,8 @@ function EntrepreneurDashboardContent() {
               programs.map((program: any) => (
                 <div
                   key={program.id}
-                  className="p-5 hover:bg-gray-50 transition-colors"
+                  onClick={() => handleProgramClick(program)}
+                  className="p-5 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
                   <div>
                     <div className="flex items-start justify-between">
@@ -408,6 +431,14 @@ function EntrepreneurDashboardContent() {
                               Started {program.startDate}
                             </span>
                           </div>
+                          {program.participants && (
+                            <div className="flex items-center gap-1">
+                              <Users className="h-3 w-3 text-gray-400" />
+                              <span className="text-xs text-gray-500">
+                                {program.participants} participants
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <div className="mt-3">
                           <div className="flex justify-between text-xs mb-1">
@@ -446,6 +477,7 @@ function EntrepreneurDashboardContent() {
                           </div>
                         )}
                       </div>
+                      <ChevronRight className="h-5 w-5 text-gray-300 flex-shrink-0 ml-4" />
                     </div>
                   </div>
                 </div>
@@ -453,6 +485,19 @@ function EntrepreneurDashboardContent() {
             )}
           </div>
         </div>
+
+        {/* Program Details Modal */}
+        {showProgramModal && selectedProgram && (
+          <ProgramDetailsModal
+            program={selectedProgram}
+            onClose={() => {
+              setShowProgramModal(false);
+              setSelectedProgram(null);
+            }}
+            userEmail={profile?.email}
+            userRole={profile?.primaryRole}
+          />
+        )}
 
         {/* Mentor Information */}
         <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

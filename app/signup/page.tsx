@@ -1,5 +1,5 @@
 "use client";
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -19,6 +19,7 @@ import {
   Phone,
   Target,
 } from "lucide-react";
+import { notifyJodyNewUser } from "@/lib/email-service";
 
 // Define the Role type
 interface Role {
@@ -258,29 +259,36 @@ export default function SignupPage() {
         return;
       }
 
+      // ✅ FIX: Create user with correct role assignment
       const newUser = {
         email: formData.email,
         password: formData.password,
         roles: formData.selectedRoles.map((r) => r.id),
         roleLabels: formData.selectedRoles.map((r) => r.label),
         primaryRole: formData.primaryRole,
+        userType: formData.primaryRole,
         fullName: `${formData.firstName} ${formData.lastName}`,
+        name: `${formData.firstName} ${formData.lastName}`,
         createdAt: new Date().toISOString(),
         status: "pending_approval",
+        passwordSet: true,
       };
       users.push(newUser);
       localStorage.setItem("users", JSON.stringify(users));
 
+      // ✅ FIX: Save profile with correct role
       const userProfile = {
         name: `${formData.firstName} ${formData.lastName}`,
         email: formData.email,
         roles: formData.selectedRoles.map((r) => r.label),
         primaryRole: formData.primaryRole,
+        userType: formData.primaryRole,
         userTypes: formData.selectedRoles.map((r) => r.id),
-        phone: formData.phone,
-        organization: formData.organization,
-        position: formData.position,
+        phone: formData.phone || "",
+        organization: formData.organization || "",
+        position: formData.position || "",
         selectedPrograms: formData.selectedPrograms,
+        status: "pending",
         createdAt: new Date().toISOString(),
       };
       localStorage.setItem(
@@ -290,14 +298,31 @@ export default function SignupPage() {
 
       saveSignup(formData);
 
+      // ✅ NEW: Send notification to Jody
+      try {
+        await notifyJodyNewUser({
+          name: `${formData.firstName} ${formData.lastName}`,
+          email: formData.email,
+          role: formData.primaryRole,
+          registrationDate: new Date().toISOString(),
+        });
+      } catch (emailError) {
+        console.warn(
+          "Email notification failed, but registration continues:",
+          emailError,
+        );
+        // Don't block registration if email fails
+      }
+
       setSuccess(
-        "Account created successfully! Your request has been sent for approval.",
+        "✅ Account created successfully! Jody has been notified. You will receive an email when your account is approved.",
       );
 
       setTimeout(() => {
         router.push("/login");
-      }, 3000);
+      }, 4000);
     } catch (err) {
+      console.error("Signup error:", err);
       setError("Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
@@ -658,7 +683,14 @@ export default function SignupPage() {
                 <span className="text-gray-500">Email:</span>
                 <span className="text-gray-900">{formData.email}</span>
 
-                <span className="text-gray-500">Roles:</span>
+                <span className="text-gray-500">Primary Role:</span>
+                <span className="text-gray-900">
+                  {formData.selectedRoles.find(
+                    (r) => r.id === formData.primaryRole,
+                  )?.label || formData.primaryRole}
+                </span>
+
+                <span className="text-gray-500">All Roles:</span>
                 <span className="text-gray-900">
                   {formData.selectedRoles.map((r) => r.label).join(", ")}
                 </span>
