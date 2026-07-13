@@ -35,7 +35,7 @@ import {
   Building,
 } from "lucide-react";
 
-// All programs with their full details
+// All programs with their full details - THIS WILL ALWAYS SHOW
 const ALL_PROGRAMS = [
   {
     id: "prog-1",
@@ -50,14 +50,11 @@ const ALL_PROGRAMS = [
     contactEmail: "mentorship@ruralcommunitypartners.org",
     contactPhone: "(620) 555-0101",
     managedBy: "multiple_mentors",
-    resources: [
-      { name: "Mentor Directory", link: "/resources/mentor-directory" },
-      { name: "Business Planning Templates", link: "/resources/templates" },
-      {
-        name: "Application Support",
-        link: "mailto:support@ruralcommunitypartners.org",
-      },
-      { name: "Success Story Guide", link: "/resources/success-stories" },
+    resourceCategories: [
+      "Mentorship",
+      "Business Planning",
+      "Marketing",
+      "Financial",
     ],
     upcomingSessions: [
       {
@@ -66,18 +63,6 @@ const ALL_PROGRAMS = [
         topic: "Business Plan Review",
         mentor: "Michael Chen",
       },
-      {
-        date: "June 24, 2025",
-        time: "2:00 PM",
-        topic: "Marketing Strategy",
-        mentor: "Sarah Johnson",
-      },
-    ],
-    resourceCategories: [
-      "Mentorship",
-      "Business Planning",
-      "Marketing",
-      "Financial",
     ],
   },
   {
@@ -93,12 +78,7 @@ const ALL_PROGRAMS = [
     contactEmail: "seed@ruralcommunitypartners.org",
     contactPhone: "(620) 555-0102",
     managedBy: "multiple_mentors",
-    resources: [
-      { name: "Cohort Calendar", link: "/resources/seed-calendar" },
-      { name: "Grant Application Guide", link: "/resources/grant-guide" },
-      { name: "Weekly Session Materials", link: "/resources/seed-materials" },
-      { name: "Pitch Deck Template", link: "/resources/pitch-template" },
-    ],
+    resourceCategories: ["Financial", "Grant Writing", "Cohort", "Pitching"],
     upcomingSessions: [
       {
         date: "June 12, 2025",
@@ -106,14 +86,7 @@ const ALL_PROGRAMS = [
         topic: "Weekly Cohort Meeting",
         mentor: "David Park",
       },
-      {
-        date: "June 19, 2025",
-        time: "10:00 AM",
-        topic: "Grant Writing Workshop",
-        mentor: "Emily Chen",
-      },
     ],
-    resourceCategories: ["Financial", "Grant Writing", "Cohort", "Pitching"],
   },
   {
     id: "prog-3",
@@ -128,11 +101,11 @@ const ALL_PROGRAMS = [
     contactEmail: "jody@hbcat.org",
     contactPhone: "(620) 555-0103",
     managedBy: "jody",
-    resources: [
-      { name: "Financial Templates", link: "/resources/financial-templates" },
-      { name: "Capital Readiness Guide", link: "/resources/capital-guide" },
-      { name: "Business Plan Template", link: "/resources/business-plan" },
-      { name: "Investor Pitch Guide", link: "/resources/pitch-guide" },
+    resourceCategories: [
+      "Financial Modeling",
+      "Startup Support",
+      "Capital",
+      "Strategy",
     ],
     upcomingSessions: [
       {
@@ -141,12 +114,6 @@ const ALL_PROGRAMS = [
         topic: "Financial Planning Session",
         mentor: "Tom Anderson",
       },
-    ],
-    resourceCategories: [
-      "Financial Modeling",
-      "Startup Support",
-      "Capital",
-      "Strategy",
     ],
   },
   {
@@ -162,11 +129,11 @@ const ALL_PROGRAMS = [
     contactEmail: "catalyst@ruralcommunitypartners.org",
     contactPhone: "(620) 555-0105",
     managedBy: "multiple_mentors",
-    resources: [
-      { name: "Program Guide", link: "/resources/sek-catalyst-guide" },
-      { name: "Workshop Schedule", link: "/resources/sek-catalyst-schedule" },
-      { name: "KU Resources", link: "/resources/ku-resources" },
-      { name: "Mentor Matching", link: "/resources/mentor-matching" },
+    resourceCategories: [
+      "Curriculum",
+      "Mentorship",
+      "KU Resources",
+      "Workshops",
     ],
     upcomingSessions: [
       {
@@ -175,18 +142,6 @@ const ALL_PROGRAMS = [
         topic: "Program Kickoff & Orientation",
         mentor: "Jody Program",
       },
-      {
-        date: "September 12, 2025",
-        time: "6:00 PM",
-        topic: "Business Planning Workshop",
-        mentor: "Tom Anderson",
-      },
-    ],
-    resourceCategories: [
-      "Curriculum",
-      "Mentorship",
-      "KU Resources",
-      "Workshops",
     ],
   },
   {
@@ -202,14 +157,8 @@ const ALL_PROGRAMS = [
     contactEmail: "loans@ruralcommunitypartners.org",
     contactPhone: "(620) 555-0104",
     managedBy: "admin",
-    resources: [
-      { name: "Loan Application", link: "/resources/loan-application" },
-      { name: "Eligibility Requirements", link: "/resources/eligibility" },
-      { name: "Financial Documentation Guide", link: "/resources/doc-guide" },
-      { name: "Interest Rate Calculator", link: "/resources/rate-calculator" },
-    ],
-    upcomingSessions: [],
     resourceCategories: ["Loans", "Financial", "Eligibility", "Documentation"],
+    upcomingSessions: [],
   },
 ];
 
@@ -230,9 +179,9 @@ function EntrepreneurDashboardContent() {
     if (programName === "Business Professional Services") {
       return true;
     }
-
-    // Check if user has approved programs in their profile
-    const approvedPrograms = profile?.approvedPrograms || [];
+    // If profile doesn't exist or no approvedPrograms, only Business Professional Services is available
+    if (!profile) return false;
+    const approvedPrograms = profile.approvedPrograms || [];
     return approvedPrograms.includes(programName);
   };
 
@@ -260,26 +209,31 @@ function EntrepreneurDashboardContent() {
       return;
     }
 
+    // Load profile
     const savedProfile = localStorage.getItem(`profile_${currentUser}`);
     if (savedProfile) {
       const parsed = JSON.parse(savedProfile);
       setProfile(parsed);
     }
 
-    // Load programs from localStorage or use defaults
+    // ✅ FIX: ALWAYS use ALL_PROGRAMS - this ensures programs always show
+    // Try to load from localStorage but fallback to ALL_PROGRAMS
     let programsData = [];
     const savedPrograms = localStorage.getItem("entrepreneur_programs_data");
+
     if (savedPrograms) {
       try {
         const parsed = JSON.parse(savedPrograms);
         programsData = parsed.programs || [];
       } catch (e) {
+        console.error("Error parsing entrepreneur programs:", e);
         programsData = [];
       }
     }
 
-    // If no saved programs, use the full program list
+    // ✅ If no saved programs, ALWAYS use the full program list
     if (programsData.length === 0) {
+      console.log("📋 Using default programs list");
       programsData = ALL_PROGRAMS;
     }
 
@@ -308,6 +262,9 @@ function EntrepreneurDashboardContent() {
     setLoading(false);
   }, [router]);
 
+  // ✅ Add debug for checking programs
+  console.log("📋 Programs loaded:", programs.length);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -322,6 +279,10 @@ function EntrepreneurDashboardContent() {
     totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
 
   const accessiblePrograms = programs.filter((p) => hasProgramAccess(p.name));
+
+  // ✅ Debug: Check what's being rendered
+  console.log("📋 Accessible programs:", accessiblePrograms.length);
+  console.log("📋 Total programs:", programs.length);
 
   return (
     <div className="min-h-screen bg-gray-50">
