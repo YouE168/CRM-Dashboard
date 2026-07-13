@@ -23,9 +23,196 @@ import {
   Award,
   TrendingUp,
   Users,
+  Lock,
+  DollarSign,
+  Clock as ClockIcon,
+  Users as UsersIcon,
+  FileText,
+  TrendingUp as TrendingUpIcon,
+  BarChart,
+  Handshake,
+  GraduationCap,
+  Building,
 } from "lucide-react";
 
-// Entrepreneur-specific dashboard content
+// All programs with their full details
+const ALL_PROGRAMS = [
+  {
+    id: "prog-1",
+    name: "RCP Small Business Mentorship",
+    description:
+      "Connect with experienced local mentors for one-on-one guidance. Get help with business planning, marketing, financial management, and more.",
+    status: "Active",
+    startDate: "January 2025",
+    progress: 33,
+    icon: "👨‍🏫",
+    color: "from-emerald-500 to-teal-500",
+    contactEmail: "mentorship@ruralcommunitypartners.org",
+    contactPhone: "(620) 555-0101",
+    managedBy: "multiple_mentors",
+    resources: [
+      { name: "Mentor Directory", link: "/resources/mentor-directory" },
+      { name: "Business Planning Templates", link: "/resources/templates" },
+      {
+        name: "Application Support",
+        link: "mailto:support@ruralcommunitypartners.org",
+      },
+      { name: "Success Story Guide", link: "/resources/success-stories" },
+    ],
+    upcomingSessions: [
+      {
+        date: "June 10, 2025",
+        time: "2:00 PM",
+        topic: "Business Plan Review",
+        mentor: "Michael Chen",
+      },
+      {
+        date: "June 24, 2025",
+        time: "2:00 PM",
+        topic: "Marketing Strategy",
+        mentor: "Sarah Johnson",
+      },
+    ],
+    resourceCategories: [
+      "Mentorship",
+      "Business Planning",
+      "Marketing",
+      "Financial",
+    ],
+  },
+  {
+    id: "prog-2",
+    name: "SEED Micro-Grant Program",
+    description:
+      "10-week SEK Catalyst cohort with mentorship and grant opportunities. Includes $250 participant support + $500 grants for top businesses.",
+    status: "Active",
+    startDate: "January 2025",
+    progress: 33,
+    icon: "💰",
+    color: "from-blue-500 to-indigo-500",
+    contactEmail: "seed@ruralcommunitypartners.org",
+    contactPhone: "(620) 555-0102",
+    managedBy: "multiple_mentors",
+    resources: [
+      { name: "Cohort Calendar", link: "/resources/seed-calendar" },
+      { name: "Grant Application Guide", link: "/resources/grant-guide" },
+      { name: "Weekly Session Materials", link: "/resources/seed-materials" },
+      { name: "Pitch Deck Template", link: "/resources/pitch-template" },
+    ],
+    upcomingSessions: [
+      {
+        date: "June 12, 2025",
+        time: "10:00 AM",
+        topic: "Weekly Cohort Meeting",
+        mentor: "David Park",
+      },
+      {
+        date: "June 19, 2025",
+        time: "10:00 AM",
+        topic: "Grant Writing Workshop",
+        mentor: "Emily Chen",
+      },
+    ],
+    resourceCategories: ["Financial", "Grant Writing", "Cohort", "Pitching"],
+  },
+  {
+    id: "prog-3",
+    name: "Business Professional Services",
+    description:
+      "Financial modeling, startup support, and capital connection. Get expert help with cash flow, break-even analysis, and funding strategies.",
+    status: "Active",
+    startDate: "January 2025",
+    progress: 28,
+    icon: "📊",
+    color: "from-purple-500 to-pink-500",
+    contactEmail: "jody@hbcat.org",
+    contactPhone: "(620) 555-0103",
+    managedBy: "jody",
+    resources: [
+      { name: "Financial Templates", link: "/resources/financial-templates" },
+      { name: "Capital Readiness Guide", link: "/resources/capital-guide" },
+      { name: "Business Plan Template", link: "/resources/business-plan" },
+      { name: "Investor Pitch Guide", link: "/resources/pitch-guide" },
+    ],
+    upcomingSessions: [
+      {
+        date: "June 15, 2025",
+        time: "1:00 PM",
+        topic: "Financial Planning Session",
+        mentor: "Tom Anderson",
+      },
+    ],
+    resourceCategories: [
+      "Financial Modeling",
+      "Startup Support",
+      "Capital",
+      "Strategy",
+    ],
+  },
+  {
+    id: "prog-4",
+    name: "SEK Catalyst: Empowered by KU",
+    description:
+      "A comprehensive 12-week entrepreneurship program designed to help rural business owners launch and grow their ventures. Includes mentorship, workshops, and access to KU resources.",
+    status: "Active",
+    startDate: "August 2025",
+    progress: 0,
+    icon: "🎯",
+    color: "from-indigo-500 to-purple-500",
+    contactEmail: "catalyst@ruralcommunitypartners.org",
+    contactPhone: "(620) 555-0105",
+    managedBy: "multiple_mentors",
+    resources: [
+      { name: "Program Guide", link: "/resources/sek-catalyst-guide" },
+      { name: "Workshop Schedule", link: "/resources/sek-catalyst-schedule" },
+      { name: "KU Resources", link: "/resources/ku-resources" },
+      { name: "Mentor Matching", link: "/resources/mentor-matching" },
+    ],
+    upcomingSessions: [
+      {
+        date: "September 5, 2025",
+        time: "6:00 PM",
+        topic: "Program Kickoff & Orientation",
+        mentor: "Jody Program",
+      },
+      {
+        date: "September 12, 2025",
+        time: "6:00 PM",
+        topic: "Business Planning Workshop",
+        mentor: "Tom Anderson",
+      },
+    ],
+    resourceCategories: [
+      "Curriculum",
+      "Mentorship",
+      "KU Resources",
+      "Workshops",
+    ],
+  },
+  {
+    id: "prog-5",
+    name: "Microloan Program",
+    description:
+      "Access to capital for rural businesses. Designed to support startup and growth-stage entrepreneurs with flexible loan options.",
+    status: "Active",
+    startDate: "January 2025",
+    progress: 15,
+    icon: "🏦",
+    color: "from-amber-500 to-orange-500",
+    contactEmail: "loans@ruralcommunitypartners.org",
+    contactPhone: "(620) 555-0104",
+    managedBy: "admin",
+    resources: [
+      { name: "Loan Application", link: "/resources/loan-application" },
+      { name: "Eligibility Requirements", link: "/resources/eligibility" },
+      { name: "Financial Documentation Guide", link: "/resources/doc-guide" },
+      { name: "Interest Rate Calculator", link: "/resources/rate-calculator" },
+    ],
+    upcomingSessions: [],
+    resourceCategories: ["Loans", "Financial", "Eligibility", "Documentation"],
+  },
+];
+
 function EntrepreneurDashboardContent() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
@@ -36,6 +223,35 @@ function EntrepreneurDashboardContent() {
   const [mentorInfo, setMentorInfo] = useState<any>(null);
   const [selectedProgram, setSelectedProgram] = useState<any>(null);
   const [showProgramModal, setShowProgramModal] = useState(false);
+
+  // Check if user has access to a program
+  const hasProgramAccess = (programName: string): boolean => {
+    // All users can access "Business Professional Services"
+    if (programName === "Business Professional Services") {
+      return true;
+    }
+
+    // Check if user has approved programs in their profile
+    const approvedPrograms = profile?.approvedPrograms || [];
+    return approvedPrograms.includes(programName);
+  };
+
+  // Check if program is locked for this user
+  const isProgramLocked = (programName: string): boolean => {
+    return !hasProgramAccess(programName);
+  };
+
+  // Handle program click - only allow if not locked
+  const handleProgramClick = (program: any) => {
+    if (isProgramLocked(program.name)) {
+      alert(
+        `"${program.name}" is locked. Please contact Jody to request access to this program.`,
+      );
+      return;
+    }
+    setSelectedProgram(program);
+    setShowProgramModal(true);
+  };
 
   useEffect(() => {
     const currentUser = localStorage.getItem("currentUser");
@@ -50,178 +266,21 @@ function EntrepreneurDashboardContent() {
       setProfile(parsed);
     }
 
-    // ✅ FIX: Load programs from admin program management data
+    // Load programs from localStorage or use defaults
     let programsData = [];
-
-    // Try to load from entrepreneur_programs_data
-    const entrepreneurData = localStorage.getItem("entrepreneur_programs_data");
-    if (entrepreneurData) {
+    const savedPrograms = localStorage.getItem("entrepreneur_programs_data");
+    if (savedPrograms) {
       try {
-        const parsed = JSON.parse(entrepreneurData);
+        const parsed = JSON.parse(savedPrograms);
         programsData = parsed.programs || [];
       } catch (e) {
         programsData = [];
       }
     }
 
-    // ✅ If no data, try to load from admin program management
+    // If no saved programs, use the full program list
     if (programsData.length === 0) {
-      const adminData = localStorage.getItem("program_management_data");
-      if (adminData) {
-        try {
-          const parsed = JSON.parse(adminData);
-          programsData = parsed.programs || [];
-        } catch (e) {
-          programsData = [];
-        }
-      }
-    }
-
-    // ✅ If still no data, use default programs with all configured programs
-    if (programsData.length === 0) {
-      programsData = [
-        {
-          id: "prog-1",
-          name: "RCP Small Business Mentorship",
-          description:
-            "Connect with experienced local mentors for one-on-one guidance.",
-          status: "Active",
-          startDate: "January 2025",
-          progress: 33,
-          nextMilestone: "Complete your business profile",
-          nextMilestoneAction: "https://forms.google.com/mentorship-profile",
-          resources: [
-            { name: "Mentor Directory", link: "/resources/mentor-directory" },
-            {
-              name: "Business Planning Templates",
-              link: "/resources/templates",
-            },
-          ],
-          upcomingSessions: [
-            {
-              date: "June 10, 2025",
-              time: "2:00 PM",
-              topic: "Business Plan Review",
-              mentor: "Michael Chen",
-            },
-          ],
-          contactEmail: "mentorship@ruralcommunitypartners.org",
-          contactPhone: "(620) 555-0101",
-        },
-        {
-          id: "prog-2",
-          name: "SEED Micro-Grant",
-          description:
-            "10-week SEK Catalyst cohort with mentorship and grant opportunities.",
-          status: "Active",
-          startDate: "January 2025",
-          progress: 33,
-          nextMilestone: "Complete cohort application",
-          nextMilestoneAction: "https://forms.google.com/seed-application",
-          resources: [
-            { name: "Cohort Calendar", link: "/resources/seed-calendar" },
-            { name: "Grant Application Guide", link: "/resources/grant-guide" },
-          ],
-          upcomingSessions: [
-            {
-              date: "June 12, 2025",
-              time: "10:00 AM",
-              topic: "Weekly Cohort Meeting",
-              mentor: "David Park",
-            },
-          ],
-          contactEmail: "seed@ruralcommunitypartners.org",
-          contactPhone: "(620) 555-0102",
-        },
-        {
-          id: "prog-3",
-          name: "Business Professional Services",
-          description:
-            "Financial modeling, startup support, and capital connection.",
-          status: "Active",
-          startDate: "January 2025",
-          progress: 33,
-          nextMilestone: "Schedule professional services call",
-          nextMilestoneAction:
-            "https://calendar.google.com/professional-services",
-          resources: [
-            {
-              name: "Financial Templates",
-              link: "/resources/financial-templates",
-            },
-            {
-              name: "Capital Readiness Guide",
-              link: "/resources/capital-guide",
-            },
-          ],
-          upcomingSessions: [
-            {
-              date: "June 15, 2025",
-              time: "1:00 PM",
-              topic: "Financial Planning Session",
-              mentor: "Jody Program",
-            },
-          ],
-          contactEmail: "jody@hbcat.org",
-          contactPhone: "(620) 555-0103",
-        },
-        {
-          id: "prog-4",
-          name: "Microloan Program",
-          description: "Access to capital for rural businesses.",
-          status: "Active",
-          startDate: "January 2025",
-          progress: 33,
-          nextMilestone: "Check loan eligibility",
-          nextMilestoneAction: "https://forms.google.com/microloan-eligibility",
-          resources: [
-            { name: "Loan Application", link: "/resources/loan-application" },
-            {
-              name: "Eligibility Requirements",
-              link: "/resources/eligibility",
-            },
-          ],
-          upcomingSessions: [],
-          contactEmail: "loans@ruralcommunitypartners.org",
-          contactPhone: "(620) 555-0104",
-        },
-        {
-          id: "prog-5",
-          name: "SEK Catalyst: Empowered by KU",
-          description: "12-week entrepreneurship program with KU resources.",
-          status: "Active",
-          startDate: "August 2025",
-          progress: 0,
-          nextMilestone: "Complete your onboarding session",
-          nextMilestoneAction:
-            "https://calendar.google.com/sek-catalyst-onboarding",
-          resources: [
-            { name: "Program Guide", link: "/resources/sek-catalyst-guide" },
-            {
-              name: "Workshop Schedule",
-              link: "/resources/sek-catalyst-schedule",
-            },
-            { name: "KU Resources", link: "/resources/ku-resources" },
-            { name: "Mentor Matching", link: "/resources/mentor-matching" },
-          ],
-          upcomingSessions: [
-            {
-              date: "September 5, 2025",
-              time: "6:00 PM",
-              topic: "Program Kickoff & Orientation",
-              mentor: "Jody Program",
-            },
-            {
-              date: "September 12, 2025",
-              time: "6:00 PM",
-              topic: "Business Planning Workshop",
-              mentor: "Tom Anderson",
-            },
-          ],
-          contactEmail: "catalyst@ruralcommunitypartners.org",
-          contactPhone: "(620) 555-0105",
-        },
-      ];
+      programsData = ALL_PROGRAMS;
     }
 
     setPrograms(programsData);
@@ -249,11 +308,6 @@ function EntrepreneurDashboardContent() {
     setLoading(false);
   }, [router]);
 
-  const handleProgramClick = (program: any) => {
-    setSelectedProgram(program);
-    setShowProgramModal(true);
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -266,6 +320,8 @@ function EntrepreneurDashboardContent() {
   const totalGoals = goals.length;
   const progress =
     totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
+
+  const accessiblePrograms = programs.filter((p) => hasProgramAccess(p.name));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -282,22 +338,14 @@ function EntrepreneurDashboardContent() {
             </p>
             <div className="flex flex-wrap gap-4 mt-6">
               <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
-                <p className="text-sm opacity-90">Active Programs</p>
-                <p className="text-2xl font-bold">{programs.length}</p>
+                <p className="text-sm opacity-90">Available Programs</p>
+                <p className="text-2xl font-bold">
+                  {accessiblePrograms.length}
+                </p>
               </div>
               <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
-                <p className="text-sm opacity-90">Completion Rate</p>
-                <p className="text-2xl font-bold">
-                  {programs.length > 0
-                    ? Math.round(
-                        programs.reduce(
-                          (acc: number, p: any) => acc + p.progress,
-                          0,
-                        ) / programs.length,
-                      )
-                    : 0}
-                  %
-                </p>
+                <p className="text-sm opacity-90">Total Programs</p>
+                <p className="text-2xl font-bold">{programs.length}</p>
               </div>
               <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
                 <p className="text-sm opacity-90">Goals Progress</p>
@@ -309,7 +357,6 @@ function EntrepreneurDashboardContent() {
 
         {/* Navigation Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          {/* Goals Card */}
           <div
             onClick={() => router.push("/goals")}
             className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
@@ -328,7 +375,6 @@ function EntrepreneurDashboardContent() {
             </div>
           </div>
 
-          {/* Feedback Card */}
           <div
             onClick={() => router.push("/feedback")}
             className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
@@ -347,7 +393,6 @@ function EntrepreneurDashboardContent() {
             </div>
           </div>
 
-          {/* Mentee Dashboard Link - Only for Mentees */}
           {profile?.primaryRole === "mentee" && (
             <div
               onClick={() => router.push("/mentee/dashboard")}
@@ -367,137 +412,198 @@ function EntrepreneurDashboardContent() {
           )}
         </div>
 
-        {/* Active Programs */}
+        {/* Programs Section - Shows ALL programs with lock status */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-            <h3 className="font-semibold text-gray-900">
-              📋 Your Active Programs
-            </h3>
-            <p className="text-xs text-gray-500 mt-1">
-              Click on a program to view details
-            </p>
+          <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 flex justify-between items-center">
+            <div>
+              <h3 className="font-semibold text-gray-900">📋 All Programs</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                {accessiblePrograms.length > 0
+                  ? `You have access to ${accessiblePrograms.length} program(s). Locked programs require Jody's approval.`
+                  : "You have access to Business Professional Services. Contact Jody for more programs."}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full">
+                ✅ Available
+              </span>
+              <span className="text-xs px-2 py-1 bg-gray-200 text-gray-600 rounded-full flex items-center gap-1">
+                <Lock className="h-3 w-3" /> Locked
+              </span>
+            </div>
           </div>
           <div className="divide-y divide-gray-100">
             {programs.length === 0 ? (
               <div className="p-8 text-center text-gray-400">
                 <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No programs yet</p>
-                <p className="text-xs mt-1">Browse programs to get started</p>
+                <p>No programs available</p>
               </div>
             ) : (
-              programs.map((program: any) => (
-                <div
-                  key={program.id}
-                  onClick={() => handleProgramClick(program)}
-                  className="p-5 hover:bg-gray-50 transition-colors cursor-pointer"
-                >
-                  <div>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold text-gray-800">
-                            {program.name}
-                          </p>
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded-full ${
-                              program.status === "Active"
-                                ? "bg-green-100 text-green-700"
-                                : program.status === "Completed"
-                                  ? "bg-purple-100 text-purple-700"
-                                  : "bg-yellow-100 text-yellow-700"
-                            }`}
-                          >
-                            {program.status}
-                          </span>
-                          {/* SEK Catalyst Badge */}
-                          {program.name === "SEK Catalyst: Empowered by KU" && (
-                            <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
-                              <Award className="h-3 w-3" />
-                              KU Partner
-                            </span>
+              programs.map((program: any) => {
+                const locked = isProgramLocked(program.name);
+                const isJodyProgram =
+                  program.name === "Business Professional Services";
+
+                return (
+                  <div
+                    key={program.id}
+                    onClick={() => handleProgramClick(program)}
+                    className={`p-5 transition-colors cursor-pointer ${
+                      locked ? "hover:bg-gray-50" : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      {/* Program Icon */}
+                      <div
+                        className={`w-12 h-12 rounded-xl bg-gradient-to-br ${program.color || "from-gray-500 to-gray-600"} flex items-center justify-center text-2xl flex-shrink-0`}
+                      >
+                        {program.icon || "📋"}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4
+                                className={`font-semibold ${locked ? "text-gray-500" : "text-gray-900"}`}
+                              >
+                                {program.name}
+                              </h4>
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-full ${
+                                  program.status === "Active"
+                                    ? "bg-green-100 text-green-700"
+                                    : "bg-yellow-100 text-yellow-700"
+                                }`}
+                              >
+                                {program.status}
+                              </span>
+                              {locked && (
+                                <span className="text-xs px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full flex items-center gap-1">
+                                  <Lock className="h-3 w-3" />
+                                  Locked
+                                </span>
+                              )}
+                              {isJodyProgram && (
+                                <span className="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">
+                                  ✅ Available
+                                </span>
+                              )}
+                              {program.managedBy === "jody" && (
+                                <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                                  👩‍💼 Jody's Program
+                                </span>
+                              )}
+                              {program.name ===
+                                "SEK Catalyst: Empowered by KU" && (
+                                <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
+                                  <Award className="h-3 w-3" />
+                                  KU Partner
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                              {program.description}
+                            </p>
+                            <div className="flex items-center gap-4 mt-2">
+                              <span className="text-xs text-gray-400">
+                                Started {program.startDate}
+                              </span>
+                              {program.upcomingSessions &&
+                                program.upcomingSessions.length > 0 && (
+                                  <span className="text-xs text-blue-600">
+                                    📅 {program.upcomingSessions.length}{" "}
+                                    upcoming sessions
+                                  </span>
+                                )}
+                            </div>
+                          </div>
+                          {!locked && (
+                            <ChevronRight className="h-5 w-5 text-gray-300 flex-shrink-0 ml-4" />
                           )}
-                          {/* Jody's Program Badge */}
-                          {program.name ===
-                            "Business Professional Services" && (
-                            <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full flex items-center gap-1">
-                              👩‍💼 Jody's Program
-                            </span>
+                          {locked && (
+                            <Lock className="h-5 w-5 text-gray-300 flex-shrink-0 ml-4" />
                           )}
                         </div>
-                        <div className="flex items-center gap-4 mt-2">
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3 text-gray-400" />
-                            <span className="text-xs text-gray-500">
-                              Started {program.startDate}
-                            </span>
-                          </div>
-                          {program.participants && (
-                            <div className="flex items-center gap-1">
-                              <Users className="h-3 w-3 text-gray-400" />
-                              <span className="text-xs text-gray-500">
-                                {program.participants} participants
+
+                        {!locked && (
+                          <div className="mt-3">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-gray-500">Progress</span>
+                              <span className="text-emerald-600 font-medium">
+                                {program.progress}%
                               </span>
                             </div>
-                          )}
-                        </div>
-                        <div className="mt-3">
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="text-gray-500">
-                              Overall Progress
-                            </span>
-                            <span className="text-emerald-600 font-medium">
-                              {program.progress}%
-                            </span>
+                            <div className="w-full h-2 bg-gray-200 rounded-full">
+                              <div
+                                className="h-2 bg-emerald-500 rounded-full transition-all"
+                                style={{ width: `${program.progress}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="w-full h-2 bg-gray-200 rounded-full">
-                            <div
-                              className="h-2 bg-emerald-500 rounded-full transition-all"
-                              style={{ width: `${program.progress}%` }}
-                            />
-                          </div>
-                        </div>
-                        {program.nextMilestone && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            📌 Next: {program.nextMilestone}
-                          </p>
                         )}
-                        {/* Show Jody's contact for Business Professional Services */}
-                        {program.name === "Business Professional Services" && (
-                          <div className="mt-2 p-2 bg-amber-50 rounded-lg border border-amber-100">
-                            <p className="text-xs text-amber-700 flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              Contact Jody for assistance:{" "}
-                              <a
-                                href="mailto:jody@hbcat.org"
-                                className="font-medium hover:underline"
-                              >
-                                jody@hbcat.org
-                              </a>
+
+                        {locked && (
+                          <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <p className="text-xs text-gray-500 flex items-center gap-1">
+                              <Lock className="h-3 w-3" />
+                              This program is locked. Contact Jody to request
+                              access.
                             </p>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.location.href =
+                                  "mailto:jody@hbcat.org?subject=Request%20Access%20to%20" +
+                                  encodeURIComponent(program.name);
+                              }}
+                              className="mt-2 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                            >
+                              Request Access →
+                            </button>
                           </div>
                         )}
+
+                        {/* Resource Categories Tags */}
+                        {!locked &&
+                          program.resourceCategories &&
+                          program.resourceCategories.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-1">
+                              {program.resourceCategories.map(
+                                (category: string) => (
+                                  <span
+                                    key={category}
+                                    className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full"
+                                  >
+                                    {category}
+                                  </span>
+                                ),
+                              )}
+                            </div>
+                          )}
                       </div>
-                      <ChevronRight className="h-5 w-5 text-gray-300 flex-shrink-0 ml-4" />
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
 
-        {/* Program Details Modal */}
-        {showProgramModal && selectedProgram && (
-          <ProgramDetailsModal
-            program={selectedProgram}
-            onClose={() => {
-              setShowProgramModal(false);
-              setSelectedProgram(null);
-            }}
-            userEmail={profile?.email}
-            userRole={profile?.primaryRole}
-          />
-        )}
+        {/* Program Details Modal - Only for accessible programs */}
+        {showProgramModal &&
+          selectedProgram &&
+          !isProgramLocked(selectedProgram.name) && (
+            <ProgramDetailsModal
+              program={selectedProgram}
+              onClose={() => {
+                setShowProgramModal(false);
+                setSelectedProgram(null);
+              }}
+              userEmail={profile?.email}
+              userRole={profile?.primaryRole}
+            />
+          )}
 
         {/* Mentor Information */}
         <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -561,7 +667,7 @@ function EntrepreneurDashboardContent() {
         </div>
 
         {/* Zoom Meeting Section */}
-        <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 transition-all">
+        <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
           <div className="flex items-start gap-4 mb-4">
             <div className="p-3 bg-blue-100 rounded-full">
               <Video className="h-6 w-6 text-blue-600" />
@@ -607,18 +713,15 @@ function EntrepreneurDashboardContent() {
               const password = (
                 document.getElementById("zoomPassword") as HTMLInputElement
               )?.value;
-
-              if (!meetingId || meetingId.trim() === "") {
+              if (!meetingId?.trim()) {
                 alert("Please enter your Zoom Meeting ID");
                 return;
               }
-
               const cleanMeetingId = meetingId.trim().replace(/\s/g, "");
               let zoomUrl = `https://zoom.us/j/${cleanMeetingId}`;
-              if (password && password.trim() !== "") {
+              if (password?.trim()) {
                 zoomUrl += `?pwd=${encodeURIComponent(password.trim())}`;
               }
-
               window.open(zoomUrl, "_blank");
             }}
             className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
@@ -626,9 +729,6 @@ function EntrepreneurDashboardContent() {
             <Video className="h-4 w-4" />
             Join Zoom Meeting
           </button>
-          <p className="text-xs text-gray-400 text-center mt-3">
-            💡 Tip: Your session host should provide the Meeting ID and passcode
-          </p>
         </div>
 
         {/* Support Section */}
