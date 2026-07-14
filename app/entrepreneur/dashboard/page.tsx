@@ -35,7 +35,7 @@ import {
   Building,
 } from "lucide-react";
 
-// All programs with their full details - THIS WILL ALWAYS SHOW
+// ✅ ALL_PROGRAMS - This is the source of truth
 const ALL_PROGRAMS = [
   {
     id: "prog-1",
@@ -67,7 +67,7 @@ const ALL_PROGRAMS = [
   },
   {
     id: "prog-2",
-    name: "SEED Micro-Grant Program",
+    name: "SEED Micro-Grant",
     description:
       "10-week SEK Catalyst cohort with mentorship and grant opportunities. Includes $250 participant support + $500 grants for top businesses.",
     status: "Active",
@@ -144,22 +144,6 @@ const ALL_PROGRAMS = [
       },
     ],
   },
-  {
-    id: "prog-5",
-    name: "Microloan Program",
-    description:
-      "Access to capital for rural businesses. Designed to support startup and growth-stage entrepreneurs with flexible loan options.",
-    status: "Active",
-    startDate: "January 2025",
-    progress: 15,
-    icon: "🏦",
-    color: "from-amber-500 to-orange-500",
-    contactEmail: "loans@ruralcommunitypartners.org",
-    contactPhone: "(620) 555-0104",
-    managedBy: "admin",
-    resourceCategories: ["Loans", "Financial", "Eligibility", "Documentation"],
-    upcomingSessions: [],
-  },
 ];
 
 function EntrepreneurDashboardContent() {
@@ -216,32 +200,10 @@ function EntrepreneurDashboardContent() {
       setProfile(parsed);
     }
 
-    // ✅ ALWAYS use ALL_PROGRAMS as the source of truth
-    // Try to load from localStorage but fallback to ALL_PROGRAMS
-    let programsData = [];
-    const savedPrograms = localStorage.getItem("entrepreneur_programs_data");
-
-    if (savedPrograms) {
-      try {
-        const parsed = JSON.parse(savedPrograms);
-        programsData = parsed.programs || [];
-        console.log(
-          "📊 Loaded programs from localStorage:",
-          programsData.length,
-        );
-      } catch (e) {
-        console.error("Error parsing entrepreneur programs:", e);
-        programsData = [];
-      }
-    }
-
-    // ✅ If no saved programs, ALWAYS use ALL_PROGRAMS
-    if (programsData.length === 0) {
-      console.log("📋 Using default programs list - ALL_PROGRAMS");
-      programsData = ALL_PROGRAMS;
-    }
-
-    setPrograms(programsData);
+    // ✅ DIRECTLY USE ALL_PROGRAMS - no localStorage needed for the list
+    // The programs are defined in the code, not in localStorage
+    console.log("📋 Loading ALL_PROGRAMS:", ALL_PROGRAMS.length);
+    setPrograms(ALL_PROGRAMS);
 
     // Load goals
     const savedGoals = JSON.parse(
@@ -289,7 +251,7 @@ function EntrepreneurDashboardContent() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32"></div>
           <div className="relative z-10">
             <h2 className="text-3xl font-bold">
-              Welcome back, {profile?.name?.split(" ")[0] || "Entrepreneur"}! 🚀
+              Welcome back, {profile?.name?.split(" ")[0] || "Entrepreneur"}! 🎉
             </h2>
             <p className="text-emerald-100 mt-2">
               Your entrepreneurial journey is making progress
@@ -370,7 +332,7 @@ function EntrepreneurDashboardContent() {
           )}
         </div>
 
-        {/* Programs Section - Shows ALL programs with lock status */}
+        {/* Programs Section */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 flex justify-between items-center">
             <div>
@@ -548,7 +510,7 @@ function EntrepreneurDashboardContent() {
           </div>
         </div>
 
-        {/* Program Details Modal - Only for accessible programs */}
+        {/* Program Details Modal */}
         {showProgramModal &&
           selectedProgram &&
           !isProgramLocked(selectedProgram.name) && (
