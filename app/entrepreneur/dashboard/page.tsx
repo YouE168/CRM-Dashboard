@@ -170,11 +170,7 @@ function EntrepreneurDashboardContent() {
     // ✅ All other programs require Jody's approval
     if (!profile) return false;
     const approvedPrograms = profile.approvedPrograms || [];
-    // ✅ Log to debug
-    console.log(
-      `🔍 Checking access for "${programName}":`,
-      approvedPrograms.includes(programName),
-    );
+    // ✅ Check if the program is in the approved list
     return approvedPrograms.includes(programName);
   };
 
@@ -184,9 +180,6 @@ function EntrepreneurDashboardContent() {
 
   // ✅ Handle program click
   const handleProgramClick = (program: any) => {
-    console.log(`🖱️ Clicked: "${program.name}"`);
-    console.log(`🔒 Is locked?`, isProgramLocked(program.name));
-
     if (isProgramLocked(program.name)) {
       // ✅ Show lock modal - DO NOT open program details
       setLockedProgramName(program.name);
@@ -209,34 +202,49 @@ function EntrepreneurDashboardContent() {
       return;
     }
 
-    const savedProfile = localStorage.getItem(`profile_${currentUser}`);
+    // ✅ Load profile and ensure approvedPrograms is empty for new users
+    let savedProfile = localStorage.getItem(`profile_${currentUser}`);
+    let parsedProfile;
+
     if (savedProfile) {
-      const parsed = JSON.parse(savedProfile);
-      console.log("📋 User profile:", parsed);
-      console.log("📋 Approved programs:", parsed.approvedPrograms || []);
-      setProfile(parsed);
+      parsedProfile = JSON.parse(savedProfile);
+      // ✅ If approvedPrograms doesn't exist or is undefined, set it to empty array
+      if (!parsedProfile.approvedPrograms) {
+        parsedProfile.approvedPrograms = [];
+        localStorage.setItem(
+          `profile_${currentUser}`,
+          JSON.stringify(parsedProfile),
+        );
+      }
     } else {
-      // ✅ If no profile, create one with empty approvedPrograms
-      const newProfile = {
+      // ✅ Create new profile with empty approvedPrograms
+      parsedProfile = {
         name: currentUser.split("@")[0],
         email: currentUser,
-        approvedPrograms: [], // ✅ Empty array = only Business Professional Services
+        primaryRole: "entrepreneur",
+        approvedPrograms: [], // ✅ EMPTY = only Business Professional Services
+        createdAt: new Date().toISOString(),
       };
       localStorage.setItem(
         `profile_${currentUser}`,
-        JSON.stringify(newProfile),
+        JSON.stringify(parsedProfile),
       );
-      setProfile(newProfile);
     }
 
-    console.log("📋 Loading ALL_PROGRAMS:", ALL_PROGRAMS.length);
+    setProfile(parsedProfile);
+    console.log("📋 User profile:", parsedProfile);
+    console.log("📋 Approved programs:", parsedProfile.approvedPrograms || []);
+
+    // ✅ Load ALL_PROGRAMS directly
     setPrograms(ALL_PROGRAMS);
 
+    // Load goals
     const savedGoals = JSON.parse(
       localStorage.getItem(`goals_${currentUser}`) || "[]",
     );
     setGoals(savedGoals);
 
+    // Load satisfaction
     const savedSatisfaction = localStorage.getItem(
       `satisfaction_${currentUser}`,
     );
@@ -244,6 +252,7 @@ function EntrepreneurDashboardContent() {
       setSatisfactionRate(parseInt(savedSatisfaction));
     }
 
+    // Load mentor info
     const savedMentorInfo = localStorage.getItem("mentor_profile_data");
     if (savedMentorInfo) {
       setMentorInfo(JSON.parse(savedMentorInfo));
