@@ -163,9 +163,11 @@ function EntrepreneurDashboardContent() {
 
   // Check if user has access to a program
   const hasProgramAccess = (programName: string): boolean => {
+    // Only "Business Professional Services" is accessible by default
     if (programName === "Business Professional Services") {
       return true;
     }
+    // All other programs require Jody's approval
     if (!profile) return false;
     const approvedPrograms = profile.approvedPrograms || [];
     return approvedPrograms.includes(programName);
@@ -177,10 +179,12 @@ function EntrepreneurDashboardContent() {
 
   const handleProgramClick = (program: any) => {
     if (isProgramLocked(program.name)) {
+      // ✅ Show lock modal and prevent program details modal from opening
       setLockedProgramName(program.name);
       setShowLockModal(true);
-      return;
+      return; // ✅ Exit early - don't show program details
     }
+    // ✅ Only accessible programs open the details modal
     setSelectedProgram(program);
     setShowProgramModal(true);
   };
@@ -455,7 +459,7 @@ function EntrepreneurDashboardContent() {
                     key={program.id}
                     onClick={() => handleProgramClick(program)}
                     className={`p-5 transition-colors cursor-pointer ${
-                      locked ? "hover:bg-gray-50" : "hover:bg-gray-50"
+                      locked ? "hover:bg-amber-50" : "hover:bg-gray-50"
                     }`}
                   >
                     <div className="flex items-start gap-4">
@@ -587,7 +591,7 @@ function EntrepreneurDashboardContent() {
           </div>
         </div>
 
-        {/* Program Details Modal */}
+        {/* ✅ Program Details Modal - Only for accessible programs */}
         {showProgramModal &&
           selectedProgram &&
           !isProgramLocked(selectedProgram.name) && (
