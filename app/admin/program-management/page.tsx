@@ -1,5 +1,6 @@
 // app/admin/program-management/page.tsx
 "use client";
+export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -18,6 +19,8 @@ import {
   Check,
   X,
   UserMinus,
+  Lock,
+  Unlock,
 } from "lucide-react";
 
 interface ProgramResource {
@@ -61,6 +64,7 @@ interface Participant {
   joinedAt: string;
   role?: string;
   businessProfessionalStatus?: string;
+  approvedPrograms?: string[];
 }
 
 interface Mentor {
@@ -70,13 +74,12 @@ interface Mentor {
   available?: boolean;
 }
 
-// ✅ DEFAULT PROGRAMS - These will always be available
 const DEFAULT_PROGRAMS: Program[] = [
   {
     id: "prog-1",
     name: "RCP Small Business Mentorship",
     description:
-      "Connect with experienced local mentors for one-on-one guidance. Get help with business planning, marketing, financial management, and more.",
+      "Connect with experienced local mentors for one-on-one guidance.",
     status: "Active",
     startDate: "January 2025",
     contactEmail: "mentorship@ruralcommunitypartners.org",
@@ -108,9 +111,9 @@ const DEFAULT_PROGRAMS: Program[] = [
   },
   {
     id: "prog-2",
-    name: "SEED Micro-Grant Program",
+    name: "SEED Micro-Grant",
     description:
-      "10-week SEK Catalyst cohort with mentorship and grant opportunities. Includes $250 participant support + $500 grants for top businesses.",
+      "10-week SEK Catalyst cohort with mentorship and grant opportunities.",
     status: "Active",
     startDate: "January 2025",
     contactEmail: "seed@ruralcommunitypartners.org",
@@ -143,8 +146,7 @@ const DEFAULT_PROGRAMS: Program[] = [
   {
     id: "prog-3",
     name: "Business Professional Services",
-    description:
-      "Financial modeling, startup support, and capital connection. Get expert help with cash flow, break-even analysis, and funding strategies.",
+    description: "Financial modeling, startup support, and capital connection.",
     status: "Active",
     startDate: "January 2025",
     contactEmail: "jody@hbcat.org",
@@ -177,8 +179,7 @@ const DEFAULT_PROGRAMS: Program[] = [
   {
     id: "prog-4",
     name: "SEK Catalyst: Empowered by KU",
-    description:
-      "A comprehensive 12-week entrepreneurship program designed to help rural business owners launch and grow their ventures. Includes mentorship, workshops, and access to KU resources.",
+    description: "12-week entrepreneurship program with KU resources.",
     status: "Active",
     startDate: "August 2025",
     contactEmail: "catalyst@ruralcommunitypartners.org",
@@ -208,32 +209,12 @@ const DEFAULT_PROGRAMS: Program[] = [
       },
     ],
   },
-  {
-    id: "prog-5",
-    name: "Microloan Program",
-    description:
-      "Access to capital for rural businesses. Designed to support startup and growth-stage entrepreneurs with flexible loan options.",
-    status: "Active",
-    startDate: "January 2025",
-    contactEmail: "loans@ruralcommunitypartners.org",
-    contactPhone: "(620) 555-0104",
-    managedBy: "admin",
-    resources: [
-      {
-        id: "res-9",
-        name: "Loan Application",
-        type: "form",
-        url: "/resources/loan-application",
-      },
-      {
-        id: "res-10",
-        name: "Eligibility Requirements",
-        type: "document",
-        url: "/resources/eligibility",
-      },
-    ],
-    upcomingSessions: [],
-  },
+];
+
+const AVAILABLE_PROGRAMS = [
+  "RCP Small Business Mentorship",
+  "SEED Micro-Grant",
+  "SEK Catalyst: Empowered by KU",
 ];
 
 export default function ProgramManagementPage() {
@@ -248,17 +229,23 @@ export default function ProgramManagementPage() {
   const [isAddingResource, setIsAddingResource] = useState(false);
   const [newSession, setNewSession] = useState<any>({});
   const [newResource, setNewResource] = useState<any>({});
+  const [selectedParticipant, setSelectedParticipant] =
+    useState<Participant | null>(null);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
 
   useEffect(() => {
+    const user = localStorage.getItem("currentUser");
+    if (!user) {
+      router.push("/login");
+      return;
+    }
     loadPrograms();
     loadParticipants();
     loadMentors();
-  }, []);
+  }, [router]);
 
   const loadPrograms = () => {
     let saved = localStorage.getItem("entrepreneur_programs_data");
-
-    // If no saved data, initialize with defaults
     if (!saved) {
       console.log("📋 No programs found, initializing with defaults...");
       const defaultData = { programs: DEFAULT_PROGRAMS };
@@ -270,11 +257,16 @@ export default function ProgramManagementPage() {
       setLoading(false);
       return;
     }
-
     try {
       const data = JSON.parse(saved);
       console.log("📊 Loaded programs:", data.programs?.length || 0);
-      setPrograms(data.programs || DEFAULT_PROGRAMS);
+      const loadedPrograms = (data.programs || DEFAULT_PROGRAMS).map(
+        (program: Program, idx: number) => ({
+          ...program,
+          id: program.id || `prog-${Date.now()}-${idx}`,
+        }),
+      );
+      setPrograms(loadedPrograms);
     } catch {
       setPrograms(DEFAULT_PROGRAMS);
     }
@@ -302,6 +294,7 @@ export default function ProgramManagementPage() {
           role: u.primaryRole,
           businessProfessionalStatus:
             profile.businessProfessionalStatus || "pending",
+          approvedPrograms: profile.approvedPrograms || [],
         };
       });
     setParticipants(loadedParticipants);
@@ -333,13 +326,64 @@ export default function ProgramManagementPage() {
     setPrograms(updatedPrograms);
   };
 
-  const handleEdit = (program: Program) => {
-    console.log(
-      "🖱️ Selected program:",
-      program.name,
-      "Managed By:",
-      program.managedBy,
+  const approveProgramAccess = (
+    participantEmail: string,
+    programName: string,
+  ) => {
+    const profile = JSON.parse(
+      localStorage.getItem(`profile_${participantEmail}`) || "{}",
     );
+    if (!profile.approvedPrograms) {
+      profile.approvedPrograms = [];
+    }
+    if (!profile.approvedPrograms.includes(programName)) {
+      profile.approvedPrograms.push(programName);
+      localStorage.setItem(
+        `profile_${participantEmail}`,
+        JSON.stringify(profile),
+      );
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.email === participantEmail
+            ? { ...p, approvedPrograms: profile.approvedPrograms }
+            : p,
+        ),
+      );
+      alert(
+        `✅ ${programName} approved for ${profile.name || participantEmail}`,
+      );
+    }
+  };
+
+  const removeProgramAccess = (
+    participantEmail: string,
+    programName: string,
+  ) => {
+    const profile = JSON.parse(
+      localStorage.getItem(`profile_${participantEmail}`) || "{}",
+    );
+    if (profile.approvedPrograms) {
+      profile.approvedPrograms = profile.approvedPrograms.filter(
+        (p: string) => p !== programName,
+      );
+      localStorage.setItem(
+        `profile_${participantEmail}`,
+        JSON.stringify(profile),
+      );
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.email === participantEmail
+            ? { ...p, approvedPrograms: profile.approvedPrograms }
+            : p,
+        ),
+      );
+      alert(
+        `❌ ${programName} access removed for ${profile.name || participantEmail}`,
+      );
+    }
+  };
+
+  const handleEdit = (program: Program) => {
     setSelectedProgram(program);
     if (program.managedBy === "jody") {
       setActiveTab("sessions");
@@ -362,9 +406,8 @@ export default function ProgramManagementPage() {
 
   const addSession = () => {
     if (!selectedProgram) return;
-
     const session = {
-      id: `session-${Date.now()}`,
+      id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       title: newSession.title || "New Session",
       date: newSession.date || new Date().toISOString().split("T")[0],
       time: newSession.time || "12:00 PM",
@@ -373,12 +416,10 @@ export default function ProgramManagementPage() {
       location: newSession.location || "",
       description: newSession.description || "",
     };
-
     const updatedProgram = {
       ...selectedProgram,
       upcomingSessions: [...(selectedProgram.upcomingSessions || []), session],
     };
-
     const updatedPrograms = programs.map((p) =>
       p.id === selectedProgram.id ? updatedProgram : p,
     );
@@ -392,14 +433,12 @@ export default function ProgramManagementPage() {
   const removeSession = (sessionId: string) => {
     if (!selectedProgram) return;
     if (!confirm("Remove this session?")) return;
-
     const updatedProgram = {
       ...selectedProgram,
       upcomingSessions: selectedProgram.upcomingSessions.filter(
         (s) => s.id !== sessionId,
       ),
     };
-
     const updatedPrograms = programs.map((p) =>
       p.id === selectedProgram.id ? updatedProgram : p,
     );
@@ -409,20 +448,17 @@ export default function ProgramManagementPage() {
 
   const addResource = () => {
     if (!selectedProgram) return;
-
     const resource = {
-      id: `res-${Date.now()}`,
+      id: `res-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: newResource.name || "New Resource",
       type: newResource.type || "document",
       url: newResource.url || "",
       description: newResource.description || "",
     };
-
     const updatedProgram = {
       ...selectedProgram,
       resources: [...(selectedProgram.resources || []), resource],
     };
-
     const updatedPrograms = programs.map((p) =>
       p.id === selectedProgram.id ? updatedProgram : p,
     );
@@ -436,12 +472,10 @@ export default function ProgramManagementPage() {
   const removeResource = (resourceId: string) => {
     if (!selectedProgram) return;
     if (!confirm("Remove this resource?")) return;
-
     const updatedProgram = {
       ...selectedProgram,
       resources: selectedProgram.resources.filter((r) => r.id !== resourceId),
     };
-
     const updatedPrograms = programs.map((p) =>
       p.id === selectedProgram.id ? updatedProgram : p,
     );
@@ -458,7 +492,6 @@ export default function ProgramManagementPage() {
     );
     profile.businessProfessionalStatus = status;
     localStorage.setItem(`profile_${email}`, JSON.stringify(profile));
-
     const users = JSON.parse(localStorage.getItem("users") || "[]");
     const updatedUsers = users.map((u: any) => {
       if (u.email === email) {
@@ -467,7 +500,6 @@ export default function ProgramManagementPage() {
       return u;
     });
     localStorage.setItem("users", JSON.stringify(updatedUsers));
-
     setParticipants((prev) =>
       prev.map((p) =>
         p.email === email ? { ...p, businessProfessionalStatus: status } : p,
@@ -484,7 +516,6 @@ export default function ProgramManagementPage() {
     );
     profile.mentor = mentor;
     localStorage.setItem(`profile_${email}`, JSON.stringify(profile));
-
     setParticipants((prev) =>
       prev.map((p) => (p.email === email ? { ...p, mentor } : p)),
     );
@@ -498,7 +529,6 @@ export default function ProgramManagementPage() {
       alert("Please select a mentor");
       return;
     }
-
     const mentorName =
       mentors.find((m) => m.email === mentorEmail)?.name || mentorEmail;
     updateParticipantMentor(participantEmail, mentorName);
@@ -567,9 +597,9 @@ export default function ProgramManagementPage() {
               </p>
             </div>
             <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
-              {programs.map((program) => (
+              {programs.map((program, idx) => (
                 <button
-                  key={program.id}
+                  key={program.id ?? `program-${idx}`}
                   onClick={() => handleEdit(program)}
                   className={`w-full text-left p-4 hover:bg-gray-50 transition-colors flex items-center justify-between ${
                     selectedProgram?.id === program.id
@@ -613,12 +643,1063 @@ export default function ProgramManagementPage() {
             </div>
           </div>
 
-          {/* Right Panel - Keep the same as your existing code */}
+          {/* Right Panel */}
           <div className="lg:col-span-2">
             {selectedProgram ? (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                {/* ... rest of your existing code ... */}
-                {/* Keep all the existing tab content here */}
+                {/* Header */}
+                <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-xl font-semibold text-gray-900 truncate">
+                        {selectedProgram.name}
+                      </h2>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {selectedProgram.description}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full ${
+                            selectedProgram.status === "Active"
+                              ? "bg-green-100 text-green-700"
+                              : selectedProgram.status === "Completed"
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {selectedProgram.status}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          Started {selectedProgram.startDate}
+                        </span>
+                        {selectedProgram.managedBy === "jody" && (
+                          <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                            👩‍💼 Jody's Program
+                          </span>
+                        )}
+                        {selectedProgram.managedBy === "multiple_mentors" && (
+                          <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                            👨‍🏫 Mentor Program
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(selectedProgram.id)}
+                      className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm flex items-center gap-1"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="px-5 border-b border-gray-100 bg-gray-50/50">
+                  <div className="flex gap-2 overflow-x-auto">
+                    {isJodyProgram && (
+                      <button
+                        key="tab-sessions"
+                        onClick={() => setActiveTab("sessions")}
+                        className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+                          activeTab === "sessions"
+                            ? "border-emerald-500 text-emerald-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700"
+                        }`}
+                      >
+                        <Calendar className="h-4 w-4" />
+                        Sessions
+                      </button>
+                    )}
+                    {isJodyProgram && (
+                      <button
+                        key="tab-approvals"
+                        onClick={() => setActiveTab("participants")}
+                        className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+                          activeTab === "participants"
+                            ? "border-emerald-500 text-emerald-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700"
+                        }`}
+                      >
+                        <Users className="h-4 w-4" />
+                        Approvals
+                      </button>
+                    )}
+                    {isJodyProgram && (
+                      <button
+                        key="tab-program-approvals"
+                        onClick={() => setActiveTab("program-approvals")}
+                        className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+                          activeTab === "program-approvals"
+                            ? "border-emerald-500 text-emerald-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700"
+                        }`}
+                      >
+                        <Lock className="h-4 w-4" />
+                        Program Access
+                      </button>
+                    )}
+                    {isMentorProgram && (
+                      <button
+                        key="tab-matching"
+                        onClick={() => setActiveTab("matching")}
+                        className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+                          activeTab === "matching"
+                            ? "border-emerald-500 text-emerald-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700"
+                        }`}
+                      >
+                        <Users className="h-4 w-4" />
+                        Mentor Matching
+                      </button>
+                    )}
+                    <button
+                      key="tab-resources"
+                      onClick={() => setActiveTab("resources")}
+                      className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+                        activeTab === "resources"
+                          ? "border-emerald-500 text-emerald-600"
+                          : "border-transparent text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <FileText className="h-4 w-4" />
+                      Resources
+                    </button>
+                    <button
+                      key="tab-contact"
+                      onClick={() => setActiveTab("contact")}
+                      className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+                        activeTab === "contact"
+                          ? "border-emerald-500 text-emerald-600"
+                          : "border-transparent text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <Mail className="h-4 w-4" />
+                      Contact
+                    </button>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="p-5 max-h-[600px] overflow-y-auto">
+                  {/* SESSIONS TAB */}
+                  {activeTab === "sessions" && isJodyProgram && (
+                    <div className="space-y-4">
+                      <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 mb-4">
+                        <p className="text-sm text-amber-700 flex items-center gap-2">
+                          <Calendar className="h-4 w-4" />
+                          Jody's sessions for this program. These will appear in
+                          participants' dashboards.
+                        </p>
+                      </div>
+                      {selectedProgram.upcomingSessions.length === 0 ? (
+                        <div
+                          key="no-sessions"
+                          className="text-center py-8 text-gray-400"
+                        >
+                          <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p>No sessions added yet</p>
+                          <p className="text-xs mt-1">
+                            Click "Add Session" to create one
+                          </p>
+                        </div>
+                      ) : (
+                        selectedProgram.upcomingSessions.map((session) => (
+                          <div
+                            key={session.id}
+                            className="bg-gray-50 rounded-lg p-4 border border-gray-100"
+                          >
+                            {/* Session content */}
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  value={session.title}
+                                  onChange={(e) => {
+                                    const updated =
+                                      selectedProgram.upcomingSessions.map(
+                                        (s) =>
+                                          s.id === session.id
+                                            ? { ...s, title: e.target.value }
+                                            : s,
+                                      );
+                                    const prog = {
+                                      ...selectedProgram,
+                                      upcomingSessions: updated,
+                                    };
+                                    setSelectedProgram(prog);
+                                    savePrograms(
+                                      programs.map((p) =>
+                                        p.id === selectedProgram.id ? prog : p,
+                                      ),
+                                    );
+                                  }}
+                                  className="w-full bg-transparent font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-emerald-500"
+                                  placeholder="Session title"
+                                />
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                  <input
+                                    type="text"
+                                    value={session.date}
+                                    onChange={(e) => {
+                                      const updated =
+                                        selectedProgram.upcomingSessions.map(
+                                          (s) =>
+                                            s.id === session.id
+                                              ? { ...s, date: e.target.value }
+                                              : s,
+                                        );
+                                      const prog = {
+                                        ...selectedProgram,
+                                        upcomingSessions: updated,
+                                      };
+                                      setSelectedProgram(prog);
+                                      savePrograms(
+                                        programs.map((p) =>
+                                          p.id === selectedProgram.id
+                                            ? prog
+                                            : p,
+                                        ),
+                                      );
+                                    }}
+                                    className="bg-white border rounded-lg px-2 py-1 text-sm"
+                                    placeholder="Date"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={session.time}
+                                    onChange={(e) => {
+                                      const updated =
+                                        selectedProgram.upcomingSessions.map(
+                                          (s) =>
+                                            s.id === session.id
+                                              ? { ...s, time: e.target.value }
+                                              : s,
+                                        );
+                                      const prog = {
+                                        ...selectedProgram,
+                                        upcomingSessions: updated,
+                                      };
+                                      setSelectedProgram(prog);
+                                      savePrograms(
+                                        programs.map((p) =>
+                                          p.id === selectedProgram.id
+                                            ? prog
+                                            : p,
+                                        ),
+                                      );
+                                    }}
+                                    className="bg-white border rounded-lg px-2 py-1 text-sm"
+                                    placeholder="Time"
+                                  />
+                                </div>
+                                <input
+                                  type="text"
+                                  value={session.mentor}
+                                  onChange={(e) => {
+                                    const updated =
+                                      selectedProgram.upcomingSessions.map(
+                                        (s) =>
+                                          s.id === session.id
+                                            ? { ...s, mentor: e.target.value }
+                                            : s,
+                                      );
+                                    const prog = {
+                                      ...selectedProgram,
+                                      upcomingSessions: updated,
+                                    };
+                                    setSelectedProgram(prog);
+                                    savePrograms(
+                                      programs.map((p) =>
+                                        p.id === selectedProgram.id ? prog : p,
+                                      ),
+                                    );
+                                  }}
+                                  className="w-full bg-white border rounded-lg px-2 py-1 text-sm mt-2"
+                                  placeholder="Mentor name"
+                                />
+                                <input
+                                  type="text"
+                                  value={session.link || ""}
+                                  onChange={(e) => {
+                                    const updated =
+                                      selectedProgram.upcomingSessions.map(
+                                        (s) =>
+                                          s.id === session.id
+                                            ? { ...s, link: e.target.value }
+                                            : s,
+                                      );
+                                    const prog = {
+                                      ...selectedProgram,
+                                      upcomingSessions: updated,
+                                    };
+                                    setSelectedProgram(prog);
+                                    savePrograms(
+                                      programs.map((p) =>
+                                        p.id === selectedProgram.id ? prog : p,
+                                      ),
+                                    );
+                                  }}
+                                  className="w-full bg-white border rounded-lg px-2 py-1 text-sm mt-1"
+                                  placeholder="Zoom Link (optional)"
+                                />
+                              </div>
+                              <button
+                                onClick={() => removeSession(session.id)}
+                                className="text-gray-400 hover:text-red-600 ml-2 p-1 hover:bg-red-50 rounded-lg"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      {isAddingSession ? (
+                        <div
+                          key="add-session-form"
+                          className="bg-gray-50 rounded-lg p-4 border-2 border-dashed border-emerald-300"
+                        >
+                          <h4 className="font-medium text-gray-900 mb-3">
+                            New Session
+                          </h4>
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              placeholder="Session Title *"
+                              value={newSession.title || ""}
+                              onChange={(e) =>
+                                setNewSession({
+                                  ...newSession,
+                                  title: e.target.value,
+                                })
+                              }
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                            />
+                            <div className="grid grid-cols-2 gap-3">
+                              <input
+                                type="date"
+                                value={newSession.date || ""}
+                                onChange={(e) =>
+                                  setNewSession({
+                                    ...newSession,
+                                    date: e.target.value,
+                                  })
+                                }
+                                className="w-full border rounded-lg px-3 py-2 text-sm"
+                              />
+                              <input
+                                type="time"
+                                value={newSession.time || ""}
+                                onChange={(e) =>
+                                  setNewSession({
+                                    ...newSession,
+                                    time: e.target.value,
+                                  })
+                                }
+                                className="w-full border rounded-lg px-3 py-2 text-sm"
+                              />
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Mentor (optional)"
+                              value={newSession.mentor || "Jody Love"}
+                              onChange={(e) =>
+                                setNewSession({
+                                  ...newSession,
+                                  mentor: e.target.value,
+                                })
+                              }
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Zoom Link (optional)"
+                              value={newSession.link || ""}
+                              onChange={(e) =>
+                                setNewSession({
+                                  ...newSession,
+                                  link: e.target.value,
+                                })
+                              }
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={addSession}
+                                className="flex-1 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                              >
+                                Add Session
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setIsAddingSession(false);
+                                  setNewSession({});
+                                }}
+                                className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          key="add-session-btn"
+                          onClick={() => setIsAddingSession(true)}
+                          className="w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-400 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50"
+                        >
+                          <Plus className="h-4 w-4 inline mr-1" />
+                          Add Session
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* APPROVALS TAB */}
+                  {activeTab === "participants" && isJodyProgram && (
+                    <div>
+                      <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 mb-4">
+                        <p className="text-sm text-amber-700 flex items-center gap-2">
+                          <Users className="h-4 w-4" />
+                          Approve or reject participants for this program.
+                        </p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-gray-200">
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Participant
+                              </th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Email
+                              </th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Status
+                              </th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Action
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {participants
+                              .filter((p) =>
+                                p.programs.includes(selectedProgram.name),
+                              )
+                              .map((p, idx) => (
+                                <tr
+                                  key={`participant-${p.email}-${idx}`}
+                                  className="border-b border-gray-100 hover:bg-gray-50"
+                                >
+                                  <td className="py-2 px-3 text-sm text-gray-900">
+                                    {p.name}
+                                  </td>
+                                  <td className="py-2 px-3 text-sm text-gray-500">
+                                    {p.email}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-full ${
+                                        p.businessProfessionalStatus ===
+                                          "approved" ||
+                                        p.businessProfessionalStatus ===
+                                          "active"
+                                          ? "bg-green-100 text-green-700"
+                                          : p.businessProfessionalStatus ===
+                                              "rejected"
+                                            ? "bg-red-100 text-red-700"
+                                            : "bg-yellow-100 text-yellow-700"
+                                      }`}
+                                    >
+                                      {p.businessProfessionalStatus ||
+                                        "pending"}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="flex gap-2">
+                                      {p.businessProfessionalStatus !==
+                                        "approved" &&
+                                        p.businessProfessionalStatus !==
+                                          "active" && (
+                                          <button
+                                            key={`approve-${p.email}`}
+                                            onClick={() =>
+                                              updateParticipantStatus(
+                                                p.email,
+                                                "approved",
+                                              )
+                                            }
+                                            className="text-xs bg-green-600 text-white px-2 py-1 rounded-lg hover:bg-green-700 flex items-center gap-1"
+                                          >
+                                            <Check className="h-3 w-3" />
+                                            Approve
+                                          </button>
+                                        )}
+                                      {p.businessProfessionalStatus !==
+                                        "rejected" && (
+                                        <button
+                                          key={`reject-${p.email}`}
+                                          onClick={() =>
+                                            updateParticipantStatus(
+                                              p.email,
+                                              "rejected",
+                                            )
+                                          }
+                                          className="text-xs bg-red-600 text-white px-2 py-1 rounded-lg hover:bg-red-700 flex items-center gap-1"
+                                        >
+                                          <X className="h-3 w-3" />
+                                          Reject
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PROGRAM ACCESS TAB */}
+                  {activeTab === "program-approvals" && isJodyProgram && (
+                    <div>
+                      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mb-4">
+                        <p className="text-sm text-blue-700 flex items-center gap-2">
+                          <Lock className="h-4 w-4" />
+                          Manage which programs participants can access. Only
+                          "Business Professional Services" is available by
+                          default.
+                        </p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-gray-200">
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Participant
+                              </th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Email
+                              </th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Approved Programs
+                              </th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {participants.length === 0 ? (
+                              <tr key="no-participants">
+                                <td
+                                  colSpan={4}
+                                  className="text-center py-8 text-gray-400"
+                                >
+                                  <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                  <p>No participants found</p>
+                                </td>
+                              </tr>
+                            ) : (
+                              participants.map((p, idx) => (
+                                <tr
+                                  key={`program-approval-${p.email}-${idx}`}
+                                  className="border-b border-gray-100 hover:bg-gray-50"
+                                >
+                                  <td className="py-2 px-3 text-sm text-gray-900">
+                                    {p.name}
+                                  </td>
+                                  <td className="py-2 px-3 text-sm text-gray-500">
+                                    {p.email}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="flex flex-wrap gap-1">
+                                      {p.approvedPrograms &&
+                                      p.approvedPrograms.length > 0 ? (
+                                        p.approvedPrograms.map(
+                                          (prog: string) => (
+                                            <span
+                                              key={`approved-${p.email}-${prog}`}
+                                              className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full flex items-center gap-1"
+                                            >
+                                              <Check className="h-3 w-3" />
+                                              {prog.length > 20
+                                                ? prog.substring(0, 20) + "..."
+                                                : prog}
+                                            </span>
+                                          ),
+                                        )
+                                      ) : (
+                                        <span
+                                          key={`no-approved-${p.email}`}
+                                          className="text-xs text-gray-400"
+                                        >
+                                          Only Business Professional Services
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="flex flex-wrap gap-1">
+                                      {AVAILABLE_PROGRAMS.map((programName) => {
+                                        const isApproved =
+                                          p.approvedPrograms?.includes(
+                                            programName,
+                                          ) || false;
+                                        return (
+                                          <div
+                                            key={`action-wrapper-${p.email}-${programName}`}
+                                            className="inline-block"
+                                          >
+                                            <button
+                                              onClick={() => {
+                                                if (isApproved) {
+                                                  removeProgramAccess(
+                                                    p.email,
+                                                    programName,
+                                                  );
+                                                } else {
+                                                  approveProgramAccess(
+                                                    p.email,
+                                                    programName,
+                                                  );
+                                                }
+                                              }}
+                                              className={`text-xs px-2 py-1 rounded-lg transition-colors flex items-center gap-1 ${
+                                                isApproved
+                                                  ? "bg-green-500 text-white hover:bg-green-600"
+                                                  : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                                              }`}
+                                            >
+                                              {isApproved ? (
+                                                <>
+                                                  <Check className="h-3 w-3" />
+                                                  {programName.length > 15
+                                                    ? programName.substring(
+                                                        0,
+                                                        15,
+                                                      ) + "..."
+                                                    : programName}
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Lock className="h-3 w-3" />
+                                                  {programName.length > 15
+                                                    ? programName.substring(
+                                                        0,
+                                                        15,
+                                                      ) + "..."
+                                                    : programName}
+                                                </>
+                                              )}
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* MENTOR MATCHING TAB */}
+                  {activeTab === "matching" && isMentorProgram && (
+                    <div>
+                      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mb-4">
+                        <p className="text-sm text-blue-700 flex items-center gap-2">
+                          <Users className="h-4 w-4" />
+                          Match mentors with participants.
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 mb-4">
+                        <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                          <User className="h-4 w-4 text-blue-600" />
+                          Available Mentors
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {mentors.length > 0 ? (
+                            mentors.map((mentor) => (
+                              <span
+                                key={mentor.email}
+                                className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm flex items-center gap-1"
+                              >
+                                {mentor.name}
+                                <span className="text-xs text-blue-500">
+                                  ({mentor.email})
+                                </span>
+                              </span>
+                            ))
+                          ) : (
+                            <p
+                              key="no-mentors"
+                              className="text-sm text-gray-400"
+                            >
+                              No mentors registered yet
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-gray-200">
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Participant
+                              </th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Email
+                              </th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Assigned Mentor
+                              </th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
+                                Action
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {participants
+                              .filter((p) =>
+                                p.programs.includes(selectedProgram.name),
+                              )
+                              .map((p, idx) => (
+                                <tr
+                                  key={`matching-${p.email}-${idx}`}
+                                  className="border-b border-gray-100 hover:bg-gray-50"
+                                >
+                                  <td className="py-2 px-3 text-sm text-gray-900">
+                                    {p.name}
+                                  </td>
+                                  <td className="py-2 px-3 text-sm text-gray-500">
+                                    {p.email}
+                                  </td>
+                                  <td className="py-2 px-3 text-sm">
+                                    <span
+                                      className={`font-medium ${p.mentor !== "Not assigned" ? "text-emerald-600" : "text-gray-400"}`}
+                                    >
+                                      {p.mentor}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="flex gap-2">
+                                      {p.mentor !== "Not assigned" ? (
+                                        <button
+                                          key={`unassign-${p.email}`}
+                                          onClick={() =>
+                                            removeMentorMatch(p.email)
+                                          }
+                                          className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                                        >
+                                          <UserMinus className="h-3 w-3" />
+                                          Unassign
+                                        </button>
+                                      ) : (
+                                        <select
+                                          key={`assign-${p.email}`}
+                                          onChange={(e) => {
+                                            if (e.target.value) {
+                                              matchMentorToParticipant(
+                                                p.email,
+                                                e.target.value,
+                                              );
+                                            }
+                                          }}
+                                          className="text-xs border rounded-lg px-2 py-1 bg-white"
+                                          defaultValue=""
+                                        >
+                                          <option value="">
+                                            Assign mentor...
+                                          </option>
+                                          {mentors.map((mentor) => (
+                                            <option
+                                              key={mentor.email}
+                                              value={mentor.email}
+                                            >
+                                              {mentor.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* RESOURCES TAB */}
+                  {activeTab === "resources" && (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mb-4">
+                        <p className="text-sm text-blue-700 flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          Manage program resources
+                        </p>
+                      </div>
+                      {selectedProgram.resources.length === 0 ? (
+                        <div
+                          key="no-resources"
+                          className="text-center py-8 text-gray-400"
+                        >
+                          <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p>No resources added yet</p>
+                        </div>
+                      ) : (
+                        selectedProgram.resources.map((resource) => (
+                          <div
+                            key={resource.id}
+                            className="bg-gray-50 rounded-lg p-4 border border-gray-100"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1">
+                                <input
+                                  type="text"
+                                  value={resource.name}
+                                  onChange={(e) => {
+                                    const updated =
+                                      selectedProgram.resources.map((r) =>
+                                        r.id === resource.id
+                                          ? { ...r, name: e.target.value }
+                                          : r,
+                                      );
+                                    const prog = {
+                                      ...selectedProgram,
+                                      resources: updated,
+                                    };
+                                    setSelectedProgram(prog);
+                                    savePrograms(
+                                      programs.map((p) =>
+                                        p.id === selectedProgram.id ? prog : p,
+                                      ),
+                                    );
+                                  }}
+                                  className="w-full bg-transparent font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-emerald-500"
+                                  placeholder="Resource Name"
+                                />
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                  <select
+                                    value={resource.type}
+                                    onChange={(e) => {
+                                      const updated =
+                                        selectedProgram.resources.map((r) =>
+                                          r.id === resource.id
+                                            ? {
+                                                ...r,
+                                                type: e.target.value as any,
+                                              }
+                                            : r,
+                                        );
+                                      const prog = {
+                                        ...selectedProgram,
+                                        resources: updated,
+                                      };
+                                      setSelectedProgram(prog);
+                                      savePrograms(
+                                        programs.map((p) =>
+                                          p.id === selectedProgram.id
+                                            ? prog
+                                            : p,
+                                        ),
+                                      );
+                                    }}
+                                    className="bg-white border rounded-lg px-2 py-1 text-sm"
+                                  >
+                                    <option value="document">Document</option>
+                                    <option value="link">Link</option>
+                                    <option value="form">Form</option>
+                                    <option value="template">Template</option>
+                                  </select>
+                                  <input
+                                    type="text"
+                                    value={resource.url || ""}
+                                    onChange={(e) => {
+                                      const updated =
+                                        selectedProgram.resources.map((r) =>
+                                          r.id === resource.id
+                                            ? { ...r, url: e.target.value }
+                                            : r,
+                                        );
+                                      const prog = {
+                                        ...selectedProgram,
+                                        resources: updated,
+                                      };
+                                      setSelectedProgram(prog);
+                                      savePrograms(
+                                        programs.map((p) =>
+                                          p.id === selectedProgram.id
+                                            ? prog
+                                            : p,
+                                        ),
+                                      );
+                                    }}
+                                    className="bg-white border rounded-lg px-2 py-1 text-sm"
+                                    placeholder="URL (optional)"
+                                  />
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => removeResource(resource.id)}
+                                className="text-gray-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-lg"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      {isAddingResource ? (
+                        <div
+                          key="add-resource-form"
+                          className="bg-gray-50 rounded-lg p-4 border-2 border-dashed border-emerald-300"
+                        >
+                          <h4 className="font-medium text-gray-900 mb-3">
+                            New Resource
+                          </h4>
+                          <div className="space-y-3">
+                            <input
+                              type="text"
+                              placeholder="Resource Name *"
+                              value={newResource.name || ""}
+                              onChange={(e) =>
+                                setNewResource({
+                                  ...newResource,
+                                  name: e.target.value,
+                                })
+                              }
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                            />
+                            <select
+                              value={newResource.type || "document"}
+                              onChange={(e) =>
+                                setNewResource({
+                                  ...newResource,
+                                  type: e.target.value,
+                                })
+                              }
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                            >
+                              <option value="document">Document</option>
+                              <option value="link">Link</option>
+                              <option value="form">Form</option>
+                              <option value="template">Template</option>
+                            </select>
+                            <input
+                              type="text"
+                              placeholder="URL (optional)"
+                              value={newResource.url || ""}
+                              onChange={(e) =>
+                                setNewResource({
+                                  ...newResource,
+                                  url: e.target.value,
+                                })
+                              }
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={addResource}
+                                className="flex-1 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                              >
+                                Add Resource
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setIsAddingResource(false);
+                                  setNewResource({});
+                                }}
+                                className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          key="add-resource-btn"
+                          onClick={() => setIsAddingResource(true)}
+                          className="w-full p-3 border-2 border-dashed border-gray-200 rounded-lg text-sm text-gray-400 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50"
+                        >
+                          <Plus className="h-4 w-4 inline mr-1" />
+                          Add Resource
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CONTACT TAB */}
+                  {activeTab === "contact" && (
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                        <h4 className="font-medium text-gray-900 mb-3">
+                          Contact Information
+                        </h4>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">
+                              Email
+                            </label>
+                            <input
+                              type="email"
+                              value={selectedProgram.contactEmail}
+                              onChange={(e) => {
+                                const updated = {
+                                  ...selectedProgram,
+                                  contactEmail: e.target.value,
+                                };
+                                setSelectedProgram(updated);
+                                savePrograms(
+                                  programs.map((p) =>
+                                    p.id === selectedProgram.id ? updated : p,
+                                  ),
+                                );
+                              }}
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">
+                              Phone
+                            </label>
+                            <input
+                              type="text"
+                              value={selectedProgram.contactPhone}
+                              onChange={(e) => {
+                                const updated = {
+                                  ...selectedProgram,
+                                  contactPhone: e.target.value,
+                                };
+                                setSelectedProgram(updated);
+                                savePrograms(
+                                  programs.map((p) =>
+                                    p.id === selectedProgram.id ? updated : p,
+                                  ),
+                                );
+                              }}
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => alert("✅ Contact information saved!")}
+                          className="w-full mt-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                        >
+                          💾 Save Contact Info
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div

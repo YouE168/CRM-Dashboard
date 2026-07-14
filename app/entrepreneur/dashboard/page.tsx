@@ -216,7 +216,7 @@ function EntrepreneurDashboardContent() {
       setProfile(parsed);
     }
 
-    // ✅ FIX: ALWAYS use ALL_PROGRAMS - this ensures programs always show
+    // ✅ ALWAYS use ALL_PROGRAMS as the source of truth
     // Try to load from localStorage but fallback to ALL_PROGRAMS
     let programsData = [];
     const savedPrograms = localStorage.getItem("entrepreneur_programs_data");
@@ -225,15 +225,19 @@ function EntrepreneurDashboardContent() {
       try {
         const parsed = JSON.parse(savedPrograms);
         programsData = parsed.programs || [];
+        console.log(
+          "📊 Loaded programs from localStorage:",
+          programsData.length,
+        );
       } catch (e) {
         console.error("Error parsing entrepreneur programs:", e);
         programsData = [];
       }
     }
 
-    // ✅ If no saved programs, ALWAYS use the full program list
+    // ✅ If no saved programs, ALWAYS use ALL_PROGRAMS
     if (programsData.length === 0) {
-      console.log("📋 Using default programs list");
+      console.log("📋 Using default programs list - ALL_PROGRAMS");
       programsData = ALL_PROGRAMS;
     }
 
@@ -262,9 +266,6 @@ function EntrepreneurDashboardContent() {
     setLoading(false);
   }, [router]);
 
-  // ✅ Add debug for checking programs
-  console.log("📋 Programs loaded:", programs.length);
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -279,10 +280,6 @@ function EntrepreneurDashboardContent() {
     totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
 
   const accessiblePrograms = programs.filter((p) => hasProgramAccess(p.name));
-
-  // ✅ Debug: Check what's being rendered
-  console.log("📋 Accessible programs:", accessiblePrograms.length);
-  console.log("📋 Total programs:", programs.length);
 
   return (
     <div className="min-h-screen bg-gray-50">
