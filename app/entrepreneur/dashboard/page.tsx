@@ -33,6 +33,8 @@ import {
   Handshake,
   GraduationCap,
   Building,
+  X,
+  Shield,
 } from "lucide-react";
 
 // ✅ ALL_PROGRAMS - This is the source of truth
@@ -44,7 +46,7 @@ const ALL_PROGRAMS = [
       "Connect with experienced local mentors for one-on-one guidance. Get help with business planning, marketing, financial management, and more.",
     status: "Active",
     startDate: "January 2025",
-    progress: 0, // ✅ Set to 0 for new users
+    progress: 0,
     icon: "👨‍🏫",
     color: "from-emerald-500 to-teal-500",
     contactEmail: "mentorship@ruralcommunitypartners.org",
@@ -72,7 +74,7 @@ const ALL_PROGRAMS = [
       "10-week SEK Catalyst cohort with mentorship and grant opportunities. Includes $250 participant support + $500 grants for top businesses.",
     status: "Active",
     startDate: "January 2025",
-    progress: 0, // ✅ Set to 0 for new users
+    progress: 0,
     icon: "💰",
     color: "from-blue-500 to-indigo-500",
     contactEmail: "seed@ruralcommunitypartners.org",
@@ -95,7 +97,7 @@ const ALL_PROGRAMS = [
       "Financial modeling, startup support, and capital connection. Get expert help with cash flow, break-even analysis, and funding strategies.",
     status: "Active",
     startDate: "January 2025",
-    progress: 0, // ✅ Set to 0 for new users
+    progress: 0,
     icon: "📊",
     color: "from-purple-500 to-pink-500",
     contactEmail: "jody@hbcat.org",
@@ -123,7 +125,7 @@ const ALL_PROGRAMS = [
       "A comprehensive 12-week entrepreneurship program designed to help rural business owners launch and grow their ventures. Includes mentorship, workshops, and access to KU resources.",
     status: "Active",
     startDate: "August 2025",
-    progress: 0, // ✅ Set to 0 for new users
+    progress: 0,
     icon: "🎯",
     color: "from-indigo-500 to-purple-500",
     contactEmail: "catalyst@ruralcommunitypartners.org",
@@ -156,30 +158,27 @@ function EntrepreneurDashboardContent() {
   const [mentorInfo, setMentorInfo] = useState<any>(null);
   const [selectedProgram, setSelectedProgram] = useState<any>(null);
   const [showProgramModal, setShowProgramModal] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [lockedProgramName, setLockedProgramName] = useState("");
 
   // Check if user has access to a program
   const hasProgramAccess = (programName: string): boolean => {
-    // ✅ Only "Business Professional Services" is accessible by default
     if (programName === "Business Professional Services") {
       return true;
     }
-    // All other programs require Jody's approval
     if (!profile) return false;
     const approvedPrograms = profile.approvedPrograms || [];
     return approvedPrograms.includes(programName);
   };
 
-  // Check if program is locked for this user
   const isProgramLocked = (programName: string): boolean => {
     return !hasProgramAccess(programName);
   };
 
-  // Handle program click - only allow if not locked
   const handleProgramClick = (program: any) => {
     if (isProgramLocked(program.name)) {
-      alert(
-        `"${program.name}" is locked. Please contact Jody to request access to this program.`,
-      );
+      setLockedProgramName(program.name);
+      setShowLockModal(true);
       return;
     }
     setSelectedProgram(program);
@@ -193,24 +192,20 @@ function EntrepreneurDashboardContent() {
       return;
     }
 
-    // Load profile
     const savedProfile = localStorage.getItem(`profile_${currentUser}`);
     if (savedProfile) {
       const parsed = JSON.parse(savedProfile);
       setProfile(parsed);
     }
 
-    // ✅ DIRECTLY USE ALL_PROGRAMS - no localStorage needed for the list
     console.log("📋 Loading ALL_PROGRAMS:", ALL_PROGRAMS.length);
     setPrograms(ALL_PROGRAMS);
 
-    // Load goals
     const savedGoals = JSON.parse(
       localStorage.getItem(`goals_${currentUser}`) || "[]",
     );
     setGoals(savedGoals);
 
-    // Load satisfaction
     const savedSatisfaction = localStorage.getItem(
       `satisfaction_${currentUser}`,
     );
@@ -218,7 +213,6 @@ function EntrepreneurDashboardContent() {
       setSatisfactionRate(parseInt(savedSatisfaction));
     }
 
-    // Load mentor info
     const savedMentorInfo = localStorage.getItem("mentor_profile_data");
     if (savedMentorInfo) {
       setMentorInfo(JSON.parse(savedMentorInfo));
@@ -244,6 +238,99 @@ function EntrepreneurDashboardContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* ✅ Locked Program Modal */}
+      {showLockModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            {/* Header */}
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-100 rounded-lg">
+                  <Shield className="h-5 w-5 text-amber-600" />
+                </div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Program Locked
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowLockModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 space-y-4">
+              <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                <div className="flex items-start gap-3">
+                  <Lock className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-amber-800">
+                      "{lockedProgramName}" is locked
+                    </p>
+                    <p className="text-sm text-amber-700 mt-1">
+                      This program requires approval from Jody before you can
+                      access it.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-medium text-gray-900 text-sm">
+                  To get access:
+                </h4>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500 font-bold">1.</span>
+                    <span>Schedule a meeting with Jody</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500 font-bold">2.</span>
+                    <span>Discuss your goals and program interest</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-500 font-bold">3.</span>
+                    <span>Jody will approve your access</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <p className="text-xs text-gray-500">
+                  💡 Tip: You already have access to{" "}
+                  <strong>Business Professional Services</strong> while you wait
+                  for approval.
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-5 border-t border-gray-100 flex gap-3">
+              <button
+                onClick={() => setShowLockModal(false)}
+                className="flex-1 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setShowLockModal(false);
+                  window.location.href =
+                    "mailto:jody@hbcat.org?subject=Request%20Access%20to%20" +
+                    encodeURIComponent(lockedProgramName);
+                }}
+                className="flex-1 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+              >
+                <Mail className="h-4 w-4" />
+                Request Access
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
         {/* Hero Section */}
         <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl p-8 text-white mb-8">
@@ -445,7 +532,6 @@ function EntrepreneurDashboardContent() {
                           )}
                         </div>
 
-                        {/* ✅ Only show progress bar for accessible programs */}
                         {!locked && (
                           <div className="mt-3">
                             <div className="flex justify-between text-xs mb-1">
@@ -466,23 +552,12 @@ function EntrepreneurDashboardContent() {
                         )}
 
                         {locked && (
-                          <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                            <p className="text-xs text-gray-500 flex items-center gap-1">
+                          <div className="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                            <p className="text-xs text-amber-700 flex items-center gap-1">
                               <Lock className="h-3 w-3" />
-                              This program is locked. Contact Jody to request
-                              access.
+                              This program is locked. Click to request access
+                              from Jody.
                             </p>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.location.href =
-                                  "mailto:jody@hbcat.org?subject=Request%20Access%20to%20" +
-                                  encodeURIComponent(program.name);
-                              }}
-                              className="mt-2 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
-                            >
-                              Request Access →
-                            </button>
                           </div>
                         )}
 
