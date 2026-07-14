@@ -161,15 +161,20 @@ function EntrepreneurDashboardContent() {
   const [showLockModal, setShowLockModal] = useState(false);
   const [lockedProgramName, setLockedProgramName] = useState("");
 
-  // Check if user has access to a program
+  // ✅ Check if user has access to a program
   const hasProgramAccess = (programName: string): boolean => {
-    // Only "Business Professional Services" is accessible by default
+    // ✅ ONLY "Business Professional Services" is accessible by default
     if (programName === "Business Professional Services") {
       return true;
     }
-    // All other programs require Jody's approval
+    // ✅ All other programs require Jody's approval
     if (!profile) return false;
     const approvedPrograms = profile.approvedPrograms || [];
+    // ✅ Log to debug
+    console.log(
+      `🔍 Checking access for "${programName}":`,
+      approvedPrograms.includes(programName),
+    );
     return approvedPrograms.includes(programName);
   };
 
@@ -177,13 +182,21 @@ function EntrepreneurDashboardContent() {
     return !hasProgramAccess(programName);
   };
 
+  // ✅ Handle program click
   const handleProgramClick = (program: any) => {
+    console.log(`🖱️ Clicked: "${program.name}"`);
+    console.log(`🔒 Is locked?`, isProgramLocked(program.name));
+
     if (isProgramLocked(program.name)) {
-      // ✅ Show lock modal and prevent program details modal from opening
+      // ✅ Show lock modal - DO NOT open program details
       setLockedProgramName(program.name);
       setShowLockModal(true);
-      return; // ✅ Exit early - don't show program details
+      // ✅ Clear any previously selected program
+      setSelectedProgram(null);
+      setShowProgramModal(false);
+      return; // ✅ Exit early - don't proceed
     }
+
     // ✅ Only accessible programs open the details modal
     setSelectedProgram(program);
     setShowProgramModal(true);
@@ -199,7 +212,21 @@ function EntrepreneurDashboardContent() {
     const savedProfile = localStorage.getItem(`profile_${currentUser}`);
     if (savedProfile) {
       const parsed = JSON.parse(savedProfile);
+      console.log("📋 User profile:", parsed);
+      console.log("📋 Approved programs:", parsed.approvedPrograms || []);
       setProfile(parsed);
+    } else {
+      // ✅ If no profile, create one with empty approvedPrograms
+      const newProfile = {
+        name: currentUser.split("@")[0],
+        email: currentUser,
+        approvedPrograms: [], // ✅ Empty array = only Business Professional Services
+      };
+      localStorage.setItem(
+        `profile_${currentUser}`,
+        JSON.stringify(newProfile),
+      );
+      setProfile(newProfile);
     }
 
     console.log("📋 Loading ALL_PROGRAMS:", ALL_PROGRAMS.length);
@@ -257,7 +284,10 @@ function EntrepreneurDashboardContent() {
                 </h2>
               </div>
               <button
-                onClick={() => setShowLockModal(false)}
+                onClick={() => {
+                  setShowLockModal(false);
+                  setLockedProgramName("");
+                }}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="h-5 w-5 text-gray-500" />
@@ -313,7 +343,10 @@ function EntrepreneurDashboardContent() {
             {/* Actions */}
             <div className="p-5 border-t border-gray-100 flex gap-3">
               <button
-                onClick={() => setShowLockModal(false)}
+                onClick={() => {
+                  setShowLockModal(false);
+                  setLockedProgramName("");
+                }}
                 className="flex-1 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
               >
                 Close
@@ -321,9 +354,10 @@ function EntrepreneurDashboardContent() {
               <button
                 onClick={() => {
                   setShowLockModal(false);
-                  window.location.href =
-                    "mailto:jody@hbcat.org?subject=Request%20Access%20to%20" +
-                    encodeURIComponent(lockedProgramName);
+                  const subject = encodeURIComponent(
+                    `Request Access to ${lockedProgramName}`,
+                  );
+                  window.location.href = `mailto:jody@hbcat.org?subject=${subject}&body=Hi Jody,%0D%0A%0D%0AI would like to request access to the "${lockedProgramName}" program.%0D%0A%0D%0AThank you!`;
                 }}
                 className="flex-1 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm font-medium flex items-center justify-center gap-2"
               >
@@ -591,7 +625,7 @@ function EntrepreneurDashboardContent() {
           </div>
         </div>
 
-        {/* ✅ Program Details Modal - Only for accessible programs */}
+        {/* ✅ Program Details Modal - ONLY for accessible programs */}
         {showProgramModal &&
           selectedProgram &&
           !isProgramLocked(selectedProgram.name) && (
