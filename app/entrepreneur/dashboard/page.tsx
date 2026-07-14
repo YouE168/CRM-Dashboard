@@ -44,7 +44,7 @@ const ALL_PROGRAMS = [
       "Connect with experienced local mentors for one-on-one guidance. Get help with business planning, marketing, financial management, and more.",
     status: "Active",
     startDate: "January 2025",
-    progress: 33,
+    progress: 0, // ✅ Set to 0 for new users
     icon: "👨‍🏫",
     color: "from-emerald-500 to-teal-500",
     contactEmail: "mentorship@ruralcommunitypartners.org",
@@ -72,7 +72,7 @@ const ALL_PROGRAMS = [
       "10-week SEK Catalyst cohort with mentorship and grant opportunities. Includes $250 participant support + $500 grants for top businesses.",
     status: "Active",
     startDate: "January 2025",
-    progress: 33,
+    progress: 0, // ✅ Set to 0 for new users
     icon: "💰",
     color: "from-blue-500 to-indigo-500",
     contactEmail: "seed@ruralcommunitypartners.org",
@@ -95,7 +95,7 @@ const ALL_PROGRAMS = [
       "Financial modeling, startup support, and capital connection. Get expert help with cash flow, break-even analysis, and funding strategies.",
     status: "Active",
     startDate: "January 2025",
-    progress: 28,
+    progress: 0, // ✅ Set to 0 for new users
     icon: "📊",
     color: "from-purple-500 to-pink-500",
     contactEmail: "jody@hbcat.org",
@@ -123,7 +123,7 @@ const ALL_PROGRAMS = [
       "A comprehensive 12-week entrepreneurship program designed to help rural business owners launch and grow their ventures. Includes mentorship, workshops, and access to KU resources.",
     status: "Active",
     startDate: "August 2025",
-    progress: 0,
+    progress: 0, // ✅ Set to 0 for new users
     icon: "🎯",
     color: "from-indigo-500 to-purple-500",
     contactEmail: "catalyst@ruralcommunitypartners.org",
@@ -159,11 +159,11 @@ function EntrepreneurDashboardContent() {
 
   // Check if user has access to a program
   const hasProgramAccess = (programName: string): boolean => {
-    // All users can access "Business Professional Services"
+    // ✅ Only "Business Professional Services" is accessible by default
     if (programName === "Business Professional Services") {
       return true;
     }
-    // If profile doesn't exist or no approvedPrograms, only Business Professional Services is available
+    // All other programs require Jody's approval
     if (!profile) return false;
     const approvedPrograms = profile.approvedPrograms || [];
     return approvedPrograms.includes(programName);
@@ -201,7 +201,6 @@ function EntrepreneurDashboardContent() {
     }
 
     // ✅ DIRECTLY USE ALL_PROGRAMS - no localStorage needed for the list
-    // The programs are defined in the code, not in localStorage
     console.log("📋 Loading ALL_PROGRAMS:", ALL_PROGRAMS.length);
     setPrograms(ALL_PROGRAMS);
 
@@ -446,10 +445,13 @@ function EntrepreneurDashboardContent() {
                           )}
                         </div>
 
+                        {/* ✅ Only show progress bar for accessible programs */}
                         {!locked && (
                           <div className="mt-3">
                             <div className="flex justify-between text-xs mb-1">
-                              <span className="text-gray-500">Progress</span>
+                              <span className="text-gray-500">
+                                Overall Progress
+                              </span>
                               <span className="text-emerald-600 font-medium">
                                 {program.progress}%
                               </span>
