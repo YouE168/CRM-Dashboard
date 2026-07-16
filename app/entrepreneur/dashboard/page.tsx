@@ -37,7 +37,7 @@ import {
   Shield,
 } from "lucide-react";
 
-// ✅ ALL_PROGRAMS - This is the source of truth
+// ✅ ALL_PROGRAMS - All programs start with 0% progress
 const ALL_PROGRAMS = [
   {
     id: "prog-1",
@@ -46,7 +46,7 @@ const ALL_PROGRAMS = [
       "Connect with experienced local mentors for one-on-one guidance. Get help with business planning, marketing, financial management, and more.",
     status: "Active",
     startDate: "January 2025",
-    progress: 0,
+    progress: 0, // ✅ All start at 0
     icon: "👨‍🏫",
     color: "from-emerald-500 to-teal-500",
     contactEmail: "mentorship@ruralcommunitypartners.org",
@@ -74,7 +74,7 @@ const ALL_PROGRAMS = [
       "10-week SEK Catalyst cohort with mentorship and grant opportunities. Includes $250 participant support + $500 grants for top businesses.",
     status: "Active",
     startDate: "January 2025",
-    progress: 0,
+    progress: 0, // ✅ All start at 0
     icon: "💰",
     color: "from-blue-500 to-indigo-500",
     contactEmail: "seed@ruralcommunitypartners.org",
@@ -97,7 +97,7 @@ const ALL_PROGRAMS = [
       "Financial modeling, startup support, and capital connection. Get expert help with cash flow, break-even analysis, and funding strategies.",
     status: "Active",
     startDate: "January 2025",
-    progress: 0,
+    progress: 0, // ✅ All start at 0
     icon: "📊",
     color: "from-purple-500 to-pink-500",
     contactEmail: "jody@hbcat.org",
@@ -125,7 +125,7 @@ const ALL_PROGRAMS = [
       "A comprehensive 12-week entrepreneurship program designed to help rural business owners launch and grow their ventures. Includes mentorship, workshops, and access to KU resources.",
     status: "Active",
     startDate: "August 2025",
-    progress: 0,
+    progress: 0, // ✅ All start at 0
     icon: "🎯",
     color: "from-indigo-500 to-purple-500",
     contactEmail: "catalyst@ruralcommunitypartners.org",
@@ -170,7 +170,6 @@ function EntrepreneurDashboardContent() {
     // ✅ All other programs require Jody's approval
     if (!profile) return false;
     const approvedPrograms = profile.approvedPrograms || [];
-    // ✅ Check if the program is in the approved list
     return approvedPrograms.includes(programName);
   };
 
@@ -181,16 +180,12 @@ function EntrepreneurDashboardContent() {
   // ✅ Handle program click
   const handleProgramClick = (program: any) => {
     if (isProgramLocked(program.name)) {
-      // ✅ Show lock modal - DO NOT open program details
       setLockedProgramName(program.name);
       setShowLockModal(true);
-      // ✅ Clear any previously selected program
       setSelectedProgram(null);
       setShowProgramModal(false);
-      return; // ✅ Exit early - don't proceed
+      return;
     }
-
-    // ✅ Only accessible programs open the details modal
     setSelectedProgram(program);
     setShowProgramModal(true);
   };
@@ -202,20 +197,21 @@ function EntrepreneurDashboardContent() {
       return;
     }
 
-    // ✅ Load profile and ensure approvedPrograms is empty for new users
+    // ✅ ALWAYS reset programs to ALL_PROGRAMS with 0 progress
+    setPrograms(ALL_PROGRAMS);
+
+    // ✅ Load or create profile with empty approvedPrograms
     let savedProfile = localStorage.getItem(`profile_${currentUser}`);
     let parsedProfile;
 
     if (savedProfile) {
       parsedProfile = JSON.parse(savedProfile);
-      // ✅ If approvedPrograms doesn't exist or is undefined, set it to empty array
-      if (!parsedProfile.approvedPrograms) {
-        parsedProfile.approvedPrograms = [];
-        localStorage.setItem(
-          `profile_${currentUser}`,
-          JSON.stringify(parsedProfile),
-        );
-      }
+      // ✅ FORCE reset approvedPrograms to empty array
+      parsedProfile.approvedPrograms = [];
+      localStorage.setItem(
+        `profile_${currentUser}`,
+        JSON.stringify(parsedProfile),
+      );
     } else {
       // ✅ Create new profile with empty approvedPrograms
       parsedProfile = {
@@ -234,9 +230,6 @@ function EntrepreneurDashboardContent() {
     setProfile(parsedProfile);
     console.log("📋 User profile:", parsedProfile);
     console.log("📋 Approved programs:", parsedProfile.approvedPrograms || []);
-
-    // ✅ Load ALL_PROGRAMS directly
-    setPrograms(ALL_PROGRAMS);
 
     // Load goals
     const savedGoals = JSON.parse(
@@ -282,7 +275,6 @@ function EntrepreneurDashboardContent() {
       {showLockModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-            {/* Header */}
             <div className="p-5 border-b border-gray-100 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-amber-100 rounded-lg">
@@ -303,7 +295,6 @@ function EntrepreneurDashboardContent() {
               </button>
             </div>
 
-            {/* Content */}
             <div className="p-5 space-y-4">
               <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
                 <div className="flex items-start gap-3">
@@ -349,7 +340,6 @@ function EntrepreneurDashboardContent() {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="p-5 border-t border-gray-100 flex gap-3">
               <button
                 onClick={() => {
@@ -586,13 +576,13 @@ function EntrepreneurDashboardContent() {
                                 Overall Progress
                               </span>
                               <span className="text-emerald-600 font-medium">
-                                {program.progress}%
+                                0%
                               </span>
                             </div>
                             <div className="w-full h-2 bg-gray-200 rounded-full">
                               <div
                                 className="h-2 bg-emerald-500 rounded-full transition-all"
-                                style={{ width: `${program.progress}%` }}
+                                style={{ width: `0%` }}
                               />
                             </div>
                           </div>
