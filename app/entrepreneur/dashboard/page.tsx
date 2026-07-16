@@ -46,7 +46,7 @@ const ALL_PROGRAMS = [
       "Connect with experienced local mentors for one-on-one guidance. Get help with business planning, marketing, financial management, and more.",
     status: "Active",
     startDate: "January 2025",
-    progress: 0, // ✅ All start at 0
+    progress: 0,
     icon: "👨‍🏫",
     color: "from-emerald-500 to-teal-500",
     contactEmail: "mentorship@ruralcommunitypartners.org",
@@ -74,7 +74,7 @@ const ALL_PROGRAMS = [
       "10-week SEK Catalyst cohort with mentorship and grant opportunities. Includes $250 participant support + $500 grants for top businesses.",
     status: "Active",
     startDate: "January 2025",
-    progress: 0, // ✅ All start at 0
+    progress: 0,
     icon: "💰",
     color: "from-blue-500 to-indigo-500",
     contactEmail: "seed@ruralcommunitypartners.org",
@@ -97,7 +97,7 @@ const ALL_PROGRAMS = [
       "Financial modeling, startup support, and capital connection. Get expert help with cash flow, break-even analysis, and funding strategies.",
     status: "Active",
     startDate: "January 2025",
-    progress: 0, // ✅ All start at 0
+    progress: 0,
     icon: "📊",
     color: "from-purple-500 to-pink-500",
     contactEmail: "jody@hbcat.org",
@@ -125,7 +125,7 @@ const ALL_PROGRAMS = [
       "A comprehensive 12-week entrepreneurship program designed to help rural business owners launch and grow their ventures. Includes mentorship, workshops, and access to KU resources.",
     status: "Active",
     startDate: "August 2025",
-    progress: 0, // ✅ All start at 0
+    progress: 0,
     icon: "🎯",
     color: "from-indigo-500 to-purple-500",
     contactEmail: "catalyst@ruralcommunitypartners.org",
@@ -197,9 +197,6 @@ function EntrepreneurDashboardContent() {
       return;
     }
 
-    // ✅ ALWAYS reset programs to ALL_PROGRAMS with 0 progress
-    setPrograms(ALL_PROGRAMS);
-
     // ✅ Load or create profile with empty approvedPrograms
     let savedProfile = localStorage.getItem(`profile_${currentUser}`);
     let parsedProfile;
@@ -218,7 +215,7 @@ function EntrepreneurDashboardContent() {
         name: currentUser.split("@")[0],
         email: currentUser,
         primaryRole: "entrepreneur",
-        approvedPrograms: [], // ✅ EMPTY = only Business Professional Services
+        approvedPrograms: [],
         createdAt: new Date().toISOString(),
       };
       localStorage.setItem(
@@ -230,6 +227,10 @@ function EntrepreneurDashboardContent() {
     setProfile(parsedProfile);
     console.log("📋 User profile:", parsedProfile);
     console.log("📋 Approved programs:", parsedProfile.approvedPrograms || []);
+
+    // ✅ DIRECTLY set programs from ALL_PROGRAMS
+    console.log("📋 Setting programs from ALL_PROGRAMS:", ALL_PROGRAMS.length);
+    setPrograms(ALL_PROGRAMS);
 
     // Load goals
     const savedGoals = JSON.parse(
@@ -268,6 +269,10 @@ function EntrepreneurDashboardContent() {
     totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
 
   const accessiblePrograms = programs.filter((p) => hasProgramAccess(p.name));
+
+  // ✅ Debug: Log programs to console
+  console.log("📋 Programs in state:", programs);
+  console.log("📋 Programs count:", programs.length);
 
   return (
     <div className="min-h-screen bg-gray-50">
