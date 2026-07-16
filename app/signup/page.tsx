@@ -20,6 +20,11 @@ import {
   Target,
 } from "lucide-react";
 import { notifyJodyNewUser } from "@/lib/email-service";
+import {
+  supabase,
+  isSupabaseConfigured,
+  isClient,
+} from "@/lib/supabase/client";
 
 // Define the Role type
 interface Role {
@@ -104,7 +109,7 @@ const STEPS = [
   "Review",
 ];
 
-// Helper function to save signup
+// Helper function to save signup to localStorage (fallback)
 const saveSignup = (formData: any) => {
   const signups = JSON.parse(localStorage.getItem("programSignups") || "[]");
   signups.push({
@@ -251,76 +256,178 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const users = JSON.parse(localStorage.getItem("users") || "[]");
+      // Check if Supabase is configured
+      const useSupabase = isSupabaseConfigured() && isClient;
 
-      if (users.find((u: any) => u.email === formData.email)) {
-        setError("User already exists with this email");
-        setIsSubmitting(false);
-        return;
-      }
+      if (useSupabase) {
+        // ============================================
+        // SUPABASE REGISTRATION
+        // ============================================
 
-      // ✅ FIX: Create user with correct role assignment
-      const newUser = {
-        email: formData.email,
-        password: formData.password,
-        roles: formData.selectedRoles.map((r) => r.id),
-        roleLabels: formData.selectedRoles.map((r) => r.label),
-        primaryRole: formData.primaryRole,
-        userType: formData.primaryRole,
-        fullName: `${formData.firstName} ${formData.lastName}`,
-        name: `${formData.firstName} ${formData.lastName}`,
-        createdAt: new Date().toISOString(),
-        status: "pending_approval",
-        passwordSet: true,
-      };
-      users.push(newUser);
-      localStorage.setItem("users", JSON.stringify(users));
+        // 1. Create user in Supabase
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .insert({
+            email: formData.email,
+            password: formData.password,
+            name: `${formData.firstName} ${formData.lastName}`,
+            full_name: `${formData.firstName} ${formData.lastName}`,
+            primary_role: formData.primaryRole,
+            status: "active",
+            created_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
 
-      // ✅ FIX: Save profile with correct role
-      const userProfile = {
-        name: `${formData.firstName} ${formData.lastName}`,
-        email: formData.email,
-        roles: formData.selectedRoles.map((r) => r.label),
-        primaryRole: formData.primaryRole,
-        userType: formData.primaryRole,
-        userTypes: formData.selectedRoles.map((r) => r.id),
-        phone: formData.phone || "",
-        organization: formData.organization || "",
-        position: formData.position || "",
-        selectedPrograms: formData.selectedPrograms,
-        status: "pending",
-        createdAt: new Date().toISOString(),
-      };
-      localStorage.setItem(
-        `profile_${formData.email}`,
-        JSON.stringify(userProfile),
-      );
+        if (userError) {
+          console.error("Supabase user creation error:", userError);
+          setError("Failed to create account. Please try again.");
+          setIsSubmitting(false);
+          return;
+        }
 
-      saveSignup(formData);
-
-      // ✅ NEW: Send notification to Jody
-      try {
-        await notifyJodyNewUser({
+        // 2. Create profile in Supabase
+        const { error: profileError } = await supabase.from("profiles").insert({
+          user_id: userData.id,
           name: `${formData.firstName} ${formData.lastName}`,
           email: formData.email,
-          role: formData.primaryRole,
-          registrationDate: new Date().toISOString(),
+          primary_role: formData.primaryRole,
+          phone: formData.phone || "",
+          organization: formData.organization || "",
+          position: formData.position || "",
+          approved_programs: [], // Empty by default
+          created_at: new Date().toISOString(),
         });
-      } catch (emailError) {
-        console.warn(
-          "Email notification failed, but registration continues:",
-          emailError,
+
+        if (profileError) {
+          console.error("Supabase profile creation error:", profileError);
+          // Continue anyway - profile can be created later
+        }
+
+        // 3. ✅ Get all programs and create user_programs entries
+        const { data: programsData, error: programsError } = await supabase
+          .from("programs")
+          .select("id, name");
+
+        if (programsError) {
+          console.error("Error fetching programs:", programsError);
+        }
+
+        if (programsData && programsData.length > 0) {
+          // ✅ Create user_programs for each program
+          // Only "Business Professional Services" is approved by default
+          const userPrograms = programsData.map((program: any) => ({
+            user_id: userData.id,
+            program_id: program.id,
+            approved: program.name === "Business Professional Services",
+            progress: 0,
+            created_at: new Date().toISOString(),
+          }));
+
+          const { error: userProgramsError } = await supabase
+            .from("user_programs")
+            .insert(userPrograms);
+
+          if (userProgramsError) {
+            console.error("Error creating user programs:", userProgramsError);
+          } else {
+            console.log(
+              `✅ Created ${userPrograms.length} user_programs entries`,
+            );
+            console.log(`✅ Only "Business Professional Services" is approved`);
+          }
+        }
+
+        // 4. Send notification to Jody
+        try {
+          await notifyJodyNewUser({
+            name: `${formData.firstName} ${formData.lastName}`,
+            email: formData.email,
+            role: formData.primaryRole,
+            registrationDate: new Date().toISOString(),
+          });
+        } catch (emailError) {
+          console.warn("Email notification failed:", emailError);
+        }
+
+        setSuccess(
+          "✅ Account created successfully! You now have access to Business Professional Services. Jody has been notified. You will receive access to other programs once approved.",
         );
-        // Don't block registration if email fails
+      } else {
+        // ============================================
+        // LOCALSTORAGE REGISTRATION (Fallback)
+        // ============================================
+
+        const users = JSON.parse(localStorage.getItem("users") || "[]");
+
+        if (users.find((u: any) => u.email === formData.email)) {
+          setError("User already exists with this email");
+          setIsSubmitting(false);
+          return;
+        }
+
+        // Create user with correct role assignment
+        const newUser = {
+          email: formData.email,
+          password: formData.password,
+          roles: formData.selectedRoles.map((r) => r.id),
+          roleLabels: formData.selectedRoles.map((r) => r.label),
+          primaryRole: formData.primaryRole,
+          userType: formData.primaryRole,
+          fullName: `${formData.firstName} ${formData.lastName}`,
+          name: `${formData.firstName} ${formData.lastName}`,
+          createdAt: new Date().toISOString(),
+          status: "pending_approval",
+          passwordSet: true,
+          approvedPrograms: [], // Empty by default
+        };
+        users.push(newUser);
+        localStorage.setItem("users", JSON.stringify(users));
+
+        // Save profile with correct role
+        const userProfile = {
+          name: `${formData.firstName} ${formData.lastName}`,
+          email: formData.email,
+          roles: formData.selectedRoles.map((r) => r.label),
+          primaryRole: formData.primaryRole,
+          userType: formData.primaryRole,
+          userTypes: formData.selectedRoles.map((r) => r.id),
+          phone: formData.phone || "",
+          organization: formData.organization || "",
+          position: formData.position || "",
+          selectedPrograms: formData.selectedPrograms,
+          approvedPrograms: [], // Empty by default
+          status: "pending",
+          createdAt: new Date().toISOString(),
+        };
+        localStorage.setItem(
+          `profile_${formData.email}`,
+          JSON.stringify(userProfile),
+        );
+
+        saveSignup(formData);
+
+        // Send notification to Jody
+        try {
+          await notifyJodyNewUser({
+            name: `${formData.firstName} ${formData.lastName}`,
+            email: formData.email,
+            role: formData.primaryRole,
+            registrationDate: new Date().toISOString(),
+          });
+        } catch (emailError) {
+          console.warn("Email notification failed:", emailError);
+        }
+
+        setSuccess(
+          "✅ Account created successfully! You now have access to Business Professional Services. Jody has been notified. You will receive access to other programs once approved.",
+        );
       }
 
-      setSuccess(
-        "✅ Account created successfully! Jody has been notified. You will receive an email when your account is approved.",
-      );
-
+      // Redirect to login after success
       setTimeout(() => {
         router.push("/login");
-      }, 4000);
+      }, 5000);
     } catch (err) {
       console.error("Signup error:", err);
       setError("Something went wrong. Please try again.");
