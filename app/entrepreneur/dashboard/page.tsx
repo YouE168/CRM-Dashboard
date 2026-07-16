@@ -4,7 +4,11 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/client";
+import {
+  supabase,
+  isSupabaseConfigured,
+  isClient,
+} from "@/lib/supabase/client";
 import ProgramDetailsModal from "@/components/program-details-modal";
 import { RouteGuard } from "@/components/auth/route-guard";
 import { USER_ROLES } from "@/lib/roles";
@@ -37,6 +41,83 @@ import {
   X,
   Shield,
 } from "lucide-react";
+
+// Default programs in case Supabase fails
+const DEFAULT_PROGRAMS = [
+  {
+    id: "default-1",
+    name: "RCP Small Business Mentorship",
+    description:
+      "Connect with experienced local mentors for one-on-one guidance.",
+    status: "Active",
+    start_date: "January 2025",
+    progress: 0,
+    icon: "👨‍🏫",
+    color: "from-emerald-500 to-teal-500",
+    managed_by: "multiple_mentors",
+    contact_email: "mentorship@ruralcommunitypartners.org",
+    contact_phone: "(620) 555-0101",
+    resource_categories: [
+      "Mentorship",
+      "Business Planning",
+      "Marketing",
+      "Financial",
+    ],
+  },
+  {
+    id: "default-2",
+    name: "SEED Micro-Grant",
+    description:
+      "10-week SEK Catalyst cohort with mentorship and grant opportunities.",
+    status: "Active",
+    start_date: "January 2025",
+    progress: 0,
+    icon: "💰",
+    color: "from-blue-500 to-indigo-500",
+    managed_by: "multiple_mentors",
+    contact_email: "seed@ruralcommunitypartners.org",
+    contact_phone: "(620) 555-0102",
+    resource_categories: ["Financial", "Grant Writing", "Cohort", "Pitching"],
+  },
+  {
+    id: "default-3",
+    name: "Business Professional Services",
+    description: "Financial modeling, startup support, and capital connection.",
+    status: "Active",
+    start_date: "January 2025",
+    progress: 0,
+    icon: "📊",
+    color: "from-purple-500 to-pink-500",
+    managed_by: "jody",
+    contact_email: "jody@hbcat.org",
+    contact_phone: "(620) 555-0103",
+    resource_categories: [
+      "Financial Modeling",
+      "Startup Support",
+      "Capital",
+      "Strategy",
+    ],
+  },
+  {
+    id: "default-4",
+    name: "SEK Catalyst: Empowered by KU",
+    description: "12-week entrepreneurship program with KU resources.",
+    status: "Active",
+    start_date: "August 2025",
+    progress: 0,
+    icon: "🎯",
+    color: "from-indigo-500 to-purple-500",
+    managed_by: "multiple_mentors",
+    contact_email: "catalyst@ruralcommunitypartners.org",
+    contact_phone: "(620) 555-0105",
+    resource_categories: [
+      "Curriculum",
+      "Mentorship",
+      "KU Resources",
+      "Workshops",
+    ],
+  },
+];
 
 function EntrepreneurDashboardContent() {
   const router = useRouter();
@@ -85,7 +166,21 @@ function EntrepreneurDashboardContent() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Get current user email from localStorage (for now)
+        // Check if we're in the browser
+        if (!isClient) {
+          setLoading(false);
+          return;
+        }
+
+        // Check if Supabase is configured
+        if (!isSupabaseConfigured()) {
+          console.warn("Supabase is not configured. Using default programs.");
+          setPrograms(DEFAULT_PROGRAMS);
+          setLoading(false);
+          return;
+        }
+
+        // Get current user email from localStorage
         const userEmail = localStorage.getItem("currentUser");
         if (!userEmail) {
           router.push("/login");
@@ -101,8 +196,9 @@ function EntrepreneurDashboardContent() {
 
         if (userError) {
           console.error("Error fetching user:", userError);
-          // If user doesn't exist in Supabase, redirect to signup
-          router.push("/signup");
+          // Use default programs if user not found
+          setPrograms(DEFAULT_PROGRAMS);
+          setLoading(false);
           return;
         }
 
@@ -127,7 +223,7 @@ function EntrepreneurDashboardContent() {
           },
         );
 
-        // 3. Get all programs
+        // 3. Get all programs from Supabase
         const { data: programsData, error: programsError } = await supabase
           .from("programs")
           .select("*")
@@ -135,10 +231,10 @@ function EntrepreneurDashboardContent() {
 
         if (programsError) {
           console.error("Error fetching programs:", programsError);
-          return;
+          setPrograms(DEFAULT_PROGRAMS);
+        } else {
+          setPrograms(programsData || DEFAULT_PROGRAMS);
         }
-
-        setPrograms(programsData || []);
 
         // 4. Get user's approved programs
         const { data: userProgramsData, error: userProgramsError } =
@@ -177,6 +273,8 @@ function EntrepreneurDashboardContent() {
         setLoading(false);
       } catch (error) {
         console.error("Error loading dashboard:", error);
+        // Fallback to default programs
+        setPrograms(DEFAULT_PROGRAMS);
         setLoading(false);
       }
     };
