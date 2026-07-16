@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 import ProgramDetailsModal from "@/components/program-details-modal";
 import { RouteGuard } from "@/components/auth/route-guard";
 import { USER_ROLES } from "@/lib/roles";
@@ -37,122 +38,13 @@ import {
   Shield,
 } from "lucide-react";
 
-// ✅ ALL_PROGRAMS - All programs start with 0% progress
-const ALL_PROGRAMS = [
-  {
-    id: "prog-1",
-    name: "RCP Small Business Mentorship",
-    description:
-      "Connect with experienced local mentors for one-on-one guidance. Get help with business planning, marketing, financial management, and more.",
-    status: "Active",
-    startDate: "January 2025",
-    progress: 0,
-    icon: "👨‍🏫",
-    color: "from-emerald-500 to-teal-500",
-    contactEmail: "mentorship@ruralcommunitypartners.org",
-    contactPhone: "(620) 555-0101",
-    managedBy: "multiple_mentors",
-    resourceCategories: [
-      "Mentorship",
-      "Business Planning",
-      "Marketing",
-      "Financial",
-    ],
-    upcomingSessions: [
-      {
-        date: "June 10, 2025",
-        time: "2:00 PM",
-        topic: "Business Plan Review",
-        mentor: "Michael Chen",
-      },
-    ],
-  },
-  {
-    id: "prog-2",
-    name: "SEED Micro-Grant",
-    description:
-      "10-week SEK Catalyst cohort with mentorship and grant opportunities. Includes $250 participant support + $500 grants for top businesses.",
-    status: "Active",
-    startDate: "January 2025",
-    progress: 0,
-    icon: "💰",
-    color: "from-blue-500 to-indigo-500",
-    contactEmail: "seed@ruralcommunitypartners.org",
-    contactPhone: "(620) 555-0102",
-    managedBy: "multiple_mentors",
-    resourceCategories: ["Financial", "Grant Writing", "Cohort", "Pitching"],
-    upcomingSessions: [
-      {
-        date: "June 12, 2025",
-        time: "10:00 AM",
-        topic: "Weekly Cohort Meeting",
-        mentor: "David Park",
-      },
-    ],
-  },
-  {
-    id: "prog-3",
-    name: "Business Professional Services",
-    description:
-      "Financial modeling, startup support, and capital connection. Get expert help with cash flow, break-even analysis, and funding strategies.",
-    status: "Active",
-    startDate: "January 2025",
-    progress: 0,
-    icon: "📊",
-    color: "from-purple-500 to-pink-500",
-    contactEmail: "jody@hbcat.org",
-    contactPhone: "(620) 555-0103",
-    managedBy: "jody",
-    resourceCategories: [
-      "Financial Modeling",
-      "Startup Support",
-      "Capital",
-      "Strategy",
-    ],
-    upcomingSessions: [
-      {
-        date: "June 15, 2025",
-        time: "1:00 PM",
-        topic: "Financial Planning Session",
-        mentor: "Tom Anderson",
-      },
-    ],
-  },
-  {
-    id: "prog-4",
-    name: "SEK Catalyst: Empowered by KU",
-    description:
-      "A comprehensive 12-week entrepreneurship program designed to help rural business owners launch and grow their ventures. Includes mentorship, workshops, and access to KU resources.",
-    status: "Active",
-    startDate: "August 2025",
-    progress: 0,
-    icon: "🎯",
-    color: "from-indigo-500 to-purple-500",
-    contactEmail: "catalyst@ruralcommunitypartners.org",
-    contactPhone: "(620) 555-0105",
-    managedBy: "multiple_mentors",
-    resourceCategories: [
-      "Curriculum",
-      "Mentorship",
-      "KU Resources",
-      "Workshops",
-    ],
-    upcomingSessions: [
-      {
-        date: "September 5, 2025",
-        time: "6:00 PM",
-        topic: "Program Kickoff & Orientation",
-        mentor: "Jody Program",
-      },
-    ],
-  },
-];
-
 function EntrepreneurDashboardContent() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [programs, setPrograms] = useState<any[]>([]);
+  const [userPrograms, setUserPrograms] = useState<any[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
   const [goals, setGoals] = useState<any[]>([]);
   const [satisfactionRate, setSatisfactionRate] = useState(5);
   const [mentorInfo, setMentorInfo] = useState<any>(null);
@@ -161,23 +53,23 @@ function EntrepreneurDashboardContent() {
   const [showLockModal, setShowLockModal] = useState(false);
   const [lockedProgramName, setLockedProgramName] = useState("");
 
-  // ✅ Check if user has access to a program
+  // Check if user has access to a program
   const hasProgramAccess = (programName: string): boolean => {
-    // ✅ ONLY "Business Professional Services" is accessible by default
+    // ONLY "Business Professional Services" is accessible by default
     if (programName === "Business Professional Services") {
       return true;
     }
-    // ✅ All other programs require Jody's approval
-    if (!profile) return false;
-    const approvedPrograms = profile.approvedPrograms || [];
-    return approvedPrograms.includes(programName);
+    // Check if user has this program approved
+    const approved = userPrograms.find(
+      (up) => up.program_name === programName && up.approved === true,
+    );
+    return !!approved;
   };
 
   const isProgramLocked = (programName: string): boolean => {
     return !hasProgramAccess(programName);
   };
 
-  // ✅ Handle program click
   const handleProgramClick = (program: any) => {
     if (isProgramLocked(program.name)) {
       setLockedProgramName(program.name);
@@ -191,68 +83,105 @@ function EntrepreneurDashboardContent() {
   };
 
   useEffect(() => {
-    const currentUser = localStorage.getItem("currentUser");
-    if (!currentUser) {
-      router.push("/login");
-      return;
-    }
+    const fetchData = async () => {
+      try {
+        // Get current user email from localStorage (for now)
+        const userEmail = localStorage.getItem("currentUser");
+        if (!userEmail) {
+          router.push("/login");
+          return;
+        }
 
-    // ✅ Load or create profile with empty approvedPrograms
-    let savedProfile = localStorage.getItem(`profile_${currentUser}`);
-    let parsedProfile;
+        // 1. Get user from Supabase
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("*")
+          .eq("email", userEmail)
+          .single();
 
-    if (savedProfile) {
-      parsedProfile = JSON.parse(savedProfile);
-      // ✅ FORCE reset approvedPrograms to empty array
-      parsedProfile.approvedPrograms = [];
-      localStorage.setItem(
-        `profile_${currentUser}`,
-        JSON.stringify(parsedProfile),
-      );
-    } else {
-      // ✅ Create new profile with empty approvedPrograms
-      parsedProfile = {
-        name: currentUser.split("@")[0],
-        email: currentUser,
-        primaryRole: "entrepreneur",
-        approvedPrograms: [],
-        createdAt: new Date().toISOString(),
-      };
-      localStorage.setItem(
-        `profile_${currentUser}`,
-        JSON.stringify(parsedProfile),
-      );
-    }
+        if (userError) {
+          console.error("Error fetching user:", userError);
+          // If user doesn't exist in Supabase, redirect to signup
+          router.push("/signup");
+          return;
+        }
 
-    setProfile(parsedProfile);
-    console.log("📋 User profile:", parsedProfile);
-    console.log("📋 Approved programs:", parsedProfile.approvedPrograms || []);
+        setUserId(userData.id);
 
-    // ✅ DIRECTLY set programs from ALL_PROGRAMS
-    console.log("📋 Setting programs from ALL_PROGRAMS:", ALL_PROGRAMS.length);
-    setPrograms(ALL_PROGRAMS);
+        // 2. Get profile
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_id", userData.id)
+          .single();
 
-    // Load goals
-    const savedGoals = JSON.parse(
-      localStorage.getItem(`goals_${currentUser}`) || "[]",
-    );
-    setGoals(savedGoals);
+        if (profileError && profileError.code !== "PGRST116") {
+          console.error("Error fetching profile:", profileError);
+        }
 
-    // Load satisfaction
-    const savedSatisfaction = localStorage.getItem(
-      `satisfaction_${currentUser}`,
-    );
-    if (savedSatisfaction) {
-      setSatisfactionRate(parseInt(savedSatisfaction));
-    }
+        setProfile(
+          profileData || {
+            name: userData.name || userEmail.split("@")[0],
+            email: userEmail,
+            primary_role: userData.primary_role || "entrepreneur",
+          },
+        );
 
-    // Load mentor info
-    const savedMentorInfo = localStorage.getItem("mentor_profile_data");
-    if (savedMentorInfo) {
-      setMentorInfo(JSON.parse(savedMentorInfo));
-    }
+        // 3. Get all programs
+        const { data: programsData, error: programsError } = await supabase
+          .from("programs")
+          .select("*")
+          .order("name");
 
-    setLoading(false);
+        if (programsError) {
+          console.error("Error fetching programs:", programsError);
+          return;
+        }
+
+        setPrograms(programsData || []);
+
+        // 4. Get user's approved programs
+        const { data: userProgramsData, error: userProgramsError } =
+          await supabase
+            .from("user_programs")
+            .select("*, programs(name)")
+            .eq("user_id", userData.id);
+
+        if (userProgramsError) {
+          console.error("Error fetching user programs:", userProgramsError);
+        }
+
+        // Format user programs with program names
+        const formattedUserPrograms = (userProgramsData || []).map(
+          (up: any) => ({
+            ...up,
+            program_name: up.programs?.name || "",
+          }),
+        );
+        setUserPrograms(formattedUserPrograms);
+
+        // Load goals from localStorage (for now, will migrate later)
+        const savedGoals = JSON.parse(
+          localStorage.getItem(`goals_${userEmail}`) || "[]",
+        );
+        setGoals(savedGoals);
+
+        // Load satisfaction
+        const savedSatisfaction = localStorage.getItem(
+          `satisfaction_${userEmail}`,
+        );
+        if (savedSatisfaction) {
+          setSatisfactionRate(parseInt(savedSatisfaction));
+        }
+
+        setLoading(false);
+      } catch (error) {
+        console.error("Error loading dashboard:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, [router]);
 
   if (loading) {
@@ -270,13 +199,9 @@ function EntrepreneurDashboardContent() {
 
   const accessiblePrograms = programs.filter((p) => hasProgramAccess(p.name));
 
-  // ✅ Debug: Log programs to console
-  console.log("📋 Programs in state:", programs);
-  console.log("📋 Programs count:", programs.length);
-
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ✅ Locked Program Modal */}
+      {/* Locked Modal */}
       {showLockModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -299,7 +224,6 @@ function EntrepreneurDashboardContent() {
                 <X className="h-5 w-5 text-gray-500" />
               </button>
             </div>
-
             <div className="p-5 space-y-4">
               <div className="bg-amber-50 rounded-lg p-4 border border-amber-200">
                 <div className="flex items-start gap-3">
@@ -315,7 +239,6 @@ function EntrepreneurDashboardContent() {
                   </div>
                 </div>
               </div>
-
               <div className="space-y-3">
                 <h4 className="font-medium text-gray-900 text-sm">
                   To get access:
@@ -335,7 +258,6 @@ function EntrepreneurDashboardContent() {
                   </li>
                 </ul>
               </div>
-
               <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                 <p className="text-xs text-gray-500">
                   💡 Tip: You already have access to{" "}
@@ -344,7 +266,6 @@ function EntrepreneurDashboardContent() {
                 </p>
               </div>
             </div>
-
             <div className="p-5 border-t border-gray-100 flex gap-3">
               <button
                 onClick={() => {
@@ -441,7 +362,7 @@ function EntrepreneurDashboardContent() {
             </div>
           </div>
 
-          {profile?.primaryRole === "mentee" && (
+          {profile?.primary_role === "mentee" && (
             <div
               onClick={() => router.push("/mentee/dashboard")}
               className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
@@ -537,7 +458,7 @@ function EntrepreneurDashboardContent() {
                                   ✅ Available
                                 </span>
                               )}
-                              {program.managedBy === "jody" && (
+                              {program.managed_by === "jody" && (
                                 <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
                                   👩‍💼 Jody's Program
                                 </span>
@@ -555,15 +476,8 @@ function EntrepreneurDashboardContent() {
                             </p>
                             <div className="flex items-center gap-4 mt-2">
                               <span className="text-xs text-gray-400">
-                                Started {program.startDate}
+                                Started {program.start_date}
                               </span>
-                              {program.upcomingSessions &&
-                                program.upcomingSessions.length > 0 && (
-                                  <span className="text-xs text-blue-600">
-                                    📅 {program.upcomingSessions.length}{" "}
-                                    upcoming sessions
-                                  </span>
-                                )}
                             </div>
                           </div>
                           {!locked && (
@@ -602,24 +516,6 @@ function EntrepreneurDashboardContent() {
                             </p>
                           </div>
                         )}
-
-                        {/* Resource Categories Tags */}
-                        {!locked &&
-                          program.resourceCategories &&
-                          program.resourceCategories.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-1">
-                              {program.resourceCategories.map(
-                                (category: string) => (
-                                  <span
-                                    key={category}
-                                    className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full"
-                                  >
-                                    {category}
-                                  </span>
-                                ),
-                              )}
-                            </div>
-                          )}
                       </div>
                     </div>
                   </div>
@@ -629,7 +525,7 @@ function EntrepreneurDashboardContent() {
           </div>
         </div>
 
-        {/* ✅ Program Details Modal - ONLY for accessible programs */}
+        {/* Program Details Modal */}
         {showProgramModal &&
           selectedProgram &&
           !isProgramLocked(selectedProgram.name) && (
@@ -640,7 +536,7 @@ function EntrepreneurDashboardContent() {
                 setSelectedProgram(null);
               }}
               userEmail={profile?.email}
-              userRole={profile?.primaryRole}
+              userRole={profile?.primary_role}
             />
           )}
 
