@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { supabase, isSupabaseConfigured, supabaseConfig } from '@/lib/supabase/config';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
 export default function TestSupabasePage() {
   const [status, setStatus] = useState('Checking...');
@@ -9,17 +9,18 @@ export default function TestSupabasePage() {
 
   useEffect(() => {
     const test = async () => {
-      setConfig(supabaseConfig);
+      const configured = isSupabaseConfigured();
+      setConfig({
+        configured,
+        hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        hasKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      });
 
-      if (isSupabaseConfigured()) {
-        setStatus('✅ Supabase environment variables are set! Testing connection...');
-        
+      if (configured) {
         try {
-          // Test the connection
-          const { data, error } = await supabase.from('users').select('count').limit(1);
-          
+          const { data, error } = await supabase.from('programs').select('count').limit(1);
           if (error) {
-            setStatus(`❌ Connection error: ${error.message}`);
+            setStatus(`❌ Error: ${error.message}`);
           } else {
             setStatus('✅ Connected to Supabase successfully!');
           }
@@ -27,7 +28,7 @@ export default function TestSupabasePage() {
           setStatus(`❌ Error: ${e.message}`);
         }
       } else {
-        setStatus('⚠️ Supabase environment variables are missing. Please check your .env file.');
+        setStatus('⚠️ Supabase not configured. Please check your environment variables.');
       }
     };
 
@@ -38,8 +39,8 @@ export default function TestSupabasePage() {
     <div className="p-8 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Supabase Connection Test</h1>
       <div className={`p-4 rounded-lg mb-4 ${
-        status.includes('✅') ? 'bg-green-50 border border-green-200' : 
-        status.includes('❌') ? 'bg-red-50 border border-red-200' : 
+        status.includes('✅') ? 'bg-green-50 border border-green-200' :
+        status.includes('❌') ? 'bg-red-50 border border-red-200' :
         'bg-yellow-50 border border-yellow-200'
       }`}>
         <p className="font-medium">{status}</p>
@@ -49,11 +50,6 @@ export default function TestSupabasePage() {
         <pre className="bg-white p-3 rounded border text-sm">
           {JSON.stringify(config, null, 2)}
         </pre>
-      </div>
-      <div className="mt-4 text-sm text-gray-500">
-        <p>URL: {config.hasUrl ? 'Set ✅' : 'Not set ❌'}</p>
-        <p>Key: {config.hasKey ? 'Set ✅' : 'Not set ❌'}</p>
-        <p className="mt-2 text-xs text-gray-400">Note: Environment variables are only available on the server. Client components receive them via Next.js's build process.</p>
       </div>
     </div>
   );

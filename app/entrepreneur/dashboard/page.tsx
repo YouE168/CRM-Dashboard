@@ -42,7 +42,7 @@ import {
   Shield,
 } from "lucide-react";
 
-// Default programs in case Supabase fails
+// DEFAULT PROGRAMS - These will always show
 const DEFAULT_PROGRAMS = [
   {
     id: "default-1",
@@ -134,17 +134,17 @@ function EntrepreneurDashboardContent() {
   const [showLockModal, setShowLockModal] = useState(false);
   const [lockedProgramName, setLockedProgramName] = useState("");
 
-  // Check if user has access to a program
+  // ✅ Check if user has access to a program
   const hasProgramAccess = (programName: string): boolean => {
-    // ONLY "Business Professional Services" is accessible by default
+    // ✅ ONLY "Business Professional Services" is accessible by default
     if (programName === "Business Professional Services") {
       return true;
     }
-    // Check if user has this program approved
-    const approved = userPrograms.find(
-      (up) => up.program_name === programName && up.approved === true,
+    // ✅ For all other programs, check if approved in userPrograms
+    const userProgram = userPrograms.find(
+      (up) => up.program_name === programName,
     );
-    return !!approved;
+    return userProgram?.approved === true;
   };
 
   const isProgramLocked = (programName: string): boolean => {
@@ -166,16 +166,7 @@ function EntrepreneurDashboardContent() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Check if we're in the browser
         if (!isClient) {
-          setLoading(false);
-          return;
-        }
-
-        // Check if Supabase is configured
-        if (!isSupabaseConfigured()) {
-          console.warn("Supabase is not configured. Using default programs.");
-          setPrograms(DEFAULT_PROGRAMS);
           setLoading(false);
           return;
         }
@@ -184,6 +175,21 @@ function EntrepreneurDashboardContent() {
         const userEmail = localStorage.getItem("currentUser");
         if (!userEmail) {
           router.push("/login");
+          return;
+        }
+
+        // ✅ Check if Supabase is configured
+        if (!isSupabaseConfigured()) {
+          console.warn("Supabase not configured, using default programs");
+          setPrograms(DEFAULT_PROGRAMS);
+          // ✅ For default programs, only Business Professional Services is approved
+          setUserPrograms([
+            { program_name: "Business Professional Services", approved: true },
+            { program_name: "RCP Small Business Mentorship", approved: false },
+            { program_name: "SEED Micro-Grant", approved: false },
+            { program_name: "SEK Catalyst: Empowered by KU", approved: false },
+          ]);
+          setLoading(false);
           return;
         }
 
@@ -196,7 +202,6 @@ function EntrepreneurDashboardContent() {
 
         if (userError) {
           console.error("Error fetching user:", userError);
-          // Use default programs if user not found
           setPrograms(DEFAULT_PROGRAMS);
           setLoading(false);
           return;
@@ -223,38 +228,76 @@ function EntrepreneurDashboardContent() {
           },
         );
 
-        // 3. Get all programs from Supabase
-        const { data: programsData, error: programsError } = await supabase
-          .from("programs")
-          .select("*")
-          .order("name");
+        // 3. Get all programs
+        let programsData;
+        let programsError;
 
-        if (programsError) {
-          console.error("Error fetching programs:", programsError);
+        if (isSupabaseConfigured()) {
+          const result = await supabase
+            .from("programs")
+            .select("*")
+            .order("name");
+          programsData = result.data;
+          programsError = result.error;
+        }
+
+        if (programsError || !programsData || programsData.length === 0) {
+          console.warn("Using default programs");
           setPrograms(DEFAULT_PROGRAMS);
         } else {
-          setPrograms(programsData || DEFAULT_PROGRAMS);
+          setPrograms(programsData);
         }
 
-        // 4. Get user's approved programs
-        const { data: userProgramsData, error: userProgramsError } =
-          await supabase
+        // 4. ✅ Get user's approved programs from Supabase
+        let userProgramsData;
+        let userProgramsError;
+
+        if (isSupabaseConfigured() && userId) {
+          const result = await supabase
             .from("user_programs")
             .select("*, programs(name)")
-            .eq("user_id", userData.id);
-
-        if (userProgramsError) {
-          console.error("Error fetching user programs:", userProgramsError);
+            .eq("user_id", userId);
+          userProgramsData = result.data;
+          userProgramsError = result.error;
         }
 
-        // Format user programs with program names
-        const formattedUserPrograms = (userProgramsData || []).map(
-          (up: any) => ({
+        if (
+          userProgramsError ||
+          !userProgramsData ||
+          userProgramsData.length === 0
+        ) {
+          // ✅ If no user programs found, create default access
+          // Only Business Professional Services is approved
+          const defaultAccess = (programsData || DEFAULT_PROGRAMS).map(
+            (p: any) => ({
+              program_name: p.name,
+              approved: p.name === "Business Professional Services",
+              progress: 0,
+            }),
+          );
+          setUserPrograms(defaultAccess);
+
+          // ✅ If Supabase is configured, create these entries in the database
+          if (isSupabaseConfigured() && userId) {
+            const programsToInsert = (programsData || DEFAULT_PROGRAMS).map(
+              (p: any) => ({
+                user_id: userId,
+                program_id: p.id,
+                approved: p.name === "Business Professional Services",
+                progress: 0,
+              }),
+            );
+
+            await supabase.from("user_programs").insert(programsToInsert);
+          }
+        } else {
+          // Format user programs with program names
+          const formattedUserPrograms = userProgramsData.map((up: any) => ({
             ...up,
             program_name: up.programs?.name || "",
-          }),
-        );
-        setUserPrograms(formattedUserPrograms);
+          }));
+          setUserPrograms(formattedUserPrograms);
+        }
 
         // Load goals from localStorage (for now, will migrate later)
         const savedGoals = JSON.parse(
@@ -273,8 +316,14 @@ function EntrepreneurDashboardContent() {
         setLoading(false);
       } catch (error) {
         console.error("Error loading dashboard:", error);
-        // Fallback to default programs
+        // ✅ Fallback to default programs with only Business Professional Services approved
         setPrograms(DEFAULT_PROGRAMS);
+        setUserPrograms([
+          { program_name: "Business Professional Services", approved: true },
+          { program_name: "RCP Small Business Mentorship", approved: false },
+          { program_name: "SEED Micro-Grant", approved: false },
+          { program_name: "SEK Catalyst: Empowered by KU", approved: false },
+        ]);
         setLoading(false);
       }
     };
@@ -295,6 +344,7 @@ function EntrepreneurDashboardContent() {
   const progress =
     totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0;
 
+  // ✅ Count accessible programs (only Business Professional Services by default)
   const accessiblePrograms = programs.filter((p) => hasProgramAccess(p.name));
 
   return (
