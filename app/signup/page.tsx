@@ -264,12 +264,36 @@ export default function SignupPage() {
         // SUPABASE REGISTRATION
         // ============================================
 
-        // 1. Create user in Supabase
+        // 1. Create the real Supabase Auth account first, then mirror
+        // it into public.users (no plaintext password stored - the
+        // password lives only in Supabase Auth's own secure store).
+        const { data: authSignupData, error: authSignupError } =
+          await supabase.auth.signUp({
+            email: formData.email,
+            password: formData.password,
+            options: {
+              data: {
+                name: `${formData.firstName} ${formData.lastName}`,
+                primary_role: formData.primaryRole,
+              },
+            },
+          });
+
+        if (authSignupError || !authSignupData.user) {
+          console.error("Supabase auth signup error:", authSignupError);
+          setError(
+            authSignupError?.message ||
+              "Failed to create account. Please try again.",
+          );
+          setIsSubmitting(false);
+          return;
+        }
+
         const { data: userData, error: userError } = await supabase
           .from("users")
           .insert({
+            id: authSignupData.user.id,
             email: formData.email,
-            password: formData.password,
             name: `${formData.firstName} ${formData.lastName}`,
             full_name: `${formData.firstName} ${formData.lastName}`,
             primary_role: formData.primaryRole,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase/client";
 import UserProgramModal from "@/components/user-program-modal";
 import { useRouter } from "next/navigation";
 import ProgramDetailsModal from "@/components/program-details-modal";
@@ -4769,65 +4770,92 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    const user = localStorage.getItem("currentUser");
-    if (!user) {
-      router.push("/login");
-      return;
-    }
+    let cancelled = false;
 
-    setIsAuthenticated(true);
+    const loadAuthAndProfile = async () => {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        router.push("/login");
+        return;
+      }
 
-    const savedProfile = localStorage.getItem(`profile_${user}`);
-    if (savedProfile) {
-      const parsed = JSON.parse(savedProfile);
-      setProfile(parsed);
-      setEditForm(parsed);
-    } else {
-      const name = user.split("@")[0];
-      const displayName = name.charAt(0).toUpperCase() + name.slice(1);
-      const newProfile = { name: displayName, email: user, role: "Member" };
-      setProfile(newProfile);
-      setEditForm(newProfile);
-    }
+      const { data: userRow, error: userError } = await supabase
+        .from("users")
+        .select("id, name, email, primary_role, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
 
-    if (user === "admin@ruralcommunity.org") {
-      router.push("/admin/dashboard");
-    }
+      if (cancelled) return;
 
-    const savedEmailNotifications = localStorage.getItem(
-      "email_notifications_enabled",
-    );
-    const savedSessionReminders = localStorage.getItem(
-      "session_reminders_enabled",
-    );
-    const savedBrowserNotifications = localStorage.getItem(
-      "browser_notifications_enabled",
-    );
+      if (userError || !userRow) {
+        router.push("/login");
+        return;
+      }
 
-    if (savedEmailNotifications !== null) {
-      setSettings((prev) => ({
-        ...prev,
-        emailNotifications: savedEmailNotifications === "true",
-      }));
-    }
-    if (savedSessionReminders !== null) {
-      setSettings((prev) => ({
-        ...prev,
-        mentorAlerts: savedSessionReminders === "true",
-      }));
-    }
-    if (savedBrowserNotifications !== null) {
-      setSettings((prev) => ({
-        ...prev,
-        reportAlerts: savedBrowserNotifications === "true",
-      }));
-    }
+      if (userRow.status && userRow.status !== "active") {
+        router.push("/login");
+        return;
+      }
 
-    const sessionRemindersEnabled =
-      localStorage.getItem("session_reminders_enabled") === "true";
-    if (sessionRemindersEnabled) {
-      setTimeout(() => checkForUpcomingSessions(), 2000);
-    }
+      // Admin/staff/program_manager belong on the admin dashboard, not here
+      if (
+        userRow.primary_role === "admin" ||
+        userRow.primary_role === "staff" ||
+        userRow.primary_role === "program_manager"
+      ) {
+        router.push("/admin/dashboard");
+        return;
+      }
+
+      const loadedProfile = {
+        name: userRow.name || userRow.email.split("@")[0],
+        email: userRow.email,
+        role: userRow.primary_role || "Member",
+        primaryRole: userRow.primary_role ?? undefined,
+      };
+
+      setProfile(loadedProfile);
+      setEditForm(loadedProfile);
+      setIsAuthenticated(true);
+
+      // Local UI preferences (not sensitive, fine to keep in localStorage)
+      const savedEmailNotifications = localStorage.getItem(
+        "email_notifications_enabled",
+      );
+      const savedSessionReminders = localStorage.getItem(
+        "session_reminders_enabled",
+      );
+      const savedBrowserNotifications = localStorage.getItem(
+        "browser_notifications_enabled",
+      );
+
+      if (savedEmailNotifications !== null) {
+        setSettings((prev) => ({
+          ...prev,
+          emailNotifications: savedEmailNotifications === "true",
+        }));
+      }
+      if (savedSessionReminders !== null) {
+        setSettings((prev) => ({
+          ...prev,
+          mentorAlerts: savedSessionReminders === "true",
+        }));
+      }
+      if (savedBrowserNotifications !== null) {
+        setSettings((prev) => ({
+          ...prev,
+          reportAlerts: savedBrowserNotifications === "true",
+        }));
+      }
+
+      const sessionRemindersEnabled =
+        localStorage.getItem("session_reminders_enabled") === "true";
+      if (sessionRemindersEnabled) {
+        setTimeout(() => checkForUpcomingSessions(), 2000);
+      }
+    };
+
+    loadAuthAndProfile();
 
     const interval = setInterval(() => {
       if (localStorage.getItem("session_reminders_enabled") === "true") {
@@ -4835,7 +4863,10 @@ export default function DashboardPage() {
       }
     }, 3600000);
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [router]);
 
   const saveProfile = () => {
@@ -4869,8 +4900,8 @@ export default function DashboardPage() {
     }, 1200);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("currentUser");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     router.push("/login");
   };
 

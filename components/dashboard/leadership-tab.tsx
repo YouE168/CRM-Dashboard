@@ -1,9 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { KPICard } from "./kpi-card";
 import { AddActionModal } from "@/components/ui/add-action-modal";
-import { loadCMSData } from "@/lib/cms-data";
+import {
+  getLeadershipStats,
+  getActionItems,
+  addActionItemRow,
+  updateActionItemStatus,
+  deleteActionItemRow,
+  subscribeToLeadershipChanges,
+  type LeadershipStats,
+  type ActionItemRow,
+} from "@/lib/supabase/dashboard-data";
 import {
   Users,
   CalendarDays,
@@ -20,15 +29,7 @@ import {
   ArrowRight,
   Video,
   Copy,
-  Plus,
 } from "lucide-react";
-
-interface ActionItemType {
-  task: string;
-  assignee: string;
-  due: string;
-  status: "pending" | "in-progress" | "completed" | "not-started";
-}
 
 interface LeadershipTabProps {
   profileName: string;
@@ -42,6 +43,15 @@ interface LeadershipTabProps {
     duration?: number,
   ) => void;
 }
+
+// ============================================================
+// NOTE: Past Meetings, Core Members, Member Spotlight, and the
+// static Resources list below are still hardcoded - deliberate
+// next-phase items, not yet migrated to Supabase. KPI stats,
+// Resources Invested figures, Next Meeting, and Action Items
+// (which are actively edited) are fully real/Supabase-backed
+// as of this pass.
+// ============================================================
 
 // Learn More Modal Component
 function LearnMoreModal({ onClose }: { onClose: () => void }) {
@@ -198,79 +208,71 @@ export function LeadershipTab({
   onCloseSignup,
   showToast,
 }: LeadershipTabProps) {
-  const [actionItems, setActionItems] = useState<ActionItemType[]>([
-    {
-      task: "Finalize Q2 program budgets",
-      assignee: "Michael Chen",
-      due: "May 10",
-      status: "in-progress",
-    },
-    {
-      task: "Recruit 5 new mentors for Youth program",
-      assignee: "Lisa Thompson",
-      due: "May 15",
-      status: "pending",
-    },
-    {
-      task: "Prepare Q1 impact report for board",
-      assignee: "Admin User",
-      due: "May 20",
-      status: "not-started",
-    },
-    {
-      task: "Coordinate cross-program workshop",
-      assignee: "David Park",
-      due: "May 8",
-      status: "completed",
-    },
-  ]);
-
+  const [stats, setStats] = useState<LeadershipStats | null>(null);
+  const [actionItems, setActionItems] = useState<ActionItemRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [cmsData, setCmsData] = useState(loadCMSData());
   const [showLearnMore, setShowLearnMore] = useState(false);
 
-  useEffect(() => {
-    setCmsData(loadCMSData());
+  const loadData = useCallback(async () => {
+    try {
+      const [statsData, itemsData] = await Promise.all([
+        getLeadershipStats(),
+        getActionItems(),
+      ]);
+      setStats(statsData);
+      setActionItems(itemsData);
+    } catch (err) {
+      console.error("Failed to load leadership data:", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const toggleActionItemStatus = (index: number) => {
-    setActionItems((prev) =>
-      prev.map((item, i) => {
-        if (i === index) {
-          const newStatus =
-            item.status === "completed" ? "pending" : "completed";
-          return { ...item, status: newStatus };
-        }
-        return item;
-      }),
-    );
-    showToast(
-      actionItems[index].status === "completed"
-        ? "Task marked as incomplete"
-        : "Task marked as complete!",
-      "success",
-    );
+  useEffect(() => {
+    loadData();
+    const unsubscribe = subscribeToLeadershipChanges(loadData);
+    return unsubscribe;
+  }, [loadData]);
+
+  const toggleActionItemStatus = async (item: ActionItemRow) => {
+    const newStatus = item.status === "completed" ? "pending" : "completed";
+    try {
+      await updateActionItemStatus(item.id, newStatus);
+      showToast(
+        item.status === "completed"
+          ? "Task marked as incomplete"
+          : "Task marked as complete!",
+        "success",
+      );
+    } catch (err) {
+      console.error("Failed to update action item:", err);
+    }
   };
 
-  const deleteActionItem = (index: number) => {
-    setActionItems((prev) => prev.filter((_, i) => i !== index));
-    showToast("Action item deleted", "info");
+  const deleteActionItem = async (id: string) => {
+    try {
+      await deleteActionItemRow(id);
+      showToast("Action item deleted", "info");
+    } catch (err) {
+      console.error("Failed to delete action item:", err);
+    }
   };
 
-  const addActionItem = (task: string) => {
-    const newItem: ActionItemType = {
-      task: task,
-      assignee: profileName,
-      due: new Date().toLocaleDateString("en-US", {
+  const addActionItem = async (task: string) => {
+    try {
+      const due = new Date().toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
-      }),
-      status: "pending",
-    };
-    setActionItems((prev) => [...prev, newItem]);
-    showToast(`✅ Action item added: "${task}"`, "success");
+      });
+      await addActionItemRow(task, profileName, due);
+      showToast(`✅ Action item added: "${task}"`, "success");
+    } catch (err) {
+      console.error("Failed to add action item:", err);
+    }
   };
 
+  // ---- Still hardcoded (next-phase) ----
   const pastMeetings = [
     {
       date: "Apr 17, 2026",
@@ -321,18 +323,25 @@ export function LeadershipTab({
       description: "Annual goals and strategic initiatives",
     },
   ];
+  // ---------------------------------------
 
-  // Get meeting data from CMS
-  const meeting = cmsData.leadership?.nextMeeting || {
-    date: "May 15, 2026",
-    day: 15,
-    month: "May",
-    time: "2:00 PM",
-    title: "Q2 Strategy & Impact Review",
-    description:
-      "Join us to review Q1 outcomes, discuss Q2 initiatives, and share best practices across programs.",
-    attendees: 12,
-    zoomPlaceholder: "123 456 7890",
+  if (loading || !stats) {
+    return (
+      <div className="p-6 text-sm text-gray-400">
+        Loading leadership roundtable…
+      </div>
+    );
+  }
+
+  const meeting = {
+    date: stats.next_meeting?.date ?? "TBD",
+    day: stats.next_meeting?.day ?? 0,
+    month: stats.next_meeting?.month ?? "",
+    time: stats.next_meeting?.time ?? "",
+    title: stats.next_meeting?.title ?? "Next Meeting",
+    description: stats.next_meeting?.description ?? "",
+    attendees: stats.next_meeting?.attendees ?? 0,
+    zoomPlaceholder: stats.next_meeting?.zoomPlaceholder ?? "",
   };
 
   return (
@@ -392,26 +401,23 @@ export function LeadershipTab({
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <KPICard
           title="Total Members"
-          value={cmsData.leadership.totalMembers}
+          value={stats.total_members}
           icon={Users}
-          trend={{ value: cmsData.leadership.membersTrend, isPositive: true }}
+          trend={{ value: stats.members_trend, isPositive: true }}
           subtitle="active members"
         />
         <KPICard
           title="New Signups"
-          value={cmsData.leadership.newSignups}
+          value={stats.new_signups}
           icon={Users}
-          trend={{ value: cmsData.leadership.signupsTrend, isPositive: true }}
+          trend={{ value: stats.signups_trend, isPositive: true }}
           subtitle="this month"
         />
         <KPICard
           title="Avg. Attendance"
-          value={`${cmsData.leadership.avgAttendance}%`}
+          value={`${stats.avg_attendance}%`}
           icon={CalendarDays}
-          trend={{
-            value: cmsData.leadership.attendanceTrend,
-            isPositive: true,
-          }}
+          trend={{ value: stats.attendance_trend, isPositive: true }}
           subtitle="per session"
         />
         <KPICard
@@ -425,12 +431,9 @@ export function LeadershipTab({
         />
         <KPICard
           title="Member Satisfaction"
-          value={`${cmsData.leadership.memberSatisfaction}%`}
+          value={`${stats.member_satisfaction}%`}
           icon={Award}
-          trend={{
-            value: cmsData.leadership.satisfactionTrend,
-            isPositive: true,
-          }}
+          trend={{ value: stats.satisfaction_trend, isPositive: true }}
           subtitle="positive rating"
         />
       </div>
@@ -449,25 +452,25 @@ export function LeadershipTab({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-3 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-emerald-600">
-                ${cmsData.leadership.grantFunding.toLocaleString()}
+                ${stats.grant_funding.toLocaleString()}
               </div>
               <div className="text-xs text-gray-500 mt-1">Grant Funding</div>
             </div>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-emerald-600">
-                {cmsData.leadership.mentorHours}
+                {stats.mentor_hours}
               </div>
               <div className="text-xs text-gray-500 mt-1">Mentor Hours</div>
             </div>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-emerald-600">
-                {cmsData.leadership.staffMembers}
+                {stats.staff_members}
               </div>
               <div className="text-xs text-gray-500 mt-1">Staff Members</div>
             </div>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-emerald-600">
-                ${cmsData.leadership.inKindSupport.toLocaleString()}
+                ${stats.in_kind_support.toLocaleString()}
               </div>
               <div className="text-xs text-gray-500 mt-1">In-Kind Support</div>
             </div>
@@ -476,38 +479,38 @@ export function LeadershipTab({
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="text-gray-600">Budget Utilization</span>
               <span className="text-gray-900 font-medium">
-                {cmsData.leadership.budgetUtilization}%
+                {stats.budget_utilization}%
               </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className="bg-emerald-600 h-2 rounded-full"
-                style={{ width: `${cmsData.leadership.budgetUtilization}%` }}
+                style={{ width: `${stats.budget_utilization}%` }}
               ></div>
             </div>
             <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
               <div className="flex justify-between">
                 <span className="text-gray-500">Personnel:</span>
                 <span className="font-medium">
-                  ${cmsData.leadership.personnelCost.toLocaleString()}
+                  ${stats.personnel_cost.toLocaleString()}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Programming:</span>
                 <span className="font-medium">
-                  ${cmsData.leadership.programmingCost.toLocaleString()}
+                  ${stats.programming_cost.toLocaleString()}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Operations:</span>
                 <span className="font-medium">
-                  ${cmsData.leadership.operationsCost.toLocaleString()}
+                  ${stats.operations_cost.toLocaleString()}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Marketing:</span>
                 <span className="font-medium">
-                  ${cmsData.leadership.marketingCost.toLocaleString()}
+                  ${stats.marketing_cost.toLocaleString()}
                 </span>
               </div>
             </div>
@@ -517,9 +520,8 @@ export function LeadershipTab({
 
       {/* TWO COLUMN LAYOUT */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
-          {/* NEXT MEETING - READ FROM CMS */}
+          {/* NEXT MEETING */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-white">
               <div className="flex items-center justify-between">
@@ -670,16 +672,16 @@ export function LeadershipTab({
               </h2>
             </div>
             <div className="divide-y divide-gray-100">
-              {actionItems.map((item, idx) => (
+              {actionItems.map((item) => (
                 <div
-                  key={idx}
+                  key={item.id}
                   className="px-5 py-3 flex items-center justify-between group hover:bg-gray-50"
                 >
                   <div className="flex items-center gap-3">
                     <input
                       type="checkbox"
                       checked={item.status === "completed"}
-                      onChange={() => toggleActionItemStatus(idx)}
+                      onChange={() => toggleActionItemStatus(item)}
                       className="w-4 h-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
                     />
                     <div>
@@ -689,12 +691,12 @@ export function LeadershipTab({
                         {item.task}
                       </p>
                       <p className="text-xs text-gray-400">
-                        {item.assignee} · Due {item.due}
+                        {item.assignee} · Due {item.due_date}
                       </p>
                     </div>
                   </div>
                   <button
-                    onClick={() => deleteActionItem(idx)}
+                    onClick={() => deleteActionItem(item.id)}
                     className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -712,7 +714,7 @@ export function LeadershipTab({
             </div>
           </div>
 
-          {/* PAST MEETINGS */}
+          {/* PAST MEETINGS (still static - next phase) */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">
@@ -760,7 +762,7 @@ export function LeadershipTab({
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
+        {/* RIGHT COLUMN (still static - next phase) */}
         <div className="space-y-6">
           <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100 p-5">
             <div className="flex items-center gap-2 mb-3">

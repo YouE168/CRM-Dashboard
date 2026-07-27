@@ -1,13 +1,12 @@
 "use client";
 
 import { ApprovalPopup } from "@/components/admin/approval-popup";
-import { useState, useEffect } from "react";
+import { getAdminNotes, sendAdminNoteRow, subscribeToAdminNotes } from "@/lib/supabase/dashboard-data";
 import { NotificationPanel } from "@/components/dashboard/notification-panel";
 import {
   notificationService,
   NotificationHelpers,
 } from "@/lib/notification-service";
-import { participants } from "@/lib/mock-data";
 import { ToastNotification } from "@/components/ui/toast-notification";
 import { useRouter } from "next/navigation";
 import { OverviewTab } from "@/components/dashboard/overview-tab";
@@ -20,6 +19,9 @@ import { ReportsTab } from "@/components/dashboard/reports-tab";
 import { SlidePanel } from "@/components/slide-panel";
 import { RoundtableSignupForm } from "@/components/roundtable-signup-form";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
+// Add Supabase client:
+import { supabase } from "@/lib/supabase/client";
+import { useEffect, useState, useCallback } from "react";
 import {
   MessageCircle,
   Send,
@@ -310,87 +312,98 @@ export default function AdminDashboardPage() {
     setConfirmModal((prev) => ({ ...prev, isOpen: false }));
   };
 
-  // Helper function to get recipients
-  const getRecipientsForType = (type: string) => {
-    const allUsers: any[] = JSON.parse(localStorage.getItem("users") || "[]");
-
-    if (type === "all") {
-      return allUsers.filter(
-        (u: any) =>
-          u.primaryRole === "coalition" ||
-          u.primaryRole === "mentor" ||
-          u.primaryRole === "partner",
-      );
+  // Load admin notes (Supabase, realtime)
+  const loadAdminNotes = useCallback(async () => {
+    try {
+      const data = await getAdminNotes();
+      setAdminNotes(data);
+    } catch (err) {
+      console.error("Failed to load admin notes:", err);
     }
+  }, []);
 
-    return allUsers.filter((u: any) => u.primaryRole === type);
-  };
+  useEffect(() => {
+    loadAdminNotes();
+    const unsubscribe = subscribeToAdminNotes(loadAdminNotes);
+    return unsubscribe;
+  }, [loadAdminNotes]);
 
   // Send admin note
-  const sendAdminNote = () => {
+  const sendAdminNote = async () => {
     if (!noteMessage.trim()) {
       showToast("Please enter a message", "error");
       return;
     }
 
-    const newNote = {
-      id: Date.now(),
-      subject: noteSubject || "General Update",
-      message: noteMessage,
-      recipientType: noteRecipientType,
-      sentBy: profile.name || "Admin",
-      sentAt: new Date().toISOString(),
-      readBy: [],
-    };
-
-    const updatedNotes = [newNote, ...adminNotes];
-    setAdminNotes(updatedNotes);
-    localStorage.setItem("admin_notes", JSON.stringify(updatedNotes));
-
-    // Also save to individual recipient buckets
-    const recipients = getRecipientsForType(noteRecipientType);
-    recipients.forEach((recipient: any) => {
-      const existingNotes = JSON.parse(
-        localStorage.getItem(`notes_${recipient.email}`) || "[]",
+    try {
+      await sendAdminNoteRow(
+        noteSubject || "General Update",
+        noteMessage,
+        noteRecipientType,
+        profile.name || "Admin",
       );
-      existingNotes.push({
-        ...newNote,
-        recipientEmail: recipient.email,
-      });
-      localStorage.setItem(
-        `notes_${recipient.email}`,
-        JSON.stringify(existingNotes),
-      );
-    });
 
-    setNoteMessage("");
-    setNoteSubject("");
-    setShowNoteModal(false);
-    showToast("Note sent successfully!", "success");
+      setNoteMessage("");
+      setNoteSubject("");
+      setShowNoteModal(false);
+      showToast("Note sent successfully!", "success");
+    } catch (err) {
+      console.error("Failed to send note:", err);
+      showToast("Failed to send note.", "error");
+    }
   };
 
-  // Load admin notes
+  // CHECK AUTHENTICATION & GET USER ROLE (Supabase)
   useEffect(() => {
-    const savedNotes = localStorage.getItem("admin_notes");
-    if (savedNotes) {
-      setAdminNotes(JSON.parse(savedNotes));
-    }
-  }, []);
+    let cancelled = false;
 
-  // CHECK AUTHENTICATION & GET USER ROLE
-  useEffect(() => {
-    const user = localStorage.getItem("currentUser");
-    if (!user) {
-      router.push("/login");
-      return;
-    }
+    const loadAuthAndProfile = async () => {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        router.push("/login");
+        return;
+      }
 
-    // Load user profile to get role
-    const savedProfile = localStorage.getItem(`profile_${user}`);
-    if (savedProfile) {
-      const parsed = JSON.parse(savedProfile);
-      setProfile(parsed);
-      const role = getUserRole(parsed);
+      const { data: userRow, error: userError } = await supabase
+        .from("users")
+        .select("id, name, email, primary_role, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (userError || !userRow) {
+        router.push("/login");
+        return;
+      }
+
+      if (userRow.status && userRow.status !== "active") {
+        router.push("/login");
+        return;
+      }
+
+      const roleLabel =
+        userRow.primary_role === "admin"
+          ? "Administrator"
+          : userRow.primary_role === "program_manager"
+            ? "Program Manager"
+            : userRow.primary_role === "coalition"
+              ? "Coalition Leader"
+              : userRow.primary_role === "partner"
+                ? "Partner"
+                : "Staff";
+
+      const loadedProfile = {
+        name: userRow.name || userRow.email.split("@")[0],
+        email: userRow.email,
+        role: roleLabel,
+        primaryRole: userRow.primary_role ?? undefined,
+        userType: userRow.primary_role ?? undefined,
+      };
+
+      setProfile(loadedProfile);
+      setEditForm(loadedProfile);
+      const role = getUserRole(loadedProfile);
       setUserRole(role);
 
       // If not admin/staff/program_manager/coalition/partner, redirect to regular dashboard
@@ -398,89 +411,65 @@ export default function AdminDashboardPage() {
         router.push("/");
         return;
       }
-    } else {
-      // Default to staff
-      setUserRole("staff");
-    }
 
-    setIsAuthenticated(true);
+      setIsAuthenticated(true);
 
-    // Load signups count
-    const savedSignups = JSON.parse(
-      localStorage.getItem("programSignups") || "[]",
-    );
-    setSignupsCount(savedSignups.length);
+      // Load signups count
+      const savedSignups = JSON.parse(
+        localStorage.getItem("programSignups") || "[]",
+      );
+      setSignupsCount(savedSignups.length);
+    };
+
+    loadAuthAndProfile();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  // LOAD ACCESS REQUESTS
+  // LOAD ACCESS REQUESTS (Supabase, realtime)
   useEffect(() => {
-    const loadAccessRequests = () => {
-      const stored = localStorage.getItem("access_requests");
-      if (stored) {
-        const requests = JSON.parse(stored);
-        setAccessRequests(requests);
-      } else {
-        // Add some sample requests for testing
-        const sampleRequests: AccessRequest[] = [
-          {
-            name: "Sarah Johnson",
-            email: "sarah.johnson@example.com",
-            reason:
-              "I need to manage the Business Catalyst program participants and track their progress. As a program coordinator, I would benefit from having access to view participant data and generate reports.",
-            requestedRole: "program_manager",
-            submittedAt: new Date(
-              Date.now() - 2 * 24 * 60 * 60 * 1000,
-            ).toISOString(),
-            status: "pending",
-            verificationToken:
-              "sarah_token_" + Math.random().toString(36).substring(2, 15),
-            passwordSet: false,
-          },
-          {
-            name: "Michael Chen",
-            email: "michael.chen@example.com",
-            reason:
-              "As a coalition leader, I need access to view participant data across all programs to better coordinate resources and support.",
-            requestedRole: "staff",
-            submittedAt: new Date(
-              Date.now() - 5 * 24 * 60 * 60 * 1000,
-            ).toISOString(),
-            status: "pending",
-            verificationToken:
-              "michael_token_" + Math.random().toString(36).substring(2, 15),
-            passwordSet: false,
-          },
-          {
-            name: "Emily Rodriguez",
-            email: "emily.rodriguez@example.com",
-            reason:
-              "I'm the new program manager for SEED Micro-Grant and need to manage applications and track participant progress.",
-            requestedRole: "program_manager",
-            submittedAt: new Date(
-              Date.now() - 1 * 24 * 60 * 60 * 1000,
-            ).toISOString(),
-            status: "pending",
-            verificationToken:
-              "emily_token_" + Math.random().toString(36).substring(2, 15),
-            passwordSet: false,
-          },
-        ];
-        localStorage.setItem("access_requests", JSON.stringify(sampleRequests));
-        setAccessRequests(sampleRequests);
+    const loadAccessRequests = async () => {
+      const { data, error } = await supabase
+        .from("access_requests")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Failed to load access requests:", error);
+        return;
       }
+
+      const mapped: any[] = (data ?? []).map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        reason: r.reason,
+        requestedRole: r.requested_role,
+        submittedAt: r.created_at,
+        status: r.status,
+        verificationToken: r.verification_token,
+        passwordSet: r.password_set,
+      }));
+      setAccessRequests(mapped);
     };
 
     loadAccessRequests();
 
-    // Listen for storage events to update in real-time
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "access_requests") {
-        const updated = JSON.parse(e.newValue || "[]");
-        setAccessRequests(updated);
-      }
+    const channelName = `access-requests-${Math.random().toString(36).slice(2)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "access_requests" },
+        loadAccessRequests,
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
   // ============================================
@@ -489,77 +478,55 @@ export default function AdminDashboardPage() {
   const handleApproveRequest = (request: AccessRequest) => {
     showConfirmModal(
       "Approve Access Request",
-      `Are you sure you want to approve ${request.name} for ${request.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"} access?\n\nThey will be able to ${request.requestedRole === "program_manager" ? "manage specific programs" : "access CMS, reports, and all programs"}.`,
-      () => {
-        // Generate a proper token if one doesn't exist
-        const token =
-          request.verificationToken ||
-          Math.random().toString(36).substring(2, 15) +
-            Math.random().toString(36).substring(2, 15);
+      `Are you sure you want to approve ${request.name} for ${request.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"} access?\n\nThey will be able to ${request.requestedRole === "program_manager" ? "manage specific programs" : "access CMS, reports, and all programs"}.\n\nThey will receive an email to set their password.`,
+      async () => {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (!token) {
+            showToast("Your session expired. Please log in again.", "error");
+            return;
+          }
 
-        const updatedRequests = accessRequests.map((r) =>
-          r.email === request.email && r.submittedAt === request.submittedAt
-            ? { ...r, status: "approved" as const, verificationToken: token }
-            : r,
-        );
-        localStorage.setItem(
-          "access_requests",
-          JSON.stringify(updatedRequests),
-        );
-        setAccessRequests(updatedRequests);
+          const res = await fetch("/api/admin/approve-access", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              requestId: (request as any).id,
+              name: request.name,
+              email: request.email,
+              requestedRole: request.requestedRole,
+            }),
+          });
 
-        // Update the user's profile in localStorage
-        const existingProfile = localStorage.getItem(
-          `profile_${request.email}`,
-        );
-        if (existingProfile) {
-          const profile = JSON.parse(existingProfile);
-          profile.userType =
-            request.requestedRole === "program_manager"
-              ? "program_manager"
-              : "staff";
-          profile.primaryRole =
-            request.requestedRole === "program_manager"
-              ? "program_manager"
-              : "staff";
-          localStorage.setItem(
-            `profile_${request.email}`,
-            JSON.stringify(profile),
+          const result = await res.json();
+          if (!res.ok || !result.success) {
+            showToast(result.error || "Failed to approve request.", "error");
+            return;
+          }
+
+          // ✅ Add real-time notification
+          notificationService.addNotification(
+            "inapp",
+            "general",
+            `✅ Access Approved: ${request.name}`,
+            `${request.name} was approved for ${request.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"} access. They've been emailed a link to set their password.`,
+            { user: request },
           );
+
+          showToast(
+            `${request.name}'s access has been approved! They'll receive an email to set their password.`,
+            "success",
+          );
+
+          setShowRequestDetails(false);
+        } catch (err) {
+          console.error("Approve request error:", err);
+          showToast("Something went wrong approving this request.", "error");
         }
-
-        // Update user status in users list
-        const users = JSON.parse(localStorage.getItem("users") || "[]");
-        const userIndex = users.findIndex(
-          (u: any) => u.email === request.email,
-        );
-        if (userIndex !== -1) {
-          users[userIndex].status = "approved";
-          localStorage.setItem("users", JSON.stringify(users));
-        }
-
-        // Show the modern popup with proper token
-        setApprovalPopup({
-          isOpen: true,
-          userName: request.name,
-          userEmail: request.email,
-          userRole: request.requestedRole,
-          token: token, // Use the proper token
-        });
-
-        // ✅ Add real-time notification
-        notificationService.addNotification(
-          "inapp",
-          "general",
-          `✅ Access Approved: ${request.name}`,
-          `${request.name} was approved for ${request.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"} access.`,
-          { user: request },
-        );
-
-        // Also show toast notification
-        showToast(`${request.name}'s access has been approved!`, "success");
-
-        setShowRequestDetails(false);
       },
       "info",
     );
@@ -581,71 +548,55 @@ export default function AdminDashboardPage() {
     showConfirmModal(
       "Reject Access Request",
       `Are you sure you want to reject ${request.name}'s access request?`,
-      () => {
-        const updatedRequests = accessRequests.map((r) =>
-          r.email === request.email && r.submittedAt === request.submittedAt
-            ? { ...r, status: "rejected" as const }
-            : r,
-        );
-        localStorage.setItem(
-          "access_requests",
-          JSON.stringify(updatedRequests),
-        );
-        setAccessRequests(updatedRequests);
+      async () => {
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (!token) {
+            showToast("Your session expired. Please log in again.", "error");
+            return;
+          }
 
-        // ✅ Add real-time notification
-        notificationService.addNotification(
-          "inapp",
-          "general",
-          `❌ Access Rejected: ${request.name}`,
-          `${request.name}'s access request was rejected.`,
-          { user: request },
-        );
+          const res = await fetch("/api/admin/reject-access", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ requestId: (request as any).id }),
+          });
 
-        showToast(
-          `Access request from ${request.name} has been rejected.`,
-          "info",
-        );
-        setShowRequestDetails(false);
+          const result = await res.json();
+          if (!res.ok || !result.success) {
+            showToast(result.error || "Failed to reject request.", "error");
+            return;
+          }
+
+          // ✅ Add real-time notification
+          notificationService.addNotification(
+            "inapp",
+            "general",
+            `❌ Access Rejected: ${request.name}`,
+            `${request.name}'s access request was rejected.`,
+            { user: request },
+          );
+
+          showToast(
+            `Access request from ${request.name} has been rejected.`,
+            "info",
+          );
+          setShowRequestDetails(false);
+        } catch (err) {
+          console.error("Reject request error:", err);
+          showToast("Something went wrong rejecting this request.", "error");
+        }
       },
       "danger",
     );
   };
 
-  // LOAD USER PROFILE FROM LOCALSTORAGE
-  useEffect(() => {
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      const savedProfile = localStorage.getItem(`profile_${currentUser}`);
-      if (savedProfile) {
-        const parsedProfile = JSON.parse(savedProfile);
-        setProfile(parsedProfile);
-        setEditForm(parsedProfile);
-      } else if (currentUser !== "admin@ruralcommunity.org") {
-        const userName = currentUser.split("@")[0];
-        const displayName =
-          userName.charAt(0).toUpperCase() + userName.slice(1);
-        const newProfile = {
-          name: displayName,
-          email: currentUser,
-          role: "Staff",
-        };
-        setProfile(newProfile);
-        setEditForm(newProfile);
-      } else {
-        setProfile({
-          name: "Admin User",
-          email: "admin@ruralcommunity.org",
-          role: "Administrator",
-        });
-        setEditForm({
-          name: "Admin User",
-          email: "admin@ruralcommunity.org",
-          role: "Administrator",
-        });
-      }
-    }
-  }, []);
+  // Profile is now loaded by the Supabase auth effect above -
+  // this duplicate localStorage-based effect has been removed.
 
   // Settings
   const [settings, setSettings] = useState<SettingsData>({
@@ -704,11 +655,19 @@ export default function AdminDashboardPage() {
     setTimeout(() => setSettingsSaved(false), 2000);
   };
 
-  const saveProfile = () => {
+  const saveProfile = async () => {
     setProfile(editForm);
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      localStorage.setItem(`profile_${currentUser}`, JSON.stringify(editForm));
+    const { data: authData } = await supabase.auth.getUser();
+    if (authData.user) {
+      const { error } = await supabase
+        .from("users")
+        .update({ name: editForm.name })
+        .eq("id", authData.user.id);
+      if (error) {
+        console.error("Failed to save profile:", error);
+        showToast("Failed to save profile.", "error");
+        return;
+      }
     }
     setEditSaved(true);
     showToast("Profile updated successfully!", "success");
@@ -739,8 +698,8 @@ export default function AdminDashboardPage() {
     showConfirmModal(
       "Sign Out",
       "Are you sure you want to sign out?",
-      () => {
-        localStorage.removeItem("currentUser");
+      async () => {
+        await supabase.auth.signOut();
         router.push("/login");
       },
       "warning",
@@ -1076,18 +1035,6 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
 
-              <div className="border-t pt-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">
-                  👥 User Activity
-                </h3>
-                <button
-                  onClick={() => router.push("/admin/login-history")}
-                  className="w-full text-left px-3 py-2 text-sm text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                >
-                  📊 View Login History →
-                </button>
-              </div>
-
               {/* Program Management */}
               <div className="border-t pt-4">
                 <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -1257,78 +1204,6 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* Test Notifications */}
-          <div className="border-t pt-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">
-              Test Notifications
-              <span className="text-xs font-normal text-gray-400 ml-2">
-                Send a test alert
-              </span>
-            </h3>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={async () => {
-                  await NotificationHelpers.notifyMentorActivity(
-                    "Sarah Johnson",
-                    "logged_hours",
-                    "3 hours logged",
-                  );
-                  showToast("Test mentor notification sent.", "success");
-                }}
-                className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm"
-              >
-                Mentor Alert
-              </button>
-              <button
-                onClick={async () => {
-                  await NotificationHelpers.notifyParticipantMilestone(
-                    "Michael Chen",
-                    "Business Plan Complete",
-                    "SEED Micro-Grant",
-                  );
-                  showToast("Test milestone notification sent.", "success");
-                }}
-                className="px-3 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors text-sm"
-              >
-                Milestone
-              </button>
-              <button
-                onClick={async () => {
-                  const nextMonth = new Date();
-                  nextMonth.setMonth(nextMonth.getMonth() + 1);
-                  await NotificationHelpers.sendReportReminder(
-                    nextMonth.toLocaleString("default", {
-                      month: "long",
-                      year: "numeric",
-                    }),
-                    "5th of the month",
-                  );
-                  showToast("Test report reminder sent.", "success");
-                }}
-                className="px-3 py-2 bg-orange-50 text-orange-700 rounded-lg hover:bg-orange-100 transition-colors text-sm"
-              >
-                Report Reminder
-              </button>
-              <button
-                onClick={async () => {
-                  await notificationService.sendEmail({
-                    to: profile.email || "admin@ruralcommunity.org",
-                    subject: "Test Email Notification",
-                    body: "This is a test email from the notification system.",
-                    type: "general",
-                  });
-                  showToast("Test email sent.", "success");
-                }}
-                className="px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors text-sm"
-              >
-                Test Email
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 mt-2 text-center">
-              Click a button to send a test notification
-            </p>
-          </div>
-
           {/* Appearance Settings */}
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
@@ -1411,53 +1286,6 @@ export default function AdminDashboardPage() {
               </button>
             </div>
           </div>
-
-          {/* Danger Zone - Admin Only */}
-          {isAdmin && (
-            <div className="border-t pt-4">
-              <h3 className="text-sm font-semibold text-red-600 mb-3">
-                Danger Zone
-              </h3>
-              <button
-                onClick={() => {
-                  showConfirmModal(
-                    "⚠️ Danger Zone",
-                    "WARNING: This will clear all mock data. This action cannot be undone. Are you absolutely sure?",
-                    () => {
-                      showConfirmModal(
-                        "🔴 FINAL WARNING",
-                        "All participant and program data will be permanently deleted.",
-                        () => {
-                          const confirmation = window.prompt(
-                            'Type "DELETE" to confirm:',
-                          );
-                          if (confirmation === "DELETE") {
-                            localStorage.removeItem("users");
-                            localStorage.removeItem("currentUser");
-                            showToast(
-                              "All mock data has been cleared. The page will now refresh.",
-                              "warning",
-                            );
-                            setTimeout(() => window.location.reload(), 1500);
-                          } else {
-                            showToast(
-                              "Data clear cancelled. Incorrect confirmation text.",
-                              "error",
-                            );
-                          }
-                        },
-                        "danger",
-                      );
-                    },
-                    "danger",
-                  );
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-              >
-                Clear all mock data (testing only)
-              </button>
-            </div>
-          )}
 
           {/* Save Button */}
           <div className="pt-2">
@@ -2117,7 +1945,7 @@ export default function AdminDashboardPage() {
               {adminNotes.filter(
                 (n) =>
                   noteRecipientType === "all" ||
-                  n.recipientType === noteRecipientType,
+                  n.recipient_type === noteRecipientType,
               ).length === 0 ? (
                 <div className="bg-white rounded-xl p-8 text-center">
                   <MessageCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -2131,7 +1959,7 @@ export default function AdminDashboardPage() {
                   .filter(
                     (n) =>
                       noteRecipientType === "all" ||
-                      n.recipientType === noteRecipientType,
+                      n.recipient_type === noteRecipientType,
                   )
                   .map((note) => (
                     <div
@@ -2145,18 +1973,18 @@ export default function AdminDashboardPage() {
                           </h3>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span className="text-xs text-gray-500">
-                              From: {note.sentBy}
+                              From: {note.sent_by}
                             </span>
                             <span className="text-xs text-gray-300">•</span>
                             <span className="text-xs text-gray-500">
-                              {new Date(note.sentAt).toLocaleString()}
+                              {new Date(note.created_at).toLocaleString()}
                             </span>
                             <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
                               To:{" "}
-                              {note.recipientType === "all"
+                              {note.recipient_type === "all"
                                 ? "All"
-                                : note.recipientType.charAt(0).toUpperCase() +
-                                  note.recipientType.slice(1)}
+                                : note.recipient_type.charAt(0).toUpperCase() +
+                                  note.recipient_type.slice(1)}
                             </span>
                           </div>
                         </div>

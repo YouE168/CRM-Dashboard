@@ -1,38 +1,49 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { KPICard } from "./kpi-card";
 import { ClientsByProgramChart } from "./clients-by-program-chart";
 import { ClientsByCountyChart } from "./clients-by-county-chart";
 import { SessionsChart } from "./sessions-chart";
 import { ParticipantsTable } from "./participants-table";
 import { Users, UserCheck, CalendarDays, Award } from "lucide-react";
-import { participants } from "@/lib/mock-data";
-import { loadCMSData } from "@/lib/cms-data";
-
-const mentors = [
-  { name: "Michael Chen", status: "Active" },
-  { name: "Lisa Thompson", status: "Active" },
-  { name: "David Park", status: "Active" },
-  { name: "Jennifer Lee", status: "Active" },
-  { name: "Tom Anderson", status: "Active" },
-  { name: "Susan White", status: "On Leave" },
-  { name: "Chris Taylor", status: "Active" },
-  { name: "Rachel Green", status: "Active" },
-];
+import {
+  getOverviewStats,
+  getParticipants,
+  subscribeToDashboardChanges,
+  type OverviewStats,
+  type DashboardParticipant,
+} from "@/lib/supabase/dashboard-data";
 
 export function OverviewTab() {
-  const [cmsData, setCmsData] = useState(loadCMSData());
+  const [stats, setStats] = useState<OverviewStats | null>(null);
+  const [participants, setParticipants] = useState<DashboardParticipant[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [statsData, participantsData] = await Promise.all([
+        getOverviewStats(),
+        getParticipants(),
+      ]);
+      setStats(statsData);
+      setParticipants(participantsData);
+    } catch (err) {
+      console.error("Failed to load overview data:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    setCmsData(loadCMSData());
-    // Listen for storage changes from CMS editor
-    const handleStorageChange = () => {
-      setCmsData(loadCMSData());
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
+    loadData();
+    const unsubscribe = subscribeToDashboardChanges(loadData);
+    return unsubscribe;
+  }, [loadData]);
+
+  if (loading || !stats) {
+    return <div className="p-6 text-sm text-gray-400">Loading overview…</div>;
+  }
 
   return (
     <>
@@ -45,36 +56,30 @@ export function OverviewTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KPICard
           title="Total Participants"
-          value={cmsData.overview.totalParticipants}
+          value={stats.total_participants}
           icon={Users}
-          trend={{
-            value: cmsData.overview.participantsTrend,
-            isPositive: true,
-          }}
+          trend={{ value: stats.total_participants_change, isPositive: true }}
           subtitle="this quarter"
         />
         <KPICard
           title="Active Mentors"
-          value={cmsData.overview.activeMentors}
+          value={stats.active_mentors}
           icon={UserCheck}
-          trend={{ value: cmsData.overview.mentorsTrend, isPositive: true }}
+          trend={{ value: stats.active_mentors_change, isPositive: true }}
           subtitle="currently active"
         />
         <KPICard
           title="Sessions This Month"
-          value={cmsData.overview.sessionsThisMonth}
+          value={stats.sessions_this_month}
           icon={CalendarDays}
-          trend={{ value: cmsData.overview.sessionsTrend, isPositive: true }}
+          trend={{ value: stats.sessions_this_month_change, isPositive: true }}
           subtitle="mentoring sessions"
         />
         <KPICard
           title="Avg. Satisfaction"
-          value={`${cmsData.overview.avgSatisfaction}%`}
+          value={`${stats.avg_satisfaction}%`}
           icon={Award}
-          trend={{
-            value: cmsData.overview.satisfactionTrend,
-            isPositive: true,
-          }}
+          trend={{ value: stats.avg_satisfaction_change, isPositive: true }}
           subtitle="participant rating"
         />
       </div>
@@ -83,7 +88,16 @@ export function OverviewTab() {
         <ClientsByCountyChart />
         <SessionsChart />
       </div>
-      <ParticipantsTable participants={participants} />
+      <ParticipantsTable
+        participants={participants.map((p) => ({
+          id: p.id,
+          name: p.name ?? "",
+          program: p.program_name ?? "",
+          county: "",
+          stage: p.status,
+          mentor: p.mentor ?? "",
+        }))}
+      />
     </>
   );
 }

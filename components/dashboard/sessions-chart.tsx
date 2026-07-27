@@ -8,52 +8,83 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import { sessionsPerMonth } from "@/lib/mock-data";
+import { useState, useEffect, useCallback } from "react";
+import {
+  getSessionsPerMonth,
+  subscribeToDashboardChanges,
+  type SessionMonthRow,
+} from "@/lib/supabase/dashboard-data";
 
 export function SessionsChart() {
+  const [data, setData] = useState<SessionMonthRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    try {
+      const rows = await getSessionsPerMonth();
+      setData(rows);
+    } catch (err) {
+      console.error("Failed to load sessions chart:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    const unsubscribe = subscribeToDashboardChanges(loadData);
+    return unsubscribe;
+  }, [loadData]);
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
       <h3 className="text-sm font-semibold text-gray-900 mb-4">
         Sessions per Month
       </h3>
-      <ResponsiveContainer width="100%" height={180}>
-        <AreaChart data={sessionsPerMonth}>
-          <defs>
-            <linearGradient id="sessGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
-              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <XAxis
-            dataKey="month"
-            tick={{ fill: "#9ca3af", fontSize: 11 }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <YAxis
-            tick={{ fill: "#9ca3af", fontSize: 11 }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <Tooltip
-            contentStyle={{
-              background: "#fff",
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
-              fontSize: 12,
-            }}
-          />
-          <Area
-            type="monotone"
-            dataKey="sessions"
-            stroke="#10b981"
-            strokeWidth={2}
-            fill="url(#sessGrad)"
-            dot={false}
-            activeDot={{ r: 4, fill: "#10b981" }}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+      {loading ? (
+        <div className="h-[180px] flex items-center justify-center text-xs text-gray-400">
+          Loading…
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={180}>
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="sessGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
+                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis
+              dataKey="month"
+              tick={{ fill: "#9ca3af", fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              tick={{ fill: "#9ca3af", fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <Tooltip
+              contentStyle={{
+                background: "#fff",
+                border: "1px solid #e5e7eb",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+            />
+            <Area
+              type="monotone"
+              dataKey="sessions"
+              stroke="#10b981"
+              strokeWidth={2}
+              fill="url(#sessGrad)"
+              dot={false}
+              activeDot={{ r: 4, fill: "#10b981" }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      )}
     </div>
   );
 }

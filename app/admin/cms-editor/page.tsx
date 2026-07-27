@@ -15,6 +15,12 @@ import {
   defaultReportData,
   type ReportData,
 } from "@/lib/report-data";
+import { supabase } from "@/lib/supabase/client";
+import {
+  getOverviewStatsForEdit,
+  updateOverviewStats,
+  type OverviewStats,
+} from "@/lib/supabase/dashboard-data";
 
 type TabType =
   | "overview"
@@ -37,6 +43,8 @@ export default function CMSEditorPage() {
   const [newProgram, setNewProgram] = useState("");
   const [newCounty, setNewCounty] = useState("");
   const [newDateRange, setNewDateRange] = useState("");
+  const [overviewStats, setOverviewStats] = useState<(OverviewStats & { id: string }) | null>(null);
+  const [overviewSaving, setOverviewSaving] = useState(false);
 
   // TOAST STATE
   const [toast, setToast] = useState<{
@@ -61,18 +69,73 @@ export default function CMSEditorPage() {
   };
 
   useEffect(() => {
-    const user = localStorage.getItem("currentUser");
-    if (user !== "admin@ruralcommunity.org") {
-      router.push("/");
-      return;
-    }
-    setIsAdmin(true);
+    let cancelled = false;
 
-    const loadedCmsData = loadCMSData();
-    setCmsData(loadedCmsData);
-    setReportData(loadReportData());
-    setIsLoading(false);
+    const checkAuthAndLoad = async () => {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("primary_role, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (!userRow || userRow.primary_role !== "admin" || (userRow.status && userRow.status !== "active")) {
+        router.push("/");
+        return;
+      }
+
+      setIsAdmin(true);
+
+      const loadedCmsData = loadCMSData();
+      setCmsData(loadedCmsData);
+      setReportData(loadReportData());
+
+      try {
+        const stats = await getOverviewStatsForEdit();
+        if (!cancelled) setOverviewStats(stats);
+      } catch (err) {
+        console.error("Failed to load overview stats:", err);
+      }
+
+      if (!cancelled) setIsLoading(false);
+    };
+
+    checkAuthAndLoad();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
+
+  const handleSaveOverview = async () => {
+    if (!overviewStats) return;
+    setOverviewSaving(true);
+    try {
+      await updateOverviewStats(overviewStats.id, {
+        total_participants: overviewStats.total_participants,
+        total_participants_change: overviewStats.total_participants_change,
+        active_mentors: overviewStats.active_mentors,
+        active_mentors_change: overviewStats.active_mentors_change,
+        sessions_this_month: overviewStats.sessions_this_month,
+        sessions_this_month_change: overviewStats.sessions_this_month_change,
+        avg_satisfaction: overviewStats.avg_satisfaction,
+        avg_satisfaction_change: overviewStats.avg_satisfaction_change,
+      });
+      showToast("Overview stats saved to the live dashboard!", "success");
+    } catch (err) {
+      console.error("Failed to save overview stats:", err);
+      showToast("Failed to save overview stats.", "error");
+    } finally {
+      setOverviewSaving(false);
+    }
+  };
 
   const handleSave = () => {
     const updatedCmsData = {
@@ -309,165 +372,160 @@ export default function CMSEditorPage() {
           ))}
         </div>
 
-        {/* Overview Tab */}
+        {/* Overview Tab - real Supabase data */}
         {activeTab === "overview" && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Overview Page Numbers
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Total Participants
-                </label>
-                <input
-                  type="number"
-                  value={cmsData.overview?.totalParticipants ?? 0}
-                  onChange={(e) =>
-                    setCmsData({
-                      ...cmsData,
-                      overview: {
-                        ...cmsData.overview,
-                        totalParticipants: parseInt(e.target.value) || 0,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                />
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Overview Page Numbers
+              </h2>
+              <button
+                onClick={handleSaveOverview}
+                disabled={overviewSaving || !overviewStats}
+                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {overviewSaving ? "Saving..." : "💾 Save Overview to Live Site"}
+              </button>
+            </div>
+            {!overviewStats ? (
+              <p className="text-sm text-gray-400">Loading overview data…</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Total Participants
+                  </label>
+                  <input
+                    type="number"
+                    value={overviewStats.total_participants ?? 0}
+                    onChange={(e) =>
+                      setOverviewStats({
+                        ...overviewStats,
+                        total_participants: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Participants Trend (+%)
+                  </label>
+                  <input
+                    type="number"
+                    value={overviewStats.total_participants_change ?? 0}
+                    onChange={(e) =>
+                      setOverviewStats({
+                        ...overviewStats,
+                        total_participants_change: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Active Mentors
+                  </label>
+                  <input
+                    type="number"
+                    value={overviewStats.active_mentors ?? 0}
+                    onChange={(e) =>
+                      setOverviewStats({
+                        ...overviewStats,
+                        active_mentors: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Mentors Trend (+%)
+                  </label>
+                  <input
+                    type="number"
+                    value={overviewStats.active_mentors_change ?? 0}
+                    onChange={(e) =>
+                      setOverviewStats({
+                        ...overviewStats,
+                        active_mentors_change: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Sessions This Month
+                  </label>
+                  <input
+                    type="number"
+                    value={overviewStats.sessions_this_month ?? 0}
+                    onChange={(e) =>
+                      setOverviewStats({
+                        ...overviewStats,
+                        sessions_this_month: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Sessions Trend (+%)
+                  </label>
+                  <input
+                    type="number"
+                    value={overviewStats.sessions_this_month_change ?? 0}
+                    onChange={(e) =>
+                      setOverviewStats({
+                        ...overviewStats,
+                        sessions_this_month_change: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Average Satisfaction (%)
+                  </label>
+                  <input
+                    type="number"
+                    value={overviewStats.avg_satisfaction ?? 0}
+                    onChange={(e) =>
+                      setOverviewStats({
+                        ...overviewStats,
+                        avg_satisfaction: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Satisfaction Trend (+%)
+                  </label>
+                  <input
+                    type="number"
+                    value={overviewStats.avg_satisfaction_change ?? 0}
+                    onChange={(e) =>
+                      setOverviewStats({
+                        ...overviewStats,
+                        avg_satisfaction_change: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Participants Trend (+%)
-                </label>
-                <input
-                  type="number"
-                  value={cmsData.overview?.participantsTrend ?? 0}
-                  onChange={(e) =>
-                    setCmsData({
-                      ...cmsData,
-                      overview: {
-                        ...cmsData.overview,
-                        participantsTrend: parseInt(e.target.value) || 0,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Active Mentors
-                </label>
-                <input
-                  type="number"
-                  value={cmsData.overview?.activeMentors ?? 0}
-                  onChange={(e) =>
-                    setCmsData({
-                      ...cmsData,
-                      overview: {
-                        ...cmsData.overview,
-                        activeMentors: parseInt(e.target.value) || 0,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mentors Trend (+%)
-                </label>
-                <input
-                  type="number"
-                  value={cmsData.overview?.mentorsTrend ?? 0}
-                  onChange={(e) =>
-                    setCmsData({
-                      ...cmsData,
-                      overview: {
-                        ...cmsData.overview,
-                        mentorsTrend: parseInt(e.target.value) || 0,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sessions This Month
-                </label>
-                <input
-                  type="number"
-                  value={cmsData.overview?.sessionsThisMonth ?? 0}
-                  onChange={(e) =>
-                    setCmsData({
-                      ...cmsData,
-                      overview: {
-                        ...cmsData.overview,
-                        sessionsThisMonth: parseInt(e.target.value) || 0,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sessions Trend (+%)
-                </label>
-                <input
-                  type="number"
-                  value={cmsData.overview?.sessionsTrend ?? 0}
-                  onChange={(e) =>
-                    setCmsData({
-                      ...cmsData,
-                      overview: {
-                        ...cmsData.overview,
-                        sessionsTrend: parseInt(e.target.value) || 0,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Average Satisfaction (%)
-                </label>
-                <input
-                  type="number"
-                  value={cmsData.overview?.avgSatisfaction ?? 0}
-                  onChange={(e) =>
-                    setCmsData({
-                      ...cmsData,
-                      overview: {
-                        ...cmsData.overview,
-                        avgSatisfaction: parseInt(e.target.value) || 0,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Satisfaction Trend (+%)
-                </label>
-                <input
-                  type="number"
-                  value={cmsData.overview?.satisfactionTrend ?? 0}
-                  onChange={(e) =>
-                    setCmsData({
-                      ...cmsData,
-                      overview: {
-                        ...cmsData.overview,
-                        satisfactionTrend: parseInt(e.target.value) || 0,
-                      },
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                />
-              </div>
+            )}
+            <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+              <p className="text-xs text-green-700">
+                ✅ This tab is connected to the live Supabase database — changes
+                here appear on the real Overview dashboard immediately after saving.
+              </p>
             </div>
           </div>
         )}

@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 import { USER_ROLES, UserRole, canAccessRoute } from "@/lib/roles";
 
 interface RouteGuardProps {
@@ -16,34 +17,49 @@ export function RouteGuard({
   children,
   allowedRoles,
   redirectTo = "/",
-  requirePermission,
 }: RouteGuardProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
-    const checkAuth = () => {
-      const currentUser = localStorage.getItem("currentUser");
-      if (!currentUser) {
+    let cancelled = false;
+
+    const checkAuth = async () => {
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
+
+      if (cancelled) return;
+
+      if (authError || !authData.user) {
         router.push("/login");
         return;
       }
 
-      const savedProfile = localStorage.getItem(`profile_${currentUser}`);
-      if (!savedProfile) {
+      const { data: userRow, error: userError } = await supabase
+        .from("users")
+        .select("primary_role, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (userError || !userRow) {
         router.push("/login");
         return;
       }
 
-      const profile = JSON.parse(savedProfile);
-      const role = profile.primaryRole || profile.userType || USER_ROLES.STAFF;
+      if (userRow.status && userRow.status !== "active") {
+        router.push("/login");
+        return;
+      }
+
+      const role = (userRow.primary_role as UserRole) || USER_ROLES.STAFF;
 
       // Check if role is allowed
       if (allowedRoles && !allowedRoles.includes(role)) {
-        // Show error message before redirect
         const message = `You do not have permission to access this page. This page is for: ${allowedRoles.join(", ")}`;
-        localStorage.setItem("route_error", message);
+        sessionStorage.setItem("route_error", message);
         router.push(redirectTo);
         return;
       }
@@ -53,17 +69,33 @@ export function RouteGuard({
         const currentPath = window.location.pathname;
         if (!canAccessRoute(role, currentPath)) {
           const message = `You do not have permission to access this page.`;
-          localStorage.setItem("route_error", message);
+          sessionStorage.setItem("route_error", message);
           router.push(redirectTo);
           return;
         }
       }
 
-      setIsAuthorized(true);
-      setIsLoading(false);
+      if (!cancelled) {
+        setIsAuthorized(true);
+        setIsLoading(false);
+      }
     };
 
     checkAuth();
+
+    // Re-check if auth state changes (e.g. sign out in another tab)
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!session) {
+          router.push("/login");
+        }
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+    };
   }, [router, allowedRoles, redirectTo]);
 
   if (isLoading) {

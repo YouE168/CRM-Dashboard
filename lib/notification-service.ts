@@ -1,4 +1,5 @@
 // lib/notification-service.ts
+import { supabase } from "@/lib/supabase/client";
 
 interface NotificationItem {
   id: string;
@@ -18,145 +19,153 @@ interface EmailNotification {
   type: "mentor_alert" | "participant_milestone" | "report_reminder" | "general";
 }
 
+function mapRow(row: any): NotificationItem {
+  return {
+    id: row.id,
+    type: row.type,
+    category: row.category,
+    title: row.title,
+    message: row.message,
+    timestamp: row.created_at,
+    read: row.read,
+    data: row.data,
+  };
+}
+
 class NotificationService {
   private notifications: NotificationItem[] = [];
   private listeners: ((notifications: NotificationItem[]) => void)[] = [];
   private isClient = false;
 
   constructor() {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       this.isClient = true;
-      this.loadNotifications();
+      this.init();
     }
   }
 
-  private loadNotifications() {
-    if (!this.isClient) return;
-    try {
-      const saved = localStorage.getItem("notification_items");
-      if (saved) {
-        this.notifications = JSON.parse(saved);
-      } else {
-        // Initialize with clean, professional sample notifications
-        this.notifications = [
-          {
-            id: `notif-${Date.now()}-1`,
-            type: "inapp",
-            category: "general",
-            title: "Welcome to Admin Dashboard",
-            message: "Real-time notifications are now active.",
-            timestamp: new Date().toISOString(),
-            read: false,
-          },
-          {
-            id: `notif-${Date.now()}-2`,
-            type: "inapp",
-            category: "mentor",
-            title: "Mentor Activity Update",
-            message: "Sarah Johnson logged 3 hours today.",
-            timestamp: new Date(Date.now() - 3600000).toISOString(),
-            read: false,
-          },
-          {
-            id: `notif-${Date.now()}-3`,
-            type: "inapp",
-            category: "participant",
-            title: "Participant Milestone",
-            message: "Michael Chen completed Business Plan module.",
-            timestamp: new Date(Date.now() - 7200000).toISOString(),
-            read: false,
-          },
-          {
-            id: `notif-${Date.now()}-4`,
-            type: "inapp",
-            category: "report",
-            title: "Report Reminder",
-            message: "Monthly reports are due by the 5th.",
-            timestamp: new Date(Date.now() - 86400000).toISOString(),
-            read: false,
-          },
-        ];
-        this.saveNotifications();
-      }
-    } catch {
-      this.notifications = [];
-    }
+  private async init() {
+    await this.loadNotifications();
+    this.subscribeRealtime();
   }
 
-  private saveNotifications() {
-    if (!this.isClient) return;
-    try {
-      localStorage.setItem("notification_items", JSON.stringify(this.notifications));
-      this.listeners.forEach(listener => listener(this.notifications));
-    } catch (error) {
-      console.error("Failed to save notifications:", error);
+  private async loadNotifications() {
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error("Failed to load notifications:", error);
+      return;
     }
+
+    this.notifications = (data ?? []).map(mapRow);
+    this.notifyListeners();
+  }
+
+  private subscribeRealtime() {
+    const channelName = `notifications-${Math.random().toString(36).slice(2)}`;
+    supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications" },
+        () => {
+          this.loadNotifications();
+        },
+      )
+      .subscribe();
+  }
+
+  private notifyListeners() {
+    this.listeners.forEach((listener) => listener(this.notifications));
   }
 
   subscribe(callback: (notifications: NotificationItem[]) => void) {
     this.listeners.push(callback);
     callback(this.notifications);
     return () => {
-      this.listeners = this.listeners.filter(l => l !== callback);
+      this.listeners = this.listeners.filter((l) => l !== callback);
     };
   }
 
-  addNotification(
+  async addNotification(
     type: NotificationItem["type"],
     category: NotificationItem["category"],
     title: string,
     message: string,
-    data?: any
+    data?: any,
   ) {
-    const notification: NotificationItem = {
-      id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      type,
-      category,
-      title,
-      message,
-      timestamp: new Date().toISOString(),
-      read: false,
-      data,
-    };
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData.user?.id;
+    if (!userId) return null;
 
-    this.notifications.unshift(notification);
-    this.saveNotifications();
-    this.showBrowserNotification(notification);
-    return notification;
-  }
+    const { data: inserted, error } = await supabase
+      .from("notifications")
+      .insert({
+        user_id: userId,
+        type,
+        category,
+        title,
+        message,
+        read: false,
+        data: data ?? null,
+      })
+      .select()
+      .single();
 
-  markAsRead(id: string) {
-    const notification = this.notifications.find(n => n.id === id);
-    if (notification) {
-      notification.read = true;
-      this.saveNotifications();
+    if (error) {
+      console.error("Failed to add notification:", error);
+      return null;
     }
+
+    const mapped = mapRow(inserted);
+    this.showBrowserNotification(mapped);
+    // The realtime subscription refreshes the local list automatically —
+    // no need to manually update this.notifications here.
+    return mapped;
   }
 
-  markAllAsRead() {
-    this.notifications.forEach(n => n.read = true);
-    this.saveNotifications();
+  async markAsRead(id: string) {
+    const { error } = await supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("id", id);
+    if (error) console.error("Failed to mark notification as read:", error);
+  }
+
+  async markAllAsRead() {
+    const ids = this.notifications.filter((n) => !n.read).map((n) => n.id);
+    if (ids.length === 0) return;
+    const { error } = await supabase
+      .from("notifications")
+      .update({ read: true })
+      .in("id", ids);
+    if (error) console.error("Failed to mark all as read:", error);
   }
 
   getUnreadCount(): number {
-    return this.notifications.filter(n => !n.read).length;
+    return this.notifications.filter((n) => !n.read).length;
   }
 
   getNotifications(): NotificationItem[] {
     return this.notifications;
   }
 
-  clearAll() {
-    this.notifications = [];
-    this.saveNotifications();
+  async clearAll() {
+    const ids = this.notifications.map((n) => n.id);
+    if (ids.length === 0) return;
+    const { error } = await supabase.from("notifications").delete().in("id", ids);
+    if (error) console.error("Failed to clear notifications:", error);
   }
 
   private showBrowserNotification(notification: NotificationItem) {
     if (!this.isClient) return;
-    
-    const browserEnabled = localStorage.getItem("browser_notifications_enabled") === "true";
+    const browserEnabled =
+      localStorage.getItem("browser_notifications_enabled") === "true";
     if (!browserEnabled) return;
-
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification(notification.title, {
         body: notification.message,
@@ -168,52 +177,46 @@ class NotificationService {
   async sendEmail(emailData: EmailNotification): Promise<boolean> {
     if (!this.isClient) return false;
 
-    try {
-      const emailEnabled = localStorage.getItem("email_notifications_enabled") === "true";
-      if (!emailEnabled) {
-        console.log("Email notifications are disabled");
-        return false;
-      }
+    const emailEnabled =
+      localStorage.getItem("email_notifications_enabled") === "true";
+    if (!emailEnabled) {
+      console.log("Email notifications are disabled");
+      return false;
+    }
 
-      console.log("Sending email:", emailData);
+    // Writes into the same email_logs table the Email Logs admin page reads
+    const { error } = await supabase.from("email_logs").insert({
+      to_email: emailData.to,
+      subject: emailData.subject,
+      body: emailData.body,
+      type: emailData.type,
+      status: "sent",
+    });
 
-      const emailLogs = JSON.parse(localStorage.getItem("email_logs") || "[]");
-      emailLogs.unshift({
-        id: `email-${Date.now()}`,
-        to: emailData.to,
-        subject: emailData.subject,
-        body: emailData.body,
-        type: emailData.type,
-        status: "sent",
-        sentAt: new Date().toISOString(),
-      });
-      localStorage.setItem("email_logs", JSON.stringify(emailLogs));
-
-      this.addNotification(
-        "email",
-        "general",
-        `Email Sent: ${emailData.subject}`,
-        `To: ${emailData.to}`,
-        { email: emailData }
-      );
-
-      return true;
-    } catch (error) {
+    if (error) {
       console.error("Failed to send email:", error);
       return false;
     }
+
+    await this.addNotification(
+      "email",
+      "general",
+      `Email Sent: ${emailData.subject}`,
+      `To: ${emailData.to}`,
+      { email: emailData },
+    );
+
+    return true;
   }
 }
 
-export const notificationService = typeof window !== 'undefined' 
-  ? new NotificationService() 
-  : new NotificationService();
+export const notificationService = new NotificationService();
 
 export const NotificationHelpers = {
   async notifyMentorActivity(
     mentorName: string,
     action: "logged_hours" | "updated_status" | "completed_session",
-    details: string
+    details: string,
   ) {
     const title = `Mentor Activity: ${mentorName}`;
     const messages = {
@@ -222,14 +225,16 @@ export const NotificationHelpers = {
       completed_session: `${mentorName} completed a session: ${details}`,
     };
 
-    notificationService.addNotification(
+    await notificationService.addNotification(
       "inapp",
       "mentor",
       title,
-      messages[action] || `${mentorName} ${action}: ${details}`
+      messages[action] || `${mentorName} ${action}: ${details}`,
     );
 
-    const emailEnabled = typeof window !== 'undefined' && localStorage.getItem("email_notifications_enabled") === "true";
+    const emailEnabled =
+      typeof window !== "undefined" &&
+      localStorage.getItem("email_notifications_enabled") === "true";
     if (emailEnabled) {
       await notificationService.sendEmail({
         to: "admin@ruralcommunity.org",
@@ -243,19 +248,16 @@ export const NotificationHelpers = {
   async notifyParticipantMilestone(
     participantName: string,
     milestone: string,
-    program: string
+    program: string,
   ) {
     const title = `Participant Milestone: ${participantName}`;
     const message = `${participantName} completed "${milestone}" in ${program}`;
 
-    notificationService.addNotification(
-      "inapp",
-      "participant",
-      title,
-      message
-    );
+    await notificationService.addNotification("inapp", "participant", title, message);
 
-    const emailEnabled = typeof window !== 'undefined' && localStorage.getItem("email_notifications_enabled") === "true";
+    const emailEnabled =
+      typeof window !== "undefined" &&
+      localStorage.getItem("email_notifications_enabled") === "true";
     if (emailEnabled) {
       await notificationService.sendEmail({
         to: "admin@ruralcommunity.org",
@@ -270,14 +272,11 @@ export const NotificationHelpers = {
     const title = "Monthly Report Reminder";
     const message = `Reports for ${month} are due by ${dueDate}. Please submit your reports.`;
 
-    notificationService.addNotification(
-      "inapp",
-      "report",
-      title,
-      message
-    );
+    await notificationService.addNotification("inapp", "report", title, message);
 
-    const emailEnabled = typeof window !== 'undefined' && localStorage.getItem("email_notifications_enabled") === "true";
+    const emailEnabled =
+      typeof window !== "undefined" &&
+      localStorage.getItem("email_notifications_enabled") === "true";
     if (emailEnabled) {
       await notificationService.sendEmail({
         to: "admin@ruralcommunity.org",

@@ -1,18 +1,48 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { KPICard } from "./kpi-card";
 import { ParticipantsTable } from "./participants-table";
 import { Users, UserCheck, ClipboardList, Award } from "lucide-react";
-import { participants } from "@/lib/mock-data";
-import { loadCMSData } from "@/lib/cms-data";
+import {
+  getParticipants,
+  subscribeToDashboardChanges,
+  type DashboardParticipant,
+} from "@/lib/supabase/dashboard-data";
 
 export function ParticipantsTab() {
-  const [cmsData, setCmsData] = useState(loadCMSData());
+  const [participants, setParticipants] = useState<DashboardParticipant[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    try {
+      const data = await getParticipants();
+      setParticipants(data);
+    } catch (err) {
+      console.error("Failed to load participants:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    setCmsData(loadCMSData());
-  }, []);
+    loadData();
+    const unsubscribe = subscribeToDashboardChanges(loadData);
+    return unsubscribe;
+  }, [loadData]);
+
+  const total = participants.length;
+  const active = participants.filter((p) => p.status === "active").length;
+  const onboarding = participants.filter(
+    (p) => p.status === "onboarding",
+  ).length;
+  const alumni = participants.filter((p) => p.status === "alumni").length;
+
+  if (loading) {
+    return (
+      <div className="p-6 text-sm text-gray-400">Loading participants…</div>
+    );
+  }
 
   return (
     <>
@@ -20,56 +50,47 @@ export function ParticipantsTab() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Participants</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {cmsData.participants.total} total participants across all programs
+            {total} total participants across all programs
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {["Active", "Onboarding", "Alumni"].map((s) => (
-            <span
-              key={s}
-              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                s === "Active"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : s === "Onboarding"
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-gray-100 text-gray-600"
-              }`}
-            >
-              {s === "Active"
-                ? cmsData.participants.active
-                : s === "Onboarding"
-                  ? cmsData.participants.onboarding
-                  : cmsData.participants.alumni}{" "}
-              {s}
-            </span>
-          ))}
+          <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+            {active} Active
+          </span>
+          <span className="px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+            {onboarding} Onboarding
+          </span>
+          <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+            {alumni} Alumni
+          </span>
         </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KPICard
-          title="Total Participants"
-          value={cmsData.participants.total}
-          icon={Users}
-        />
+        <KPICard title="Total Participants" value={total} icon={Users} />
         <KPICard
           title="Active"
-          value={cmsData.participants.active}
+          value={active}
           icon={UserCheck}
           variant="success"
         />
         <KPICard
           title="In Onboarding"
-          value={cmsData.participants.onboarding}
+          value={onboarding}
           icon={ClipboardList}
           variant="warning"
         />
-        <KPICard
-          title="Alumni"
-          value={cmsData.participants.alumni}
-          icon={Award}
-        />
+        <KPICard title="Alumni" value={alumni} icon={Award} />
       </div>
-      <ParticipantsTable participants={participants} />
+      <ParticipantsTable
+        participants={participants.map((p) => ({
+          id: p.id,
+          name: p.name ?? "",
+          program: p.program_name ?? "",
+          county: "",
+          stage: p.status,
+          mentor: p.mentor ?? "",
+        }))}
+      />
     </>
   );
 }

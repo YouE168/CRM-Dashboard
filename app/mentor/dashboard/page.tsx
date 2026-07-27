@@ -45,7 +45,7 @@ interface Goal {
 }
 
 interface Note {
-  id: number;
+  id: string;
   date: string;
   note: string;
   author: string;
@@ -62,51 +62,9 @@ interface User {
   status: string;
 }
 
-// Get mentee goals from localStorage
-const getMenteeGoals = (menteeEmail: string): Goal[] => {
-  const savedGoals = localStorage.getItem(`goals_${menteeEmail}`);
-  if (savedGoals) {
-    return JSON.parse(savedGoals);
-  }
-  return [];
-};
-
-// Get notes for a mentee from localStorage
-const getMenteeNotes = (menteeId: string): Note[] => {
-  if (typeof window === "undefined") return [];
-  const saved = localStorage.getItem(`mentee_notes_${menteeId}`);
-  return saved ? JSON.parse(saved) : [];
-};
-
-// Save note for a mentee
-const saveMenteeNote = (
-  menteeEmail: string,
-  note: string,
-  author: string,
-): Note => {
-  const existingNotes = getMenteeNotes(menteeEmail);
-  const newNote = {
-    id: Date.now(),
-    date: new Date().toISOString(),
-    note: note,
-    author: author,
-  };
-  existingNotes.unshift(newNote);
-  localStorage.setItem(
-    `mentee_notes_${menteeEmail}`,
-    JSON.stringify(existingNotes),
-  );
-  return newNote;
-};
-
-// Get profile for a user
-const getUserProfile = (email: string): any => {
-  const profile = localStorage.getItem(`profile_${email}`);
-  if (profile) {
-    return JSON.parse(profile);
-  }
-  return null;
-};
+// Goals/Notes/Profile now come from Supabase directly (see the
+// component-level effects below) - these old localStorage helpers
+// have been removed.
 
 const avatarColors = [
   "bg-emerald-100 text-emerald-700",
@@ -140,15 +98,58 @@ function MenteeDetailModal({
   );
 
   useEffect(() => {
-    setGoals(getMenteeGoals(mentee.email));
-    setNotes(getMenteeNotes(mentee.id));
-  }, [mentee.id, mentee.email]);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [goalRows, noteRows] = await Promise.all([
+          getGoalsForParticipant(mentee.id),
+          getNotesForParticipant(mentee.id),
+        ]);
+        if (cancelled) return;
+        setGoals(
+          goalRows.map((g) => ({
+            id: g.id,
+            title: g.title,
+            description: g.description ?? "",
+            dueDate: g.due_date ?? "",
+            completed: g.completed,
+            category: g.category ?? "",
+          })),
+        );
+        setNotes(
+          noteRows.map((n) => ({
+            id: n.id,
+            date: n.created_at,
+            note: n.note,
+            author: n.author ?? "",
+          })),
+        );
+      } catch (err) {
+        console.error("Failed to load goals/notes:", err);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [mentee.id]);
 
-  const handleAddNote = () => {
-    if (newNote.trim()) {
-      const savedNote = saveMenteeNote(mentee.email, newNote, mentorName);
-      setNotes([savedNote, ...notes]);
+  const handleAddNote = async () => {
+    if (!newNote.trim()) return;
+    try {
+      await addMenteeNote(mentee.id, newNote, mentorName);
+      const noteRows = await getNotesForParticipant(mentee.id);
+      setNotes(
+        noteRows.map((n) => ({
+          id: n.id,
+          date: n.created_at,
+          note: n.note,
+          author: n.author ?? "",
+        })),
+      );
       setNewNote("");
+    } catch (err) {
+      console.error("Failed to add note:", err);
     }
   };
 
@@ -417,68 +418,103 @@ function MenteeDetailModal({
 }
 
 // Main Mentor Dashboard Component
+import { supabase } from "@/lib/supabase/client";
+import {
+  getMenteesForMentor,
+  getGoalsForParticipant,
+  getNotesForParticipant,
+  addMenteeNote,
+} from "@/lib/supabase/dashboard-data";
+
 export default function MentorDashboardPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
   const [mentees, setMentees] = useState<Mentee[]>([]);
+  const [menteeGoalsMap, setMenteeGoalsMap] = useState<Record<string, { completed: boolean }[]>>({});
   const [selectedMentee, setSelectedMentee] = useState<Mentee | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = localStorage.getItem("currentUser");
-    if (!currentUser) {
-      router.push("/login");
-      return;
-    }
+    let cancelled = false;
 
-    const savedProfile = localStorage.getItem(`profile_${currentUser}`);
-    if (savedProfile) {
-      const parsed = JSON.parse(savedProfile);
-      setProfile(parsed);
-    } else {
+    const loadMentorAndMentees = async () => {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: userRow, error: userError } = await supabase
+        .from("users")
+        .select("name, email, primary_role, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (userError || !userRow || (userRow.status && userRow.status !== "active")) {
+        router.push("/login");
+        return;
+      }
+
+      const mentorName = userRow.name || userRow.email.split("@")[0];
+
       setProfile({
-        name: "Mentor",
-        email: currentUser,
+        name: mentorName,
+        email: userRow.email,
         role: "Mentor",
-        primaryRole: "mentor",
+        primaryRole: userRow.primary_role,
       });
-    }
 
-    // Load real entrepreneur users (mentees)
-    const allUsers: User[] = JSON.parse(localStorage.getItem("users") || "[]");
+      try {
+        const realMentees = await getMenteesForMentor(mentorName);
+        const menteeList: Mentee[] = realMentees.map((m) => ({
+          id: m.id,
+          name: m.name ?? "",
+          email: m.email ?? "",
+          phone: m.phone ?? "",
+          program: m.program_name ?? "Business Catalyst Program",
+          status: m.status || "Active",
+          sessionsCompleted: m.sessions_completed ?? 0,
+          startDate: new Date().toISOString().split("T")[0],
+        }));
+        if (!cancelled) setMentees(menteeList);
+      } catch (err) {
+        console.error("Failed to load mentees:", err);
+      }
 
-    // Filter users who are entrepreneurs (not admin, not mentor)
-    const entrepreneurUsers = allUsers.filter(
-      (user) =>
-        user.email !== "admin@ruralcommunity.org" &&
-        user.primaryRole !== "mentor" &&
-        user.roles?.includes("entrepreneur"),
-    );
+      if (!cancelled) setLoading(false);
+    };
 
-    // Convert to Mentee format
-    const menteeList: Mentee[] = entrepreneurUsers.map((user, index) => {
-      const userProfile = getUserProfile(user.email);
-      const goals = getMenteeGoals(user.email);
+    loadMentorAndMentees();
 
-      return {
-        id: index.toString(),
-        name: user.fullName || user.email.split("@")[0],
-        email: user.email,
-        phone: userProfile?.phone || "",
-        program:
-          userProfile?.selectedPrograms?.[0] || "Business Catalyst Program",
-        status: "Active",
-        sessionsCompleted: 0,
-        startDate:
-          user.createdAt?.split("T")[0] ||
-          new Date().toISOString().split("T")[0],
-      };
-    });
-
-    setMentees(menteeList);
-    setLoading(false);
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
+
+  useEffect(() => {
+    if (mentees.length === 0) return;
+    let cancelled = false;
+    const loadAllGoals = async () => {
+      try {
+        const entries = await Promise.all(
+          mentees.map(async (m) => {
+            const goals = await getGoalsForParticipant(m.id);
+            return [m.id, goals.map((g) => ({ completed: g.completed }))] as const;
+          }),
+        );
+        if (!cancelled) setMenteeGoalsMap(Object.fromEntries(entries));
+      } catch (err) {
+        console.error("Failed to load mentee goals:", err);
+      }
+    };
+    loadAllGoals();
+    return () => {
+      cancelled = true;
+    };
+  }, [mentees]);
 
   const filteredMentees = mentees.filter((mentee) => {
     const matchesSearch =
@@ -493,7 +529,7 @@ export default function MentorDashboardPage() {
   // Calculate average goal progress across all mentees
   let avgProgressSum = 0;
   mentees.forEach((mentee) => {
-    const goals = getMenteeGoals(mentee.email);
+    const goals = menteeGoalsMap[mentee.id] || [];
     const completed = goals.filter((g) => g.completed).length;
     avgProgressSum += goals.length > 0 ? (completed / goals.length) * 100 : 0;
   });
@@ -616,7 +652,7 @@ export default function MentorDashboardPage() {
             </div>
           ) : (
             filteredMentees.map((mentee, idx) => {
-              const goals = getMenteeGoals(mentee.email);
+              const goals = menteeGoalsMap[mentee.id] || [];
               const completedGoals = goals.filter((g) => g.completed).length;
               const progress =
                 goals.length > 0

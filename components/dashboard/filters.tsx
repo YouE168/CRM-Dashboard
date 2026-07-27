@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Select,
   SelectContent,
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Calendar, ChevronDown } from "lucide-react";
-import { loadCMSData } from "@/lib/cms-data";
+import { PROGRAMS, COUNTIES, DATE_RANGES } from "@/lib/analytics-constants";
 
 interface FiltersProps {
   selectedProgram: string;
@@ -29,26 +29,10 @@ export function Filters({
   selectedDateRange,
   setSelectedDateRange,
 }: FiltersProps) {
-  const [cmsData, setCmsData] = useState(loadCMSData());
   const [showDateMenu, setShowDateMenu] = useState(false);
-
-  useEffect(() => {
-    setCmsData(loadCMSData());
-  }, []);
-
-  const programs = cmsData.programs || [];
-  const counties = cmsData.counties || [];
-  const dateRanges = cmsData.dateRanges || [
-    "Last 30 days",
-    "Last 3 months",
-    "Last 6 months",
-    "Last 12 months",
-    "All time",
-  ];
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {/* Program Filter */}
       <Select value={selectedProgram} onValueChange={setSelectedProgram}>
         <SelectTrigger className="w-[180px] bg-white border-gray-200 text-gray-700 rounded-lg shadow-sm hover:border-gray-300 focus:ring-emerald-500">
           <SelectValue placeholder="All Programs" />
@@ -60,7 +44,7 @@ export function Filters({
           >
             All Programs
           </SelectItem>
-          {programs.map((program) => (
+          {PROGRAMS.map((program) => (
             <SelectItem
               key={program}
               value={program}
@@ -72,7 +56,6 @@ export function Filters({
         </SelectContent>
       </Select>
 
-      {/* County Filter */}
       <Select value={selectedCounty} onValueChange={setSelectedCounty}>
         <SelectTrigger className="w-[160px] bg-white border-gray-200 text-gray-700 rounded-lg shadow-sm hover:border-gray-300 focus:ring-emerald-500">
           <SelectValue placeholder="All Counties" />
@@ -84,7 +67,7 @@ export function Filters({
           >
             All Counties
           </SelectItem>
-          {counties.map((county) => (
+          {COUNTIES.map((county) => (
             <SelectItem
               key={county}
               value={county}
@@ -96,7 +79,6 @@ export function Filters({
         </SelectContent>
       </Select>
 
-      {/* Date Range Filter */}
       <div className="relative">
         <Button
           variant="outline"
@@ -110,7 +92,7 @@ export function Filters({
 
         {showDateMenu && (
           <div className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-            {dateRanges.map((range) => (
+            {DATE_RANGES.map((range) => (
               <button
                 key={range}
                 onClick={() => {

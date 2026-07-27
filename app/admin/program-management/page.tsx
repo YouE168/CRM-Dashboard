@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -234,14 +235,27 @@ export default function ProgramManagementPage() {
   const [showApprovalModal, setShowApprovalModal] = useState(false);
 
   useEffect(() => {
-    const user = localStorage.getItem("currentUser");
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-    loadPrograms();
-    loadParticipants();
-    loadMentors();
+    let cancelled = false;
+
+    const checkAuth = async () => {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        router.push("/login");
+        return;
+      }
+
+      if (cancelled) return;
+
+      loadPrograms();
+      loadParticipants();
+      loadMentors();
+    };
+
+    checkAuth();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const loadPrograms = () => {

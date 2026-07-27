@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import {
   Eye,
@@ -41,18 +42,47 @@ export default function ProgramSignupsPage() {
   const [dateFilter, setDateFilter] = useState("all");
 
   useEffect(() => {
-    const user = localStorage.getItem("currentUser");
-    if (user !== "admin@ruralcommunity.org") {
-      router.push("/");
-      return;
-    }
-    setIsAdmin(true);
+    let cancelled = false;
 
-    // Load all signups
-    const savedSignups = JSON.parse(
-      localStorage.getItem("programSignups") || "[]",
-    );
-    setSignups(savedSignups);
+    const checkAuth = async () => {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: userRow, error: userError } = await supabase
+        .from("users")
+        .select("primary_role, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (userError || !userRow || (userRow.status && userRow.status !== "active")) {
+        router.push("/login");
+        return;
+      }
+
+      if (userRow.primary_role !== "admin" && userRow.primary_role !== "staff") {
+        router.push("/");
+        return;
+      }
+
+      setIsAdmin(true);
+
+      // Load all signups
+      const savedSignups = JSON.parse(
+        localStorage.getItem("programSignups") || "[]",
+      );
+      setSignups(savedSignups);
+    };
+
+    checkAuth();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const exportToCSV = () => {

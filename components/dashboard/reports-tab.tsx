@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { SessionsChart } from "./sessions-chart";
 import { ClientsByCountyChart } from "./clients-by-county-chart";
-import { loadReportData } from "@/lib/report-data";
+import {
+  getReportData,
+  subscribeToReportData,
+  type ReportData,
+} from "@/lib/supabase/dashboard-data";
 import {
   BarChart3,
   Users,
@@ -60,9 +64,29 @@ export function ReportsTab({
 }: ReportsTabProps) {
   const [currentView, setCurrentView] = useState<ReportView>("list");
   const [noteInput, setNoteInput] = useState("");
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Load editable report data
-  const reportData = loadReportData();
+  const loadData = useCallback(async () => {
+    try {
+      const data = await getReportData();
+      setReportData(data);
+    } catch (err) {
+      console.error("Failed to load report data:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    const unsubscribe = subscribeToReportData(loadData);
+    return unsubscribe;
+  }, [loadData]);
+
+  if (loading || !reportData) {
+    return <div className="p-6 text-sm text-gray-400">Loading reports…</div>;
+  }
 
   const handleAddNote = () => {
     if (!noteInput.trim()) return;
