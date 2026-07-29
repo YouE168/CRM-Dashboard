@@ -1,97 +1,160 @@
 "use client";
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Star, Send, CheckCircle } from "lucide-react";
+import { ArrowLeft, Star, Send, CheckCircle, User } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
+import {
+  getParticipantRecordsForUser,
+  getMentorRatingForParticipant,
+  setMentorRating,
+} from "@/lib/supabase/dashboard-data";
+import { notifyJodyLowMentorRating } from "@/lib/email-service";
 
 export default function FeedbackPage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [participantId, setParticipantId] = useState<string | null>(null);
+  const [mentorName, setMentorNameState] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [overallSatisfaction, setOverallSatisfaction] = useState(0);
   const [hoveredStar, setHoveredStar] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Resolve this user's real participant record + assigned mentor, and any
+  // rating they've already given, from the real mentor_ratings table -
+  // replaces the old localStorage("currentUser")/satisfaction_* blob,
+  // which wasn't tied to a real mentor and never actually notified Jody.
   useEffect(() => {
-    const currentUser = localStorage.getItem("currentUser");
-    if (!currentUser) {
-      router.push("/login");
-      return;
-    }
-    const savedProfile = localStorage.getItem(`profile_${currentUser}`);
-    if (savedProfile) setProfile(JSON.parse(savedProfile));
+    let cancelled = false;
 
-    // Load existing satisfaction rating
-    const savedSatisfaction = localStorage.getItem(
-      `satisfaction_${currentUser}`,
-    );
-    if (savedSatisfaction) {
-      setOverallSatisfaction(parseInt(savedSatisfaction));
-      setSubmitted(true);
-    }
+    const load = async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData.user?.id;
+      const email = authData.user?.email;
+      if (!userId || !email) {
+        router.push("/login");
+        return;
+      }
+
+      try {
+        const records = await getParticipantRecordsForUser(userId, email);
+        const myRecord = records.find((r) => r.mentor) || null;
+        if (cancelled) return;
+
+        if (!myRecord || !myRecord.mentor) {
+          setLoading(false);
+          return;
+        }
+
+        setParticipantId(myRecord.id);
+        setMentorNameState(myRecord.mentor);
+
+        const existing = await getMentorRatingForParticipant(
+          myRecord.id,
+          myRecord.mentor,
+        );
+        if (cancelled) return;
+        if (existing) {
+          setOverallSatisfaction(existing.rating);
+          setSubmitted(true);
+        }
+      } catch (err) {
+        console.error("Failed to load mentor for rating:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  const handleSubmit = () => {
-    if (overallSatisfaction === 0) return;
+  const handleSubmit = async () => {
+    if (overallSatisfaction === 0 || !participantId || !mentorName) return;
 
     setIsSubmitting(true);
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      // Save satisfaction rating (1-5 stars)
-      localStorage.setItem(
-        `satisfaction_${currentUser}`,
-        overallSatisfaction.toString(),
-      );
-
-      // Also save the full feedback object
-      localStorage.setItem(
-        `feedback_${currentUser}`,
-        JSON.stringify({
-          overall: overallSatisfaction,
-          submittedAt: new Date().toISOString(),
-        }),
-      );
+    try {
+      await setMentorRating(participantId, mentorName, overallSatisfaction);
 
       // IF RATING IS 3 STARS OR LESS, SEND EMAIL TO JODY
       if (overallSatisfaction <= 3) {
-        const userProfile = JSON.parse(
-          localStorage.getItem(`profile_${currentUser}`) || "{}",
+        notifyJodyLowMentorRating({
+          mentorName,
+          rating: overallSatisfaction,
+        }).catch((err) =>
+          console.error("Failed to notify Jody of low rating:", err),
         );
-        const userName = userProfile.name || currentUser.split("@")[0];
-        const userEmail = currentUser;
-
-        // Create email subject and body
-        const subject = `⚠️ Low Satisfaction Rating from ${userName}`;
-        const body = `Low Satisfaction Alert - Rural Community Partners
-
-User: ${userName}
-Email: ${userEmail}
-Rating: ${overallSatisfaction}/5 stars
-Submitted: ${new Date().toLocaleString()}
-
-This user rated their experience ${overallSatisfaction} out of 5 stars.
-Please follow up with them to address their concerns.
-
---
-Rural Community Partners CRM`;
-
-        // Open email client with pre-filled message
-        window.location.href = `mailto:jody@hbcat.org?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       }
-    }
 
-    setTimeout(() => {
-      setIsSubmitting(false);
       setSubmitted(true);
-    }, 500);
+    } catch (err) {
+      console.error("Failed to submit rating:", err);
+      alert("Couldn't submit your rating. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleRateAgain = () => {
     setSubmitted(false);
   };
 
-  if (!profile) return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
+      </div>
+    );
+  }
+
+  if (!mentorName) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-40">
+          <div className="px-4 md:px-6 py-4">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push("/")}
+                className="p-2 hover:bg-gray-100 rounded-xl"
+              >
+                <ArrowLeft className="h-5 w-5 text-gray-600" />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-700 to-teal-700 bg-clip-text text-transparent">
+                  Rate Your Experience
+                </h1>
+                <p className="text-xs text-gray-500">Help us improve</p>
+              </div>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-2xl mx-auto px-4 md:px-6 py-12">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <User className="h-8 w-8 text-gray-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900">
+              No mentor assigned yet
+            </h2>
+            <p className="text-sm text-gray-500 mt-2">
+              You'll be able to rate your mentor once Jody matches you with
+              one after your onboarding meeting.
+            </p>
+            <button
+              onClick={() => router.push("/")}
+              className="mt-6 px-6 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (submitted && overallSatisfaction > 0) {
     const isLowRating = overallSatisfaction <= 3;
@@ -122,7 +185,8 @@ Rural Community Partners CRM`;
             </div>
             <h2 className="text-2xl font-bold text-gray-900">Thank You!</h2>
             <p className="text-gray-500 mt-2">
-              You rated us <strong>{overallSatisfaction} out of 5 stars</strong>
+              You rated {mentorName}{" "}
+              <strong>{overallSatisfaction} out of 5 stars</strong>
             </p>
             <div className="flex justify-center gap-1 my-3">
               {[1, 2, 3, 4, 5].map((star) => (
@@ -140,15 +204,14 @@ Rural Community Partners CRM`;
             {isLowRating && (
               <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
                 <p className="text-sm text-amber-700">
-                  📧 We're sorry your experience wasn't great. An email has been
-                  sent to our support team (jody@hbcat.org) and someone will
-                  reach out to you shortly.
+                  📧 We're sorry your experience wasn't great. Jody has been
+                  notified and will reach out to you shortly.
                 </p>
               </div>
             )}
 
             <p className="text-sm text-gray-400 mt-3">
-              Your satisfaction stars have been updated on the dashboard!
+              Your satisfaction rating has been updated on the dashboard!
             </p>
             <div className="flex gap-3 mt-6">
               <button
@@ -197,13 +260,14 @@ Rural Community Partners CRM`;
               <Star className="h-8 w-8 text-purple-600" />
             </div>
             <h2 className="text-2xl font-bold text-gray-900">
-              How would you rate your experience?
+              How would you rate your experience with {mentorName}?
             </h2>
             <p className="text-gray-500 mt-1">
               Your feedback helps us serve you better
             </p>
             <p className="text-xs text-gray-400 mt-2">
-              Note: If you rate 3 stars or less, Jody will be notified via email
+              Note: If you rate 3 stars or less, Jody will be notified via
+              email
             </p>
           </div>
 

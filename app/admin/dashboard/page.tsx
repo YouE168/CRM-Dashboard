@@ -1,14 +1,21 @@
 "use client";
 
 import { ApprovalPopup } from "@/components/admin/approval-popup";
-import { getAdminNotes, sendAdminNoteRow, subscribeToAdminNotes } from "@/lib/supabase/dashboard-data";
+import {
+  getAdminNotes,
+  sendAdminNoteRow,
+  subscribeToAdminNotes,
+  getAllMenteeNotesWithContext,
+  subscribeToMenteeData,
+  type MenteeNoteWithContext,
+} from "@/lib/supabase/dashboard-data";
 import { NotificationPanel } from "@/components/dashboard/notification-panel";
 import {
   notificationService,
   NotificationHelpers,
 } from "@/lib/notification-service";
 import { ToastNotification } from "@/components/ui/toast-notification";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { OverviewTab } from "@/components/dashboard/overview-tab";
 import AnalyticsTab from "@/components/dashboard/analytics-tab";
 import { ParticipantsTab } from "@/components/dashboard/participants-tab";
@@ -203,12 +210,21 @@ function PasswordInput({
 
 export default function AdminDashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userRole, setUserRole] = useState<string>("");
   const [activeTab, setActiveTab] = useState("Overview");
   const [selectedProgram, setSelectedProgram] = useState("All Programs");
   const [selectedCounty, setSelectedCounty] = useState("All Counties");
   const [panel, setPanel] = useState<PanelType>(null);
+
+  // Allow deep-linking straight to the Access Requests panel, e.g. from
+  // the old /admin/access-requests URL or an email link.
+  useEffect(() => {
+    if (searchParams.get("panel") === "access-requests") {
+      setPanel("access-requests");
+    }
+  }, [searchParams]);
   const [selectedDateRange, setSelectedDateRange] = useState("Last 12 months");
   const [signupsCount, setSignupsCount] = useState(0);
   const [profile, setProfile] = useState<ProfileData>({
@@ -328,6 +344,27 @@ export default function AdminDashboardPage() {
     return unsubscribe;
   }, [loadAdminNotes]);
 
+  // Oversight: notes mentors have sent to their mentees/entrepreneurs
+  // (read-only here - mentors send these from their own dashboard)
+  const [mentorMenteeNotes, setMentorMenteeNotes] = useState<
+    MenteeNoteWithContext[]
+  >([]);
+
+  const loadMentorMenteeNotes = useCallback(async () => {
+    try {
+      const data = await getAllMenteeNotesWithContext();
+      setMentorMenteeNotes(data);
+    } catch (err) {
+      console.error("Failed to load mentor-to-mentee notes:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMentorMenteeNotes();
+    const unsubscribe = subscribeToMenteeData(loadMentorMenteeNotes);
+    return unsubscribe;
+  }, [loadMentorMenteeNotes]);
+
   // Send admin note
   const sendAdminNote = async () => {
     if (!noteMessage.trim()) {
@@ -364,11 +401,19 @@ export default function AdminDashboardPage() {
         return;
       }
 
-      const { data: userRow, error: userError } = await supabase
-        .from("users")
-        .select("id, name, email, primary_role, status")
-        .eq("id", authData.user.id)
-        .maybeSingle();
+      const [{ data: userRow, error: userError }, { data: profileRow }] =
+        await Promise.all([
+          supabase
+            .from("users")
+            .select("id, name, email, primary_role, status")
+            .eq("id", authData.user.id)
+            .maybeSingle(),
+          supabase
+            .from("profiles")
+            .select("avatar")
+            .eq("user_id", authData.user.id)
+            .maybeSingle(),
+        ]);
 
       if (cancelled) return;
 
@@ -399,6 +444,7 @@ export default function AdminDashboardPage() {
         role: roleLabel,
         primaryRole: userRow.primary_role ?? undefined,
         userType: userRow.primary_role ?? undefined,
+        avatar: profileRow?.avatar ?? undefined,
       };
 
       setProfile(loadedProfile);
@@ -513,14 +559,23 @@ export default function AdminDashboardPage() {
             "inapp",
             "general",
             `✅ Access Approved: ${request.name}`,
-            `${request.name} was approved for ${request.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"} access. They've been emailed a link to set their password.`,
+            result.emailSent === false
+              ? `${request.name} was approved, but the invite email failed to send. Check server logs.`
+              : `${request.name} was approved for ${request.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"} access. They've been emailed a link to set their password.`,
             { user: request },
           );
 
-          showToast(
-            `${request.name}'s access has been approved! They'll receive an email to set their password.`,
-            "success",
-          );
+          if (result.emailSent === false) {
+            showToast(
+              `${request.name}'s access was approved, but the invite email failed to send. Check server logs.`,
+              "error",
+            );
+          } else {
+            showToast(
+              `${request.name}'s access has been approved! They'll receive an email to set their password.`,
+              "success",
+            );
+          }
 
           setShowRequestDetails(false);
         } catch (err) {
@@ -668,6 +723,17 @@ export default function AdminDashboardPage() {
         showToast("Failed to save profile.", "error");
         return;
       }
+      if (editForm.avatar !== profile.avatar) {
+        const { error: avatarError } = await supabase
+          .from("profiles")
+          .upsert(
+            { user_id: authData.user.id, avatar: editForm.avatar || null },
+            { onConflict: "user_id" },
+          );
+        if (avatarError) {
+          console.error("Failed to save avatar:", avatarError);
+        }
+      }
     }
     setEditSaved(true);
     showToast("Profile updated successfully!", "success");
@@ -677,7 +743,7 @@ export default function AdminDashboardPage() {
     }, 1200);
   };
 
-  const savePassword = () => {
+  const savePassword = async () => {
     setPasswordError("");
     if (!passwords.current)
       return setPasswordError("Enter your current password.");
@@ -685,13 +751,39 @@ export default function AdminDashboardPage() {
       return setPasswordError("New password must be at least 8 characters.");
     if (passwords.newPass !== passwords.confirm)
       return setPasswordError("Passwords do not match.");
-    setPasswordSaved(true);
-    showToast("Password updated successfully!", "success");
-    setPasswords({ current: "", newPass: "", confirm: "" });
-    setTimeout(() => {
-      setPasswordSaved(false);
-      setPanel("profile");
-    }, 1200);
+
+    try {
+      // Verify the current password before changing it, since Supabase's
+      // updateUser() doesn't check it on its own (it trusts the existing
+      // session).
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: profile.email,
+        password: passwords.current,
+      });
+      if (reauthError) {
+        setPasswordError("Current password is incorrect.");
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: passwords.newPass,
+      });
+      if (error) {
+        setPasswordError(error.message || "Failed to update password.");
+        return;
+      }
+
+      setPasswordSaved(true);
+      showToast("Password updated successfully!", "success");
+      setPasswords({ current: "", newPass: "", confirm: "" });
+      setTimeout(() => {
+        setPasswordSaved(false);
+        setPanel("profile");
+      }, 1200);
+    } catch (err) {
+      console.error("Failed to update password:", err);
+      setPasswordError("Something went wrong. Please try again.");
+    }
   };
 
   const handleLogout = () => {
@@ -929,60 +1021,8 @@ export default function AdminDashboardPage() {
         icon={Settings}
       >
         <div className="space-y-6">
-          {/* Profile Settings */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">
-              Profile Settings
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Display Name
-                </label>
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={(e) =>
-                    setProfile({ ...profile, name: e.target.value })
-                  }
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={profile.email}
-                  onChange={(e) =>
-                    setProfile({ ...profile, email: e.target.value })
-                  }
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Role
-                </label>
-                <select
-                  value={profile.role}
-                  onChange={(e) =>
-                    setProfile({ ...profile, role: e.target.value })
-                  }
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                >
-                  <option value="Administrator">Administrator</option>
-                  <option value="Program Manager">Program Manager</option>
-                  <option value="Mentor Coordinator">Mentor Coordinator</option>
-                  <option value="Viewer">Viewer</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
           {/* 📋 Program Signups & Access Requests Section */}
-          <div className="border-t pt-4">
+          <div>
             <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
               <span>📋 Program Signups & Access Requests</span>
               {pendingRequestsCount > 0 && (
@@ -1490,16 +1530,23 @@ export default function AdminDashboardPage() {
                   const file = (e.target as HTMLInputElement).files?.[0];
                   if (file) {
                     const reader = new FileReader();
-                    reader.onload = (event) => {
+                    reader.onload = async (event) => {
                       const avatarUrl = event.target?.result as string;
                       const updatedProfile = { ...profile, avatar: avatarUrl };
                       setProfile(updatedProfile);
-                      const currentUser = localStorage.getItem("currentUser");
-                      if (currentUser) {
-                        localStorage.setItem(
-                          `profile_${currentUser}`,
-                          JSON.stringify(updatedProfile),
-                        );
+                      const { data: authData } = await supabase.auth.getUser();
+                      if (authData.user) {
+                        const { error } = await supabase
+                          .from("profiles")
+                          .upsert(
+                            { user_id: authData.user.id, avatar: avatarUrl },
+                            { onConflict: "user_id" },
+                          );
+                        if (error) {
+                          console.error("Failed to save avatar:", error);
+                          showToast("Failed to save profile picture.", "error");
+                          return;
+                        }
                       }
                       showToast("Profile picture updated!", "success");
                     };
@@ -1592,11 +1639,13 @@ export default function AdminDashboardPage() {
             <input
               type="email"
               value={editForm.email}
-              onChange={(e) =>
-                setEditForm({ ...editForm, email: e.target.value })
-              }
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              disabled
+              readOnly
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50 cursor-not-allowed"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              Your login email can't be changed here.
+            </p>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -1605,11 +1654,13 @@ export default function AdminDashboardPage() {
             <input
               type="text"
               value={editForm.role}
-              onChange={(e) =>
-                setEditForm({ ...editForm, role: e.target.value })
-              }
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              disabled
+              readOnly
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50 cursor-not-allowed"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              Contact another admin to change your role.
+            </p>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -1994,6 +2045,54 @@ export default function AdminDashboardPage() {
                       </p>
                     </div>
                   ))
+              )}
+            </div>
+
+            {/* ============================================ */}
+            {/* Mentor -> Mentee/Entrepreneur Notes (read-only oversight) */}
+            {/* ============================================ */}
+            <div className="pt-4 border-t border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">
+                📬 Notes from Mentors to Mentees & Entrepreneurs
+              </h2>
+              <p className="text-sm text-gray-500 mt-1 mb-4">
+                Notes mentors have sent to the entrepreneurs they guide, sent
+                from each mentor's own dashboard
+              </p>
+              {mentorMenteeNotes.length === 0 ? (
+                <div className="bg-white rounded-xl p-8 text-center">
+                  <MessageCircle className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-400">No notes sent yet</p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Notes mentors send to their mentees will show up here
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {mentorMenteeNotes.map((note) => (
+                    <div
+                      key={note.id}
+                      className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm"
+                    >
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-xs font-medium text-gray-700">
+                          From: {note.mentorName}
+                        </span>
+                        <span className="text-xs text-gray-300">→</span>
+                        <span className="text-xs font-medium text-gray-700">
+                          To: {note.menteeName}
+                        </span>
+                        <span className="text-xs text-gray-300">•</span>
+                        <span className="text-xs text-gray-400">
+                          {new Date(note.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                        {note.note}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 

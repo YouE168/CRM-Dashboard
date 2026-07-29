@@ -7,7 +7,6 @@ export type Database = {
           email: string;
           password: string | null;
           name: string | null;
-          full_name: string | null;
           primary_role: string | null;
           user_type: string | null;
           status: string;
@@ -19,7 +18,6 @@ export type Database = {
           email: string;
           password?: string | null;
           name?: string | null;
-          full_name?: string | null;
           primary_role?: string | null;
           user_type?: string | null;
           status?: string;
@@ -31,7 +29,6 @@ export type Database = {
           email?: string;
           password?: string | null;
           name?: string | null;
-          full_name?: string | null;
           primary_role?: string | null;
           user_type?: string | null;
           status?: string;
@@ -47,7 +44,6 @@ export type Database = {
           name: string | null;
           email: string | null;
           primary_role: string | null;
-          approved_programs: string[];
           phone: string | null;
           organization: string | null;
           position: string | null;
@@ -63,7 +59,6 @@ export type Database = {
           name?: string | null;
           email?: string | null;
           primary_role?: string | null;
-          approved_programs?: string[];
           phone?: string | null;
           organization?: string | null;
           position?: string | null;
@@ -79,7 +74,6 @@ export type Database = {
           name?: string | null;
           email?: string | null;
           primary_role?: string | null;
-          approved_programs?: string[];
           phone?: string | null;
           organization?: string | null;
           position?: string | null;
@@ -176,6 +170,117 @@ export type Database = {
           approved?: boolean;
           approved_by?: string | null;
           approved_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      program_tracking: {
+        Row: {
+          id: string;
+          program_id: string;
+          participant_id: string;
+          budget: number;
+          spent: number;
+          grants_received: number;
+          grants_pending: number;
+          businesses_launched: number;
+          businesses_expanded: number;
+          jobs_created: number;
+          jobs_retained: number;
+          capital_accessed: number;
+          revenue_growth_pct: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          program_id: string;
+          participant_id: string;
+          budget?: number;
+          spent?: number;
+          grants_received?: number;
+          grants_pending?: number;
+          businesses_launched?: number;
+          businesses_expanded?: number;
+          jobs_created?: number;
+          jobs_retained?: number;
+          capital_accessed?: number;
+          revenue_growth_pct?: number;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          program_id?: string;
+          participant_id?: string;
+          budget?: number;
+          spent?: number;
+          grants_received?: number;
+          grants_pending?: number;
+          businesses_launched?: number;
+          businesses_expanded?: number;
+          jobs_created?: number;
+          jobs_retained?: number;
+          capital_accessed?: number;
+          revenue_growth_pct?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      program_resources: {
+        Row: {
+          id: string;
+          program_id: string;
+          name: string;
+          type: string;
+          url: string | null;
+          description: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          program_id: string;
+          name: string;
+          type?: string;
+          url?: string | null;
+          description?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          program_id?: string;
+          name?: string;
+          type?: string;
+          url?: string | null;
+          description?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      mentor_ratings: {
+        Row: {
+          id: string;
+          participant_id: string;
+          mentor_name: string;
+          rating: number;
+          comment: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          participant_id: string;
+          mentor_name: string;
+          rating: number;
+          comment?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          participant_id?: string;
+          mentor_name?: string;
+          rating?: number;
+          comment?: string | null;
           created_at?: string;
           updated_at?: string;
         };

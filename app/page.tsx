@@ -1,10 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
-import UserProgramModal from "@/components/user-program-modal";
+import {
+  getMentorProfileByEmail,
+  getMentorProfileByName,
+  getAllSessionsForMentor,
+  getMenteesForMentor,
+  getParticipantRecordsForUser,
+  getNotesForParticipant,
+  getNotesForParticipants,
+  addMenteeNote,
+  subscribeToMenteeData,
+  sendMentorEmailNotification,
+  getGoalsForParticipant,
+  getProgramsForUser,
+  type UserProgramRow,
+  type MyParticipantRow,
+  getSessionsForParticipant,
+  type MenteeSessionRow,
+  getProgramTracking,
+  type ProgramTrackingRow,
+  getProgramResources,
+  type ProgramResourceRow,
+  getMentorRatingForParticipant,
+} from "@/lib/supabase/dashboard-data";
 import { useRouter } from "next/navigation";
-import ProgramDetailsModal from "@/components/program-details-modal";
 import {
   Bell,
   Settings,
@@ -36,6 +57,8 @@ import {
   MapPin,
   Video,
   Link as LinkIcon,
+  DollarSign,
+  FileText,
 } from "lucide-react";
 
 // Types
@@ -54,7 +77,6 @@ interface SettingsData {
   emailNotifications: boolean;
   mentorAlerts: boolean;
   participantAlerts: boolean;
-  reportAlerts: boolean;
   darkMode: boolean;
   twoFactorAuth: boolean;
   dashboardLayout: string;
@@ -2837,9 +2859,11 @@ function PartnerDashboard({
 function RoleBasedDashboardContent({
   showToast,
   router,
+  authProfile,
 }: {
   showToast: (msg: string, type: any) => void;
   router: any;
+  authProfile?: { name?: string; email?: string; primaryRole?: string } | null;
 }) {
   // ALL hooks at top level - no conditional hooks!
   const [viewMode, setViewMode] = useState<string>("default");
@@ -2847,9 +2871,20 @@ function RoleBasedDashboardContent({
   const [loading, setLoading] = useState(true);
   const [selectedProgram, setSelectedProgram] = useState<any>(null);
   const [showProgramModal, setShowProgramModal] = useState(false);
-  const [satisfactionRate, setSatisfactionRate] = useState(5);
-  const [goalsCompleted, setGoalsCompleted] = useState(5);
-  const [totalGoals, setTotalGoals] = useState(7);
+  const [programModalTab, setProgramModalTab] = useState<
+    "overview" | "tracking" | "sessions" | "resources"
+  >("overview");
+  const [programTracking, setProgramTracking] =
+    useState<ProgramTrackingRow | null>(null);
+  const [programResources, setProgramResources] = useState<
+    ProgramResourceRow[]
+  >([]);
+  const [programSessions, setProgramSessions] = useState<MenteeSessionRow[]>(
+    [],
+  );
+  const [loadingProgramDetails, setLoadingProgramDetails] = useState(false);
+  const [goalsCompleted, setGoalsCompleted] = useState(0);
+  const [totalGoals, setTotalGoals] = useState(0);
   const [showAllNotesModal, setShowAllNotesModal] = useState(false);
   const [allNotes, setAllNotes] = useState<any[]>([]);
 
@@ -2872,53 +2907,393 @@ function RoleBasedDashboardContent({
     }
   }, [shouldRedirect, router]);
 
-  // Mentor Info - Read from localStorage (shared with mentor settings)
-  const [mentorInfo, setMentorInfo] = useState(() => {
-    const saved = localStorage.getItem("mentor_profile_data");
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return {
-      name: "Billi Hawk",
-      email: "Billi@gmail.com",
-      phone: "920-234-2345",
-      hourlyRate: 50,
-      bio: "Experienced business mentor helping entrepreneurs succeed.",
-      expertise: ["Business Strategy", "Marketing", "Financial Planning"],
-      availability: ["Monday 2-5 PM", "Wednesday 10-12 PM", "Friday 1-4 PM"],
-      rating: 4.8,
-      totalSessions: 47,
-    };
-  });
+  // Real mentor stats (Hours This Month / Earnings) for the purple welcome
+  // banner - computed from the real mentee_sessions + mentors tables rather
+  // than hardcoded, so it updates as the mentor logs sessions.
+  const [mentorMonthlyStats, setMentorMonthlyStats] = useState<{
+    hoursThisMonth: number;
+    earnings: number;
+    loading: boolean;
+  }>({ hoursThisMonth: 0, earnings: 0, loading: true });
 
-  // Entrepreneur program state
-  const [programsData, setProgramsData] = useState(() => {
-    const saved = localStorage.getItem("entrepreneur_programs_data");
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return {
-      programs: [
-        // ... your programs data ...
-      ],
-    };
-  });
+  // Real mentees + upcoming sessions for the quick-view cards below the
+  // purple banner - replaces the hardcoded Sarah Johnson / Michael Martinez /
+  // "3 active mentees" placeholders that used to live there.
+  const [realMentees, setRealMentees] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [upcomingSessions, setUpcomingSessions] = useState<
+    { id: string; menteeId: string; menteeName: string; date: string; topic: string }[]
+  >([]);
 
-  const [isProgramEditing, setIsProgramEditing] = useState(false);
-  const [showProgramAddModal, setShowProgramAddModal] = useState(false);
-  const [editingProgramId, setEditingProgramId] = useState<string | null>(null);
-  const [programFormData, setProgramFormData] = useState<any>({
-    name: "",
-    status: "Active",
-    startDate: "",
-    progress: 0,
-    nextMilestone: "",
-    nextMilestoneAction: "",
-    contactEmail: "",
-    contactPhone: "",
-    resources: [],
-    upcomingSessions: [],
-  });
+  // "Notes for Mentees and Entrepreneurs" - lets the mentor write a note to
+  // one mentee or all of them, reusing the same mentee_notes table that
+  // already powers "Notes from Your Mentor" on the mentee's own dashboard.
+  const [menteeNoteTarget, setMenteeNoteTarget] = useState("all");
+  const [menteeNoteMessage, setMenteeNoteMessage] = useState("");
+  const [sendingMenteeNote, setSendingMenteeNote] = useState(false);
+  const [mentorSentNotes, setMentorSentNotes] = useState<
+    { id: string; note: string; created_at: string; menteeName: string }[]
+  >([]);
+
+  const loadMentorSentNotes = async (
+    menteesList: { id: string; name: string }[],
+  ) => {
+    if (menteesList.length === 0) {
+      setMentorSentNotes([]);
+      return;
+    }
+    try {
+      const notes = await getNotesForParticipants(
+        menteesList.map((m) => m.id),
+      );
+      const menteeById = Object.fromEntries(
+        menteesList.map((m) => [m.id, m]),
+      );
+      setMentorSentNotes(
+        notes.map((n) => ({
+          id: n.id,
+          note: n.note,
+          created_at: n.created_at,
+          menteeName:
+            (n.participant_id && menteeById[n.participant_id]?.name) ||
+            "Unknown mentee",
+        })),
+      );
+    } catch (err) {
+      console.error("Failed to load sent mentee notes:", err);
+    }
+  };
+
+  const sendMenteeNote = async () => {
+    if (!menteeNoteMessage.trim() || !authProfile?.name) return;
+    setSendingMenteeNote(true);
+    try {
+      const targets =
+        menteeNoteTarget === "all"
+          ? realMentees
+          : realMentees.filter((m) => m.id === menteeNoteTarget);
+      await Promise.all(
+        targets.map((m) =>
+          addMenteeNote(m.id, menteeNoteMessage.trim(), authProfile.name!),
+        ),
+      );
+      setMenteeNoteMessage("");
+      showToast("Note sent!", "success");
+      await loadMentorSentNotes(realMentees);
+    } catch (err) {
+      console.error("Failed to send mentee note:", err);
+      showToast("Failed to send note. Please try again.", "error");
+    } finally {
+      setSendingMenteeNote(false);
+    }
+  };
+
+  useEffect(() => {
+    if (authProfile?.primaryRole !== "mentor" || !authProfile?.email) {
+      return;
+    }
+    let cancelled = false;
+
+    const loadMentorStats = async () => {
+      try {
+        const mentorRow = await getMentorProfileByEmail(authProfile.email!);
+        if (!mentorRow) {
+          if (!cancelled) setMentorMonthlyStats((s) => ({ ...s, loading: false }));
+          return;
+        }
+
+        const [sessions, realMentees] = await Promise.all([
+          getAllSessionsForMentor(mentorRow.name),
+          getMenteesForMentor(mentorRow.name),
+        ]);
+
+        const now = new Date();
+        const thisMonthMinutes = sessions
+          .filter((s) => {
+            const d = new Date(s.date);
+            return (
+              d.getFullYear() === now.getFullYear() &&
+              d.getMonth() === now.getMonth()
+            );
+          })
+          .reduce((sum, s) => sum + (s.duration || 0), 0);
+
+        const hours = thisMonthMinutes / 60;
+        const earnings = hours * (mentorRow.hourly_rate || 0);
+
+        if (!cancelled) {
+          setMentorMonthlyStats({
+            hoursThisMonth: Math.round(hours * 10) / 10,
+            earnings: Math.round(earnings),
+            loading: false,
+          });
+
+          setRealMentees(
+            realMentees.map((m) => ({ id: m.id, name: m.name ?? "" })),
+          );
+
+          const menteeById = Object.fromEntries(
+            realMentees.map((m) => [m.id, m]),
+          );
+          const todayStr = now.toISOString().split("T")[0];
+          const upcoming = sessions
+            .filter((s) => s.date >= todayStr)
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .slice(0, 2)
+            .map((s) => ({
+              id: s.id,
+              menteeId: s.participant_id || "",
+              menteeName:
+                (s.participant_id && menteeById[s.participant_id]?.name) ||
+                "Unknown mentee",
+              date: s.date,
+              topic: s.topic || "Mentoring session",
+            }));
+          setUpcomingSessions(upcoming);
+
+          const menteeList = realMentees.map((m) => ({
+            id: m.id,
+            name: m.name ?? "",
+          }));
+          await loadMentorSentNotes(menteeList);
+        }
+      } catch (err) {
+        console.error("Failed to load mentor monthly stats:", err);
+        if (!cancelled) setMentorMonthlyStats((s) => ({ ...s, loading: false }));
+      }
+    };
+
+    loadMentorStats();
+
+    // Keep in sync with real-time changes to sessions/mentor rate, same
+    // pattern as subscribeToMenteeData elsewhere in the app.
+    const channelName = `mentor-monthly-stats-${Math.random().toString(36).slice(2)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "mentee_sessions" },
+        loadMentorStats,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "mentors" },
+        loadMentorStats,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "mentee_notes" },
+        loadMentorStats,
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [authProfile?.primaryRole, authProfile?.email]);
+
+  // Real "my mentor" + "notes from my mentor" for the entrepreneur/mentee
+  // view - resolved via this user's own participants row (which carries the
+  // assigned mentor's name), replacing the old localStorage("mentor_profile_data")
+  // blob, which wasn't even personalized - every mentee saw whichever
+  // mentor last saved their settings.
+  const [myMentorProfile, setMyMentorProfile] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    bio: string;
+    expertise: string[];
+  } | null>(null);
+  const [myMentorNotes, setMyMentorNotes] = useState<
+    { id: string; note: string; author: string; date: string }[]
+  >([]);
+  const [loadingMyMentor, setLoadingMyMentor] = useState(true);
+  // This user's own participants.id - the real key used to fetch their
+  // goals (mentee_goals) and, later, their program enrollments
+  // (user_programs). Resolved once here and reused everywhere else so we
+  // don't re-derive it in multiple places.
+  const [myParticipantId, setMyParticipantId] = useState<string | null>(null);
+  const [myGoalsPreview, setMyGoalsPreview] = useState<
+    { id: string; title: string; due_date: string | null; completed: boolean }[]
+  >([]);
+  // This participant's rating of their current mentor (mentor_ratings) -
+  // one updatable rating per participant/mentor pair. Displayed on the
+  // "Satisfaction Rating" dashboard tile and the "Your Mentor" card;
+  // actually set on the dedicated /feedback page.
+  const [myMentorRating, setMyMentorRating] = useState<number | null>(null);
+
+  useEffect(() => {
+    const role = authProfile?.primaryRole;
+    if (!authProfile?.email || (role !== "entrepreneur" && role !== "mentee")) {
+      setLoadingMyMentor(false);
+      return;
+    }
+    let cancelled = false;
+
+    const loadMyMentorAndNotes = async () => {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const userId = authData.user?.id;
+        if (!userId) {
+          if (!cancelled) setLoadingMyMentor(false);
+          return;
+        }
+        // Program enrollments (user_programs) are keyed directly off the
+        // auth user, independent of whether a participants row exists -
+        // fetch them regardless of the mentor/goals lookup below.
+        getProgramsForUser(userId)
+          .then((programs) => {
+            if (!cancelled) {
+              setMyPrograms(programs);
+              setMyProgramsError(null);
+            }
+          })
+          .catch((err) => {
+            console.error("Failed to load programs:", err);
+            if (!cancelled) {
+              setMyProgramsError(
+                err?.message || "Couldn't load your programs.",
+              );
+            }
+          });
+
+        const records = await getParticipantRecordsForUser(
+          userId,
+          authProfile.email!,
+        );
+        if (!cancelled) setMyParticipantRecords(records);
+        const myRecord = records.find((r) => r.mentor) || records[0] || null;
+
+        if (!myRecord) {
+          if (!cancelled) {
+            setMyParticipantId(null);
+            setGoalsCompleted(0);
+            setTotalGoals(0);
+            setMyGoalsPreview([]);
+            setLoadingMyMentor(false);
+          }
+          return;
+        }
+
+        if (!cancelled) setMyParticipantId(myRecord.id);
+
+        const [notes, mentorRow, goals, myRating] = await Promise.all([
+          getNotesForParticipant(myRecord.id),
+          myRecord.mentor
+            ? getMentorProfileByName(myRecord.mentor)
+            : Promise.resolve(null),
+          getGoalsForParticipant(myRecord.id),
+          myRecord.mentor
+            ? getMentorRatingForParticipant(myRecord.id, myRecord.mentor)
+            : Promise.resolve(null),
+        ]);
+
+        if (cancelled) return;
+
+        setMyMentorRating(myRating?.rating ?? null);
+
+        setMyMentorNotes(
+          notes.map((n) => ({
+            id: n.id,
+            note: n.note,
+            author: n.author || myRecord.mentor || "Your mentor",
+            date: n.created_at,
+          })),
+        );
+
+        if (mentorRow) {
+          setMyMentorProfile({
+            name: mentorRow.name,
+            email: mentorRow.email || "",
+            phone: mentorRow.phone || "",
+            bio: mentorRow.bio || "",
+            expertise: mentorRow.expertise || [],
+          });
+        }
+
+        setGoalsCompleted(goals.filter((g) => g.completed).length);
+        setTotalGoals(goals.length);
+        setMyGoalsPreview(
+          goals.slice(0, 3).map((g) => ({
+            id: g.id,
+            title: g.title,
+            due_date: g.due_date,
+            completed: g.completed,
+          })),
+        );
+
+        setLoadingMyMentor(false);
+      } catch (err) {
+        console.error("Failed to load mentor/notes:", err);
+        if (!cancelled) setLoadingMyMentor(false);
+      }
+    };
+
+    loadMyMentorAndNotes();
+
+    const unsubscribe = subscribeToMenteeData(loadMyMentorAndNotes);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [authProfile?.primaryRole, authProfile?.email]);
+
+  // Entrepreneur/mentee program enrollments - real data from the
+  // programs + user_programs tables (see getProgramsForUser), loaded in
+  // the loadMyMentorAndNotes effect below alongside goals/mentor/notes.
+  // Replaces the old localStorage("entrepreneur_programs_data") blob and
+  // its full add/edit/delete CRUD, which had no real backing table for
+  // arbitrary user-created programs - programs are admin-managed and
+  // users are enrolled into them, not authors of them.
+  const [myPrograms, setMyPrograms] = useState<UserProgramRow[]>([]);
+  const [myProgramsError, setMyProgramsError] = useState<string | null>(null);
+  const [myParticipantRecords, setMyParticipantRecords] = useState<
+    MyParticipantRow[]
+  >([]);
+
+  // Fetch this program's real details whenever the program modal opens -
+  // admin-entered tracking numbers, admin-managed resources, and this
+  // user's own mentoring sessions (matched to the program via their
+  // participants row's program_name, since mentee_sessions is keyed by
+  // participant, not directly by program).
+  useEffect(() => {
+    if (!showProgramModal || !selectedProgram) return;
+    let cancelled = false;
+    setProgramModalTab("overview");
+    setLoadingProgramDetails(true);
+
+    const matchingRecord = myParticipantRecords.find(
+      (r) => r.program_name === selectedProgram.name,
+    );
+
+    Promise.all([
+      // Tracking is per (program, participant) - budget/grants/outcomes
+      // are specific to this person, so we need their own participant
+      // record matched to this program, not just the program id.
+      matchingRecord
+        ? getProgramTracking(
+            selectedProgram.program_id,
+            matchingRecord.id,
+          ).catch(() => null)
+        : Promise.resolve(null),
+      getProgramResources(selectedProgram.program_id).catch(() => []),
+      matchingRecord
+        ? getSessionsForParticipant(matchingRecord.id).catch(() => [])
+        : Promise.resolve([]),
+    ]).then(([tracking, resources, sessions]) => {
+      if (cancelled) return;
+      setProgramTracking(tracking);
+      setProgramResources(resources);
+      setProgramSessions(sessions);
+      setLoadingProgramDetails(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showProgramModal, selectedProgram, myParticipantRecords]);
 
   // Notes state for all roles
   const [coalitionReceivedNotes, setCoalitionReceivedNotes] = useState<any[]>(
@@ -2989,165 +3364,6 @@ function RoleBasedDashboardContent({
     }
   };
 
-  // Save programs data to localStorage
-  const saveProgramsData = (newData: any) => {
-    setProgramsData(newData);
-    localStorage.setItem("entrepreneur_programs_data", JSON.stringify(newData));
-    showToast("Programs updated successfully!", "success");
-  };
-
-  // Add new program
-  const addProgram = () => {
-    const newProgram = {
-      id: `prog-${Date.now()}`,
-      name: programFormData.name || "New Program",
-      status: programFormData.status || "Active",
-      startDate: programFormData.startDate || "January 2025",
-      progress: programFormData.progress || 0,
-      nextMilestone: programFormData.nextMilestone || "",
-      nextMilestoneAction: programFormData.nextMilestoneAction || "",
-      resources: programFormData.resources || [],
-      upcomingSessions: programFormData.upcomingSessions || [],
-      contactEmail: programFormData.contactEmail || "",
-      contactPhone: programFormData.contactPhone || "",
-    };
-    const updated = {
-      ...programsData,
-      programs: [...programsData.programs, newProgram],
-    };
-    saveProgramsData(updated);
-    setShowProgramAddModal(false);
-    setProgramFormData({
-      name: "",
-      status: "Active",
-      startDate: "",
-      progress: 0,
-      nextMilestone: "",
-      nextMilestoneAction: "",
-      contactEmail: "",
-      contactPhone: "",
-      resources: [],
-      upcomingSessions: [],
-    });
-    showToast("Program added successfully!", "success");
-  };
-
-  // Update program
-  const updateProgram = (id: string, field: string, value: any) => {
-    const updated = {
-      ...programsData,
-      programs: programsData.programs.map((p: any) =>
-        p.id === id ? { ...p, [field]: value } : p,
-      ),
-    };
-    saveProgramsData(updated);
-  };
-
-  // Update program progress
-  const updateProgramProgress = (id: string, progress: number) => {
-    const updated = {
-      ...programsData,
-      programs: programsData.programs.map((p: any) =>
-        p.id === id
-          ? { ...p, progress: Math.min(100, Math.max(0, progress)) }
-          : p,
-      ),
-    };
-    saveProgramsData(updated);
-  };
-
-  // Delete program
-  const deleteProgram = (id: string) => {
-    if (confirm("Are you sure you want to delete this program?")) {
-      const updated = {
-        ...programsData,
-        programs: programsData.programs.filter((p: any) => p.id !== id),
-      };
-      saveProgramsData(updated);
-      showToast("Program deleted successfully!", "info");
-    }
-  };
-
-  // Edit program in modal
-  const openEditProgram = (program: any) => {
-    setEditingProgramId(program.id);
-    setProgramFormData({
-      name: program.name || "",
-      status: program.status || "Active",
-      startDate: program.startDate || "",
-      progress: program.progress || 0,
-      nextMilestone: program.nextMilestone || "",
-      nextMilestoneAction: program.nextMilestoneAction || "",
-      contactEmail: program.contactEmail || "",
-      contactPhone: program.contactPhone || "",
-      resources: program.resources || [],
-      upcomingSessions: program.upcomingSessions || [],
-    });
-    setShowProgramAddModal(true);
-  };
-
-  // Save edited program
-  const saveEditProgram = () => {
-    if (editingProgramId) {
-      const updated = {
-        ...programsData,
-        programs: programsData.programs.map((p: any) =>
-          p.id === editingProgramId
-            ? {
-                ...p,
-                name: programFormData.name || p.name,
-                status: programFormData.status || p.status,
-                startDate: programFormData.startDate || p.startDate,
-                progress: programFormData.progress || p.progress,
-                nextMilestone: programFormData.nextMilestone || p.nextMilestone,
-                nextMilestoneAction:
-                  programFormData.nextMilestoneAction || p.nextMilestoneAction,
-                contactEmail: programFormData.contactEmail || p.contactEmail,
-                contactPhone: programFormData.contactPhone || p.contactPhone,
-                resources: programFormData.resources || p.resources,
-                upcomingSessions:
-                  programFormData.upcomingSessions || p.upcomingSessions,
-              }
-            : p,
-        ),
-      };
-      saveProgramsData(updated);
-      setShowProgramAddModal(false);
-      setEditingProgramId(null);
-      setProgramFormData({
-        name: "",
-        status: "Active",
-        startDate: "",
-        progress: 0,
-        nextMilestone: "",
-        nextMilestoneAction: "",
-        contactEmail: "",
-        contactPhone: "",
-        resources: [],
-        upcomingSessions: [],
-      });
-      showToast("Program updated successfully!", "success");
-    }
-  };
-
-  // Reset and close modal
-  const closeProgramModal = () => {
-    setShowProgramAddModal(false);
-    setEditingProgramId(null);
-    setProgramFormData({
-      name: "",
-      status: "Active",
-      startDate: "",
-      progress: 0,
-      nextMilestone: "",
-      nextMilestoneAction: "",
-      contactEmail: "",
-      contactPhone: "",
-      resources: [],
-      upcomingSessions: [],
-    });
-  };
-
   // Main useEffect - ALL at top level
   useEffect(() => {
     const currentUser = localStorage.getItem("currentUser");
@@ -3193,42 +3409,27 @@ function RoleBasedDashboardContent({
         });
       }
 
-      const savedSatisfaction = localStorage.getItem(
-        `satisfaction_${currentUser}`,
-      );
-      if (savedSatisfaction) {
-        setSatisfactionRate(parseInt(savedSatisfaction));
-      }
-
-      const savedGoals = localStorage.getItem(`goals_${currentUser}`);
-      if (savedGoals) {
-        const goalsData = JSON.parse(savedGoals);
-        setGoalsCompleted(goalsData.filter((g: any) => g.completed).length);
-        setTotalGoals(goalsData.length);
-      }
-
-      // Also refresh mentor info
-      const savedMentorInfo = localStorage.getItem("mentor_profile_data");
-      if (savedMentorInfo) {
-        setMentorInfo(JSON.parse(savedMentorInfo));
-      }
     }
     setLoading(false);
   }, []);
 
-  // Listen for changes to mentor_profile_data
+  // Sync the real, Supabase-authenticated profile (passed down from
+  // DashboardPage) into local state. The effect above only reads the old
+  // localStorage("currentUser") key, which nothing sets anymore now that
+  // login/signup use real Supabase auth - without this, profile stays null
+  // and every user sees the generic "User" / entrepreneur fallback below,
+  // regardless of their real name or role.
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "mentor_profile_data") {
-        const saved = e.newValue;
-        if (saved) {
-          setMentorInfo(JSON.parse(saved));
-        }
-      }
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
+    if (authProfile?.email) {
+      setProfile((prev: any) => ({
+        ...(prev || {}),
+        name: authProfile.name || prev?.name,
+        email: authProfile.email,
+        primaryRole:
+          authProfile.primaryRole || prev?.primaryRole || "entrepreneur",
+      }));
+    }
+  }, [authProfile?.name, authProfile?.email, authProfile?.primaryRole]);
 
   //  Check for redirects in a useEffect that always runs
   useEffect(() => {
@@ -3355,15 +3556,23 @@ function RoleBasedDashboardContent({
             <div className="flex flex-wrap gap-4 mt-6">
               <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
                 <p className="text-sm opacity-90">Active Mentees</p>
-                <p className="text-2xl font-bold">3</p>
+                <p className="text-2xl font-bold">{realMentees.length}</p>
               </div>
               <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
                 <p className="text-sm opacity-90">Hours This Month</p>
-                <p className="text-2xl font-bold">12</p>
+                <p className="text-2xl font-bold">
+                  {mentorMonthlyStats.loading
+                    ? "…"
+                    : mentorMonthlyStats.hoursThisMonth}
+                </p>
               </div>
               <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
                 <p className="text-sm opacity-90">Earnings</p>
-                <p className="text-2xl font-bold">$600</p>
+                <p className="text-2xl font-bold">
+                  {mentorMonthlyStats.loading
+                    ? "…"
+                    : `$${mentorMonthlyStats.earnings}`}
+                </p>
               </div>
             </div>
           </div>
@@ -3381,28 +3590,45 @@ function RoleBasedDashboardContent({
                   <h3 className="font-semibold text-gray-900">Your Mentees</h3>
                 </div>
                 <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
-                  3 active
+                  {realMentees.length} active
                 </span>
               </div>
             </div>
             <div className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-2xl font-bold text-gray-900">3</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {realMentees.length}
+                  </p>
                   <p className="text-sm text-gray-500">Active Mentees</p>
                   <p className="text-xs text-emerald-600 mt-1">View all →</p>
                 </div>
-                <div className="flex -space-x-2">
-                  <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-700 ring-2 ring-white">
-                    SJ
+                {realMentees.length > 0 && (
+                  <div className="flex -space-x-2">
+                    {realMentees.slice(0, 3).map((mentee, idx) => {
+                      const initials = mentee.name
+                        .split(" ")
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((p) => p[0])
+                        .join("")
+                        .toUpperCase();
+                      const colors = [
+                        { bg: "bg-emerald-100", text: "text-emerald-700" },
+                        { bg: "bg-blue-100", text: "text-blue-700" },
+                        { bg: "bg-purple-100", text: "text-purple-700" },
+                      ][idx % 3];
+                      return (
+                        <div
+                          key={mentee.id}
+                          className={`w-8 h-8 rounded-full ${colors.bg} flex items-center justify-center text-xs font-bold ${colors.text} ring-2 ring-white`}
+                        >
+                          {initials || "?"}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700 ring-2 ring-white">
-                    MM
-                  </div>
-                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-xs font-bold text-purple-700 ring-2 ring-white">
-                    EB
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -3417,54 +3643,71 @@ function RoleBasedDashboardContent({
               </div>
             </div>
             <div className="divide-y divide-gray-100">
-              <div className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                    <span className="text-sm font-bold text-emerald-600">
-                      SJ
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-800">Sarah Johnson</p>
-                    <p className="text-xs text-gray-500">
-                      Today, 2:00 PM - Business Plan Review
-                    </p>
-                  </div>
-                  <button
-                    onClick={() =>
-                      router.push(`/mentor/settings?mentee=1&tab=sessions`)
-                    }
-                    className="text-xs text-emerald-600 hover:text-emerald-700"
-                  >
-                    Log Session →
-                  </button>
+              {upcomingSessions.length === 0 ? (
+                <div className="p-6 text-center text-sm text-gray-400">
+                  No upcoming sessions logged yet.
                 </div>
-              </div>
-              <div className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                    <span className="text-sm font-bold text-purple-600">
-                      MM
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-800">
-                      Michael Martinez
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Tomorrow, 11:00 AM - Marketing Strategy
-                    </p>
-                  </div>
-                  <button
-                    onClick={() =>
-                      router.push(`/mentor/settings?mentee=2&tab=sessions`)
-                    }
-                    className="text-xs text-emerald-600 hover:text-emerald-700"
-                  >
-                    Log Session →
-                  </button>
-                </div>
-              </div>
+              ) : (
+                upcomingSessions.map((session, idx) => {
+                  const initials = session.menteeName
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((p) => p[0])
+                    .join("")
+                    .toUpperCase();
+                  const colors = [
+                    { bg: "bg-emerald-100", text: "text-emerald-600" },
+                    { bg: "bg-purple-100", text: "text-purple-600" },
+                  ][idx % 2];
+
+                  const sessionDate = new Date(session.date + "T00:00:00");
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const tomorrow = new Date(today);
+                  tomorrow.setDate(today.getDate() + 1);
+                  let whenLabel = sessionDate.toLocaleDateString();
+                  if (sessionDate.getTime() === today.getTime()) {
+                    whenLabel = "Today";
+                  } else if (sessionDate.getTime() === tomorrow.getTime()) {
+                    whenLabel = "Tomorrow";
+                  }
+
+                  return (
+                    <div className="p-4" key={session.id}>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-10 h-10 rounded-full ${colors.bg} flex items-center justify-center`}
+                        >
+                          <span
+                            className={`text-sm font-bold ${colors.text}`}
+                          >
+                            {initials || "?"}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-800">
+                            {session.menteeName}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {whenLabel} - {session.topic}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() =>
+                            router.push(
+                              `/mentor/settings?mentee=${session.menteeId}&tab=sessions`,
+                            )
+                          }
+                          className="text-xs text-emerald-600 hover:text-emerald-700"
+                        >
+                          Log Session →
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -3564,6 +3807,82 @@ function RoleBasedDashboardContent({
               💡 Tip: Your meeting host should provide the Meeting ID and
               passcode
             </p>
+          </div>
+        </div>
+
+        {/* Notes for Mentees and Entrepreneurs - Mentor */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-amber-600" />
+              <h3 className="font-semibold text-gray-900">
+                📬 Notes for Mentees and Entrepreneurs
+              </h3>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">
+              Send an update or encouragement to a mentee or all of them at
+              once
+            </p>
+          </div>
+          <div className="p-5 space-y-4">
+            {realMentees.length === 0 ? (
+              <p className="text-sm text-gray-400">
+                You don't have any mentees assigned yet, so there's no one to
+                send a note to.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-col md:flex-row gap-3">
+                  <select
+                    value={menteeNoteTarget}
+                    onChange={(e) => setMenteeNoteTarget(e.target.value)}
+                    className="w-full md:w-56 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="all">All My Mentees</option>
+                    {realMentees.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <textarea
+                    value={menteeNoteMessage}
+                    onChange={(e) => setMenteeNoteMessage(e.target.value)}
+                    placeholder="Write your note here..."
+                    rows={2}
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <button
+                  onClick={sendMenteeNote}
+                  disabled={sendingMenteeNote || !menteeNoteMessage.trim()}
+                  className="px-5 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {sendingMenteeNote ? "Sending..." : "Send Note"}
+                </button>
+              </>
+            )}
+
+            {mentorSentNotes.length > 0 && (
+              <div className="divide-y divide-gray-100 border-t border-gray-100 pt-3 mt-2">
+                {mentorSentNotes.slice(0, 5).map((note) => (
+                  <div key={note.id} className="py-3 first:pt-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-medium text-gray-700">
+                        To: {note.menteeName}
+                      </span>
+                      <span className="text-xs text-gray-300">•</span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(note.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                      {note.note}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -3693,19 +4012,15 @@ function RoleBasedDashboardContent({
               <div className="flex flex-wrap gap-4 mt-6">
                 <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
                   <p className="text-sm opacity-90">Active Programs</p>
-                  <p className="text-2xl font-bold">
-                    {programsData.programs.length}
-                  </p>
+                  <p className="text-2xl font-bold">{myPrograms.length}</p>
                 </div>
                 <div className="bg-white/20 backdrop-blur-sm rounded-xl px-5 py-3">
                   <p className="text-sm opacity-90">Completion Rate</p>
                   <p className="text-2xl font-bold">
-                    {programsData.programs.length > 0
+                    {myPrograms.length > 0
                       ? Math.round(
-                          programsData.programs.reduce(
-                            (acc: number, p: any) => acc + p.progress,
-                            0,
-                          ) / programsData.programs.length,
+                          myPrograms.reduce((acc, p) => acc + p.progress, 0) /
+                            myPrograms.length,
                         )
                       : 0}
                     %
@@ -3717,7 +4032,7 @@ function RoleBasedDashboardContent({
 
           {/* Navigation Cards */}
           <div
-            className={`grid grid-cols-1 ${isMentee ? "md:grid-cols-3" : "md:grid-cols-2"} gap-4`}
+            className={`grid grid-cols-1 md:grid-cols-2 ${role === "mentee" ? "lg:grid-cols-3" : ""} gap-4`}
           >
             {/* Goals Card */}
             <div
@@ -3737,7 +4052,8 @@ function RoleBasedDashboardContent({
               </div>
             </div>
 
-            {/* Feedback Card */}
+            {/* Satisfaction Rating Card - real rating from mentor_ratings,
+                set on the dedicated /feedback page. */}
             <div
               onClick={() => router.push("/feedback")}
               className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
@@ -3748,14 +4064,19 @@ function RoleBasedDashboardContent({
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-gray-900">
-                    {satisfactionRate}/5
+                    {myMentorRating != null ? `${myMentorRating}/5` : "—"}
                   </p>
                   <p className="text-sm text-gray-500">Satisfaction Rating</p>
                 </div>
               </div>
             </div>
 
-            {/* Third Card - Only for Mentees */}
+            {/* Third Card - Toggle between Mentee and Entrepreneur views.
+                Every mentee is also an entrepreneur, so from the mentee
+                dashboard they can jump into the entrepreneur view, and
+                from the entrepreneur view (when their real role is
+                mentee) they can jump back. Pure entrepreneur accounts
+                don't get this card since they have no mentee view. */}
             {isMentee && (
               <div
                 onClick={() => {
@@ -3777,8 +4098,35 @@ function RoleBasedDashboardContent({
                 </div>
               </div>
             )}
+
+            {/* Reverse toggle - shown when a mentee is currently viewing
+                the entrepreneur side, so they can get back. */}
+            {!isMentee && role === "mentee" && (
+              <div
+                onClick={() => {
+                  window.location.href = "/";
+                }}
+                className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <Handshake className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">Mentee Hub</p>
+                    <p className="text-xs text-gray-500">
+                      Back to your mentorship dashboard
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-gray-400 ml-auto" />
+                </div>
+              </div>
+            )}
           </div>
-          {/* Your Active Programs - WITH CRUD */}
+          {/* Your Active Programs - real read-only list from user_programs.
+              Programs are admin-managed and users are enrolled into them,
+              so there's no add/edit/delete here - just what you're
+              actually enrolled in. */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 flex justify-between items-center">
               <div>
@@ -3786,202 +4134,84 @@ function RoleBasedDashboardContent({
                   📋 Your Active Programs
                 </h3>
                 <p className="text-xs text-gray-500 mt-1">
-                  {!isProgramEditing
-                    ? "Click on a program to view details"
-                    : "Edit mode - click Done to exit"}
+                  Click on a program to view details
                 </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setIsProgramEditing(!isProgramEditing)}
-                  className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                    isProgramEditing
-                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  {isProgramEditing ? "✓ Done" : "✎ Edit"}
-                </button>
-                {isProgramEditing && (
-                  <button
-                    onClick={() => {
-                      setEditingProgramId(null);
-                      setProgramFormData({
-                        name: "",
-                        status: "Active",
-                        startDate: "",
-                        progress: 0,
-                        nextMilestone: "",
-                        nextMilestoneAction: "",
-                        contactEmail: "",
-                        contactPhone: "",
-                        resources: [],
-                        upcomingSessions: [],
-                      });
-                      setShowProgramAddModal(true);
-                    }}
-                    className="px-3 py-1 text-xs bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200"
-                  >
-                    + Add
-                  </button>
-                )}
               </div>
             </div>
             <div className="divide-y divide-gray-100">
-              {programsData.programs.length === 0 ? (
+              {myProgramsError ? (
+                <div className="p-8 text-center text-red-400">
+                  <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>Couldn't load your programs</p>
+                  <p className="text-xs mt-1">{myProgramsError}</p>
+                </div>
+              ) : myPrograms.length === 0 ? (
                 <div className="p-8 text-center text-gray-400">
                   <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>No programs yet</p>
-                  {isProgramEditing && (
-                    <p className="text-xs mt-1">
-                      Click "Add" to create a program
-                    </p>
-                  )}
+                  <p className="text-xs mt-1">
+                    Reach out to your program coordinator to get enrolled
+                  </p>
                 </div>
               ) : (
-                programsData.programs.map((program: any) => (
+                myPrograms.map((program) => (
                   <div
-                    key={program.id}
+                    key={program.user_program_id}
                     onClick={() => {
-                      if (!isProgramEditing) {
-                        console.log("🎯 Program clicked:", program.name);
-                        setSelectedProgram(program);
-                        setShowProgramModal(true);
-                      }
+                      setSelectedProgram(program);
+                      setShowProgramModal(true);
                     }}
-                    className={`p-5 hover:bg-gray-50 transition-colors group relative ${
-                      !isProgramEditing ? "cursor-pointer" : ""
-                    }`}
+                    className="p-5 hover:bg-gray-50 transition-colors group relative cursor-pointer"
                   >
-                    {isProgramEditing && (
-                      <div className="absolute right-2 top-2 flex gap-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditProgram(program);
-                          }}
-                          className="text-xs text-blue-500 hover:text-blue-700 p-1 hover:bg-blue-50 rounded"
-                          title="Edit program"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteProgram(program.id);
-                          }}
-                          className="text-xs text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded"
-                          title="Delete program"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    )}
                     <div>
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            {isProgramEditing ? (
-                              <input
-                                type="text"
-                                value={program.name}
-                                onChange={(e) =>
-                                  updateProgram(
-                                    program.id,
-                                    "name",
-                                    e.target.value,
-                                  )
-                                }
-                                className="font-semibold text-gray-800 border rounded px-2 py-1 text-sm w-64"
-                              />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-gray-800 group-hover:text-emerald-600 transition-colors">
+                              {program.name}
+                            </p>
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full ${
+                                program.status === "Active"
+                                  ? "bg-green-100 text-green-700"
+                                  : program.status === "Completed"
+                                    ? "bg-purple-100 text-purple-700"
+                                    : "bg-yellow-100 text-yellow-700"
+                              }`}
+                            >
+                              {program.status}
+                            </span>
+                            {program.approved ? (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                                Approved
+                              </span>
                             ) : (
-                              <p className="font-semibold text-gray-800 group-hover:text-emerald-600 transition-colors">
-                                {program.name}
-                              </p>
-                            )}
-                            {isProgramEditing ? (
-                              <select
-                                value={program.status}
-                                onChange={(e) =>
-                                  updateProgram(
-                                    program.id,
-                                    "status",
-                                    e.target.value,
-                                  )
-                                }
-                                className="text-xs border rounded px-2 py-0.5"
-                              >
-                                <option value="Active">Active</option>
-                                <option value="Completed">Completed</option>
-                                <option value="On Hold">On Hold</option>
-                              </select>
-                            ) : (
-                              <span
-                                className={`text-xs px-2 py-0.5 rounded-full ${
-                                  program.status === "Active"
-                                    ? "bg-green-100 text-green-700"
-                                    : program.status === "Completed"
-                                      ? "bg-purple-100 text-purple-700"
-                                      : "bg-yellow-100 text-yellow-700"
-                                }`}
-                              >
-                                {program.status}
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                                Pending approval
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-4 mt-2">
-                            {isProgramEditing ? (
-                              <input
-                                type="text"
-                                value={program.startDate}
-                                onChange={(e) =>
-                                  updateProgram(
-                                    program.id,
-                                    "startDate",
-                                    e.target.value,
-                                  )
-                                }
-                                className="text-xs text-gray-500 border rounded px-2 py-0.5 w-32"
-                                placeholder="Start date"
-                              />
-                            ) : (
+                          {program.start_date && (
+                            <div className="flex items-center gap-4 mt-2">
                               <div className="flex items-center gap-1">
                                 <Clock className="h-3 w-3 text-gray-400" />
                                 <span className="text-xs text-gray-500">
-                                  Started {program.startDate}
+                                  Started{" "}
+                                  {new Date(
+                                    program.start_date,
+                                  ).toLocaleDateString()}
                                 </span>
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
                           <div className="mt-3">
                             <div className="flex justify-between text-xs mb-1">
                               <span className="text-gray-500">
                                 Overall Progress
                               </span>
-                              {isProgramEditing ? (
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="range"
-                                    min="0"
-                                    max="100"
-                                    value={program.progress}
-                                    onChange={(e) =>
-                                      updateProgramProgress(
-                                        program.id,
-                                        parseInt(e.target.value),
-                                      )
-                                    }
-                                    className="w-32 h-1"
-                                  />
-                                  <span className="text-emerald-600 font-medium w-8 text-right">
-                                    {program.progress}%
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="text-emerald-600 font-medium">
-                                  {program.progress}%
-                                </span>
-                              )}
+                              <span className="text-emerald-600 font-medium">
+                                {program.progress}%
+                              </span>
                             </div>
                             <div className="w-full h-2 bg-gray-200 rounded-full">
                               <div
@@ -3990,33 +4220,8 @@ function RoleBasedDashboardContent({
                               />
                             </div>
                           </div>
-                          {isProgramEditing &&
-                            program.nextMilestone !== undefined && (
-                              <div className="mt-2">
-                                <input
-                                  type="text"
-                                  value={program.nextMilestone || ""}
-                                  onChange={(e) =>
-                                    updateProgram(
-                                      program.id,
-                                      "nextMilestone",
-                                      e.target.value,
-                                    )
-                                  }
-                                  placeholder="Next milestone"
-                                  className="text-xs text-gray-500 border rounded px-2 py-0.5 w-full"
-                                />
-                              </div>
-                            )}
-                          {!isProgramEditing && program.nextMilestone && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              📌 Next: {program.nextMilestone}
-                            </p>
-                          )}
                         </div>
-                        {!isProgramEditing && (
-                          <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all flex-shrink-0 ml-4" />
-                        )}
+                        <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all flex-shrink-0 ml-4" />
                       </div>
                     </div>
                   </div>
@@ -4100,8 +4305,15 @@ function RoleBasedDashboardContent({
 
           {/* TWO COLUMN LAYOUT - Mentor Info & Goals */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Mentor Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Mentor Card - real data only. Mentor assignment is
+                Jody's call via the admin Program Management "Mentor
+                Matching" tab (participants.mentor), so until she's
+                matched this person to someone, we show a waiting state
+                instead of fake placeholder data. */}
+            <div
+              id="your-mentor-card"
+              className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden scroll-mt-6"
+            >
               <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-white">
                 <div className="flex items-center gap-2">
                   <User className="h-5 w-5 text-purple-600" />
@@ -4109,55 +4321,86 @@ function RoleBasedDashboardContent({
                 </div>
               </div>
               <div className="p-5">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xl font-bold">
-                    {mentorInfo?.name?.charAt(0) || "M"}
+                {loadingMyMentor ? (
+                  <div className="flex justify-center py-6">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500" />
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">
-                      {mentorInfo?.name || "Billi Hawk"}
-                    </h4>
-                    <p className="text-sm text-gray-500">
-                      {mentorInfo?.email || "Billi@gmail.com"}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {mentorInfo?.phone || "920-234-2345"}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600 mb-4">
-                  {mentorInfo?.bio ||
-                    "Experienced business mentor helping entrepreneurs succeed."}
-                </p>
-                <div className="mb-4">
-                  <p className="text-xs font-medium text-gray-500 mb-2">
-                    Expertise
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {(
-                      mentorInfo?.expertise || [
-                        "Business Strategy",
-                        "Marketing",
-                        "Financial Planning",
-                      ]
-                    ).map((exp: string, idx: number) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-1 bg-purple-50 text-purple-600 rounded-full text-xs"
+                ) : myMentorProfile ? (
+                  <>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xl font-bold">
+                        {myMentorProfile.name?.charAt(0) || "M"}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">
+                          {myMentorProfile.name}
+                        </h4>
+                        {myMentorProfile.email && (
+                          <p className="text-sm text-gray-500">
+                            {myMentorProfile.email}
+                          </p>
+                        )}
+                        {myMentorProfile.phone && (
+                          <p className="text-sm text-gray-500">
+                            {myMentorProfile.phone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {myMentorProfile.bio && (
+                      <p className="text-sm text-gray-600 mb-4">
+                        {myMentorProfile.bio}
+                      </p>
+                    )}
+                    {myMentorProfile.expertise.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-xs font-medium text-gray-500 mb-2">
+                          Expertise
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {myMentorProfile.expertise.map((exp, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-1 bg-purple-50 text-purple-600 rounded-full text-xs"
+                            >
+                              {exp}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {myMentorProfile.email && (
+                      <button
+                        onClick={() =>
+                          (window.location.href = `mailto:${myMentorProfile.email}`)
+                        }
+                        className="w-full py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
                       >
-                        {exp}
-                      </span>
-                    ))}
+                        Message Mentor
+                      </button>
+                    )}
+                    <button
+                      onClick={() => router.push("/feedback")}
+                      className="w-full mt-3 py-2 border border-purple-200 text-purple-600 rounded-xl hover:bg-purple-50 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Star className="h-4 w-4" />
+                      {myMentorRating
+                        ? `Your Rating: ${myMentorRating}/5 — Update`
+                        : "Rate Your Mentor"}
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-center py-6 text-gray-400">
+                    <User className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                    <p className="text-sm font-medium text-gray-500">
+                      No mentor assigned yet
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Jody matches new members with a mentor after your
+                      onboarding meeting.
+                    </p>
                   </div>
-                </div>
-                <button
-                  onClick={() =>
-                    (window.location.href = `mailto:${mentorInfo?.email || "Billi@gmail.com"}`)
-                  }
-                  className="w-full py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
-                >
-                  Message Mentor
-                </button>
+                )}
               </div>
             </div>
 
@@ -4190,26 +4433,16 @@ function RoleBasedDashboardContent({
                   </div>
                 </div>
                 <div className="space-y-3">
-                  {(() => {
-                    // Load goals from localStorage
-                    const currentUser = localStorage.getItem("currentUser");
-                    if (!currentUser) return null;
-                    const savedGoals = JSON.parse(
-                      localStorage.getItem(`goals_${currentUser}`) || "[]",
-                    );
-                    const displayGoals = savedGoals.slice(0, 3);
-                    if (savedGoals.length === 0) {
-                      return (
-                        <div className="text-center py-4 text-gray-400">
-                          <Target className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm">No goals set yet</p>
-                          <p className="text-xs">
-                            Click "Goals" above to create some
-                          </p>
-                        </div>
-                      );
-                    }
-                    return displayGoals.map((goal: any) => (
+                  {myGoalsPreview.length === 0 ? (
+                    <div className="text-center py-4 text-gray-400">
+                      <Target className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No goals set yet</p>
+                      <p className="text-xs">
+                        Click "Goals" above to create some
+                      </p>
+                    </div>
+                  ) : (
+                    myGoalsPreview.map((goal) => (
                       <div
                         key={goal.id}
                         className="flex items-start gap-2 p-2 hover:bg-gray-50 rounded-lg"
@@ -4225,13 +4458,15 @@ function RoleBasedDashboardContent({
                           >
                             {goal.title}
                           </p>
-                          <p className="text-xs text-gray-400">
-                            Due: {new Date(goal.dueDate).toLocaleDateString()}
-                          </p>
+                          {goal.due_date && (
+                            <p className="text-xs text-gray-400">
+                              Due: {new Date(goal.due_date).toLocaleDateString()}
+                            </p>
+                          )}
                         </div>
                       </div>
-                    ));
-                  })()}
+                    ))
+                  )}
                 </div>
                 <button
                   onClick={() => router.push("/goals")}
@@ -4418,186 +4653,417 @@ function RoleBasedDashboardContent({
           </div>
         </div>
 
-        {/* Add/Edit Program Modal */}
-        {showProgramAddModal && (
+        {/* Program Details Modal - built from real data: programs/
+            user_programs for the overview, program_tracking (admin-
+            entered) for tracking, mentee_sessions for sessions, and
+            program_resources for resources. All read-only from the
+            user's side - programs are admin-managed. */}
+        {showProgramModal && selectedProgram && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
               <div className="p-5 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  {editingProgramId ? "Edit Program" : "Add New Program"}
-                </h2>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    {selectedProgram.name}
+                  </h2>
+                  <div className="flex items-center gap-2 flex-wrap mt-1">
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full ${
+                        selectedProgram.status === "Active"
+                          ? "bg-green-100 text-green-700"
+                          : selectedProgram.status === "Completed"
+                            ? "bg-purple-100 text-purple-700"
+                            : "bg-yellow-100 text-yellow-700"
+                      }`}
+                    >
+                      {selectedProgram.status}
+                    </span>
+                    {selectedProgram.approved ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                        Approved
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                        Pending approval
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <button
-                  onClick={closeProgramModal}
-                  className="p-2 hover:bg-gray-100 rounded-xl"
+                  onClick={() => {
+                    setShowProgramModal(false);
+                    setSelectedProgram(null);
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-xl flex-shrink-0"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
+
+              {selectedProgram.approved && (
+                <div className="px-5 border-b border-gray-100 bg-gray-50/50">
+                  <div className="flex gap-1 overflow-x-auto">
+                    {(
+                      [
+                        { id: "overview", label: "Overview" },
+                        { id: "tracking", label: "My Tracking" },
+                        { id: "sessions", label: "My Sessions" },
+                        { id: "resources", label: "Resources" },
+                      ] as const
+                    ).map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setProgramModalTab(tab.id)}
+                        className={`px-3 py-2.5 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+                          programModalTab === tab.id
+                            ? "border-emerald-500 text-emerald-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="p-5 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Program Name *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Small Business Mentorship"
-                    value={programFormData.name || ""}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        name: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={programFormData.status || "Active"}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        status: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Completed">Completed</option>
-                    <option value="On Hold">On Hold</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Start Date
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., January 2025"
-                    value={programFormData.startDate || ""}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        startDate: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Progress (%)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    placeholder="0"
-                    value={programFormData.progress || 0}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        progress: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Next Milestone
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Complete business profile"
-                    value={programFormData.nextMilestone || ""}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        nextMilestone: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact Email
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="program@example.com"
-                    value={programFormData.contactEmail || ""}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        contactEmail: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact Phone
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="(555) 123-4567"
-                    value={programFormData.contactPhone || ""}
-                    onChange={(e) =>
-                      setProgramFormData({
-                        ...programFormData,
-                        contactPhone: e.target.value,
-                      })
-                    }
-                    className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
+                {!selectedProgram.approved ? (
+                  <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 text-center">
+                    <p className="text-sm text-amber-800 font-medium">
+                      🔒 You don't have access to this program yet
+                    </p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      Jody reviews and approves access to each program.
+                      You'll be notified once you're approved.
+                    </p>
+                    <button
+                      onClick={() =>
+                        (window.location.href = `mailto:jody@hbcat.org?subject=Requesting access to ${encodeURIComponent(selectedProgram.name)}`)
+                      }
+                      className="mt-3 w-full py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm"
+                    >
+                      Ask Jody for access
+                    </button>
+                  </div>
+                ) : programModalTab === "overview" ? (
+                  <>
+                    {selectedProgram.description && (
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-1">
+                          About This Program
+                        </h4>
+                        <p className="text-gray-600 text-sm leading-relaxed">
+                          {selectedProgram.description}
+                        </p>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-600">
+                          Overall Progress
+                        </span>
+                        <span className="font-medium text-emerald-600">
+                          {selectedProgram.progress}%
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-2 bg-emerald-500 rounded-full transition-all"
+                          style={{ width: `${selectedProgram.progress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {(selectedProgram.start_date ||
+                      selectedProgram.end_date) && (
+                      <div className="flex items-center gap-1 text-sm text-gray-500">
+                        <Clock className="h-4 w-4 text-gray-400" />
+                        {selectedProgram.start_date &&
+                          `Started ${new Date(selectedProgram.start_date).toLocaleDateString()}`}
+                        {selectedProgram.start_date &&
+                          selectedProgram.end_date &&
+                          " · "}
+                        {selectedProgram.end_date &&
+                          `Ends ${new Date(selectedProgram.end_date).toLocaleDateString()}`}
+                      </div>
+                    )}
+
+                    {(selectedProgram.contact_email ||
+                      selectedProgram.contact_phone) && (
+                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-2">
+                        <h4 className="text-sm font-medium text-gray-900">
+                          Program Contact
+                        </h4>
+                        {selectedProgram.contact_email && (
+                          <button
+                            onClick={() =>
+                              (window.location.href = `mailto:${selectedProgram.contact_email}`)
+                            }
+                            className="w-full flex items-center gap-3 p-2.5 bg-white rounded-lg hover:bg-emerald-50 transition-colors border border-gray-100 text-left"
+                          >
+                            <Mail className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                            <span className="text-sm text-gray-700 truncate">
+                              {selectedProgram.contact_email}
+                            </span>
+                          </button>
+                        )}
+                        {selectedProgram.contact_phone && (
+                          <button
+                            onClick={() =>
+                              (window.location.href = `tel:${selectedProgram.contact_phone}`)
+                            }
+                            className="w-full flex items-center gap-3 p-2.5 bg-white rounded-lg hover:bg-emerald-50 transition-colors border border-gray-100 text-left"
+                          >
+                            <Phone className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                            <span className="text-sm text-gray-700">
+                              {selectedProgram.contact_phone}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : programModalTab === "tracking" ? (
+                  loadingProgramDetails ? (
+                    <div className="flex justify-center py-10">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500" />
+                    </div>
+                  ) : !programTracking ? (
+                    <div className="text-center py-10 text-gray-400">
+                      <TrendingUp className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                      <p className="text-sm font-medium text-gray-500">
+                        No tracking data yet
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Jody updates program budget and outcomes from the
+                        admin panel.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                          <DollarSign className="h-4 w-4 text-emerald-600" />
+                          Financial
+                        </h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">Budget</p>
+                            <p className="text-lg font-bold text-gray-900">
+                              ${programTracking.budget.toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">Spent</p>
+                            <p className="text-lg font-bold text-gray-900">
+                              ${programTracking.spent.toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">
+                              Grants Received
+                            </p>
+                            <p className="text-lg font-bold text-emerald-600">
+                              $
+                              {programTracking.grants_received.toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">
+                              Grants Pending
+                            </p>
+                            <p className="text-lg font-bold text-amber-600">
+                              $
+                              {programTracking.grants_pending.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                          <TrendingUp className="h-4 w-4 text-purple-600" />
+                          Outcomes
+                        </h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">
+                              Businesses Launched
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {programTracking.businesses_launched}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">
+                              Businesses Expanded
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {programTracking.businesses_expanded}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">
+                              Jobs Created
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {programTracking.jobs_created}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">
+                              Jobs Retained
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {programTracking.jobs_retained}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">
+                              Capital Accessed
+                            </p>
+                            <p className="text-lg font-bold text-emerald-600">
+                              $
+                              {programTracking.capital_accessed.toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">
+                              Revenue Growth
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {programTracking.revenue_growth_pct}%
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                ) : programModalTab === "sessions" ? (
+                  loadingProgramDetails ? (
+                    <div className="flex justify-center py-10">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500" />
+                    </div>
+                  ) : programSessions.length === 0 ? (
+                    <div className="text-center py-10 text-gray-400">
+                      <Calendar className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                      <p className="text-sm font-medium text-gray-500">
+                        No sessions yet
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Sessions your mentor logs will show up here.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {programSessions.map((session) => (
+                        <div
+                          key={session.id}
+                          className="bg-gray-50 rounded-xl p-4 border border-gray-100"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {session.topic || "Mentoring Session"}
+                              </p>
+                              <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(
+                                    session.date,
+                                  ).toLocaleDateString()}
+                                </span>
+                                {session.time && <span>{session.time}</span>}
+                                <span>{session.duration} min</span>
+                              </div>
+                              {session.mentor_name && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Mentor: {session.mentor_name}
+                                </p>
+                              )}
+                              {session.notes && (
+                                <p className="text-sm text-gray-600 mt-2">
+                                  {session.notes}
+                                </p>
+                              )}
+                            </div>
+                            {session.meeting_link && (
+                              <button
+                                onClick={() =>
+                                  window.open(session.meeting_link!, "_blank")
+                                }
+                                className="flex-shrink-0 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"
+                              >
+                                Join
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                ) : loadingProgramDetails ? (
+                  <div className="flex justify-center py-10">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500" />
+                  </div>
+                ) : programResources.length === 0 ? (
+                  <div className="text-center py-10 text-gray-400">
+                    <BookOpen className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                    <p className="text-sm font-medium text-gray-500">
+                      No resources yet
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {programResources.map((resource) => (
+                      <button
+                        key={resource.id}
+                        onClick={() => {
+                          if (!resource.url) return;
+                          if (resource.url.startsWith("mailto:")) {
+                            window.location.href = resource.url;
+                          } else {
+                            window.open(resource.url, "_blank");
+                          }
+                        }}
+                        className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-emerald-50 transition-colors group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="p-2 bg-white rounded-lg flex-shrink-0">
+                            <FileText className="h-4 w-4 text-gray-500" />
+                          </div>
+                          <div className="text-left min-w-0">
+                            <p className="text-sm font-medium text-gray-700 truncate">
+                              {resource.name}
+                            </p>
+                            <p className="text-xs text-gray-400 capitalize">
+                              {resource.type}
+                              {resource.description
+                                ? ` · ${resource.description}`
+                                : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0 group-hover:text-emerald-600" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="p-5 border-t border-gray-100 flex gap-3 sticky bottom-0 bg-white">
-                <button
-                  onClick={closeProgramModal}
-                  className="flex-1 py-2 border rounded-xl hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
+              <div className="p-5 border-t border-gray-100 sticky bottom-0 bg-white">
                 <button
                   onClick={() => {
-                    if (editingProgramId) {
-                      saveEditProgram();
-                    } else {
-                      addProgram();
-                    }
+                    setShowProgramModal(false);
+                    setSelectedProgram(null);
                   }}
-                  disabled={!programFormData.name}
-                  className="flex-1 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors"
                 >
-                  {editingProgramId ? "Save Changes" : "Add Program"}
+                  Close
                 </button>
               </div>
             </div>
           </div>
-        )}
-
-        {/* Program Details Modal */}
-        {showProgramModal && selectedProgram && (
-          <UserProgramModal
-            program={selectedProgram}
-            onClose={() => {
-              setShowProgramModal(false);
-              setSelectedProgram(null);
-            }}
-            userEmail={profile?.email}
-            userRole={profile?.primaryRole}
-            isJody={
-              profile?.email === "jody@hbcat.org" ||
-              profile?.email === "admin@ruralcommunity.org"
-            }
-          />
         )}
 
         {/* All Notes Modal - For Mentor Notes */}
@@ -4659,6 +5125,15 @@ export default function DashboardPage() {
     email: "",
     role: "",
   });
+  // checkForUpcomingSessions is called from setTimeout/setInterval callbacks
+  // created once inside a mount-only useEffect, which would otherwise close
+  // over the stale initial `profile` (still {name:"",email:"",...} at that
+  // point). This ref always holds the latest value so those callbacks see
+  // real data once auth loads.
+  const profileRef = useRef(profile);
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
   const [panel, setPanel] = useState<
     "settings" | "profile" | "edit-profile" | "change-password" | null
   >(null);
@@ -4671,7 +5146,6 @@ export default function DashboardPage() {
     emailNotifications: true,
     mentorAlerts: true,
     participantAlerts: true,
-    reportAlerts: true,
     darkMode: false,
     twoFactorAuth: true,
     dashboardLayout: "comfortable",
@@ -4707,65 +5181,86 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const checkForUpcomingSessions = () => {
-    const user = localStorage.getItem("currentUser");
-    if (!user) return;
+  // Checks the real mentee_sessions data (same source as the Upcoming
+  // Sessions card) for anything happening today or tomorrow, and fires an
+  // in-app toast + optional browser notification once per session. Reads
+  // profileRef instead of `profile` directly since this can be called from
+  // callbacks created once at mount, before the real profile has loaded.
+  const checkForUpcomingSessions = async () => {
+    const currentProfile = profileRef.current;
+    if (!currentProfile?.email || currentProfile.primaryRole !== "mentor") {
+      return;
+    }
 
     const sessionRemindersEnabled =
       localStorage.getItem("session_reminders_enabled") === "true";
-    const browserNotificationsEnabled =
-      localStorage.getItem("browser_notifications_enabled") === "true";
-
     if (!sessionRemindersEnabled) return;
 
-    const savedProfile = localStorage.getItem(`profile_${user}`);
-    const profileData = savedProfile ? JSON.parse(savedProfile) : null;
+    try {
+      const mentorRow = await getMentorProfileByEmail(currentProfile.email);
+      if (!mentorRow) return;
 
-    if (profileData?.primaryRole === "mentor") {
-      const mentorProfile = localStorage.getItem(`mentor_profile_${user}`);
-      if (mentorProfile) {
-        const mentorData = JSON.parse(mentorProfile);
-        const today = new Date();
+      const [sessions, mentees] = await Promise.all([
+        getAllSessionsForMentor(mentorRow.name),
+        getMenteesForMentor(mentorRow.name),
+      ]);
+      const menteeById = Object.fromEntries(mentees.map((m) => [m.id, m]));
 
-        mentorData.mentees?.forEach((mentee: any) => {
-          if (mentee.nextSession) {
-            const sessionDate = new Date(mentee.nextSession.date);
-            const hoursUntil =
-              (sessionDate.getTime() - today.getTime()) / (1000 * 60 * 60);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      const todayStr = today.toISOString().split("T")[0];
+      const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
-            if (hoursUntil <= 24 && hoursUntil > 0) {
-              const reminderKey = `session_reminder_${mentee.id}_${mentee.nextSession.date}`;
-              const sentReminders = JSON.parse(
-                localStorage.getItem("sent_session_reminders") || "[]",
-              );
+      const sentReminders: string[] = JSON.parse(
+        localStorage.getItem("sent_session_reminders") || "[]",
+      );
+      let updated = false;
 
-              if (!sentReminders.includes(reminderKey)) {
-                showToast(
-                  `⏰ Reminder: Session with ${mentee.name} tomorrow at ${mentee.nextSession.time} - ${mentee.nextSession.topic}`,
-                  "info",
-                );
+      const dueSessions = sessions.filter(
+        (s) => s.date === todayStr || s.date === tomorrowStr,
+      );
 
-                if (
-                  browserNotificationsEnabled &&
-                  "Notification" in window &&
-                  Notification.permission === "granted"
-                ) {
-                  new Notification("Upcoming Mentoring Session", {
-                    body: `${mentee.name} - ${mentee.nextSession.topic} at ${mentee.nextSession.time}`,
-                    icon: "/logo.png",
-                  });
-                }
+      for (const s of dueSessions) {
+        const reminderKey = `session_reminder_${s.id}`;
+        if (sentReminders.includes(reminderKey)) continue;
 
-                sentReminders.push(reminderKey);
-                localStorage.setItem(
-                  "sent_session_reminders",
-                  JSON.stringify(sentReminders),
-                );
-              }
-            }
-          }
-        });
+        const menteeName =
+          (s.participant_id && menteeById[s.participant_id]?.name) ||
+          "your mentee";
+        const whenLabel = s.date === todayStr ? "today" : "tomorrow";
+        const timeLabel = s.time ? ` at ${s.time}` : "";
+        const topic = s.topic || "Mentoring session";
+        const message = `Session with ${menteeName} ${whenLabel}${timeLabel} - ${topic}`;
+
+        showToast(`⏰ Reminder: ${message}`, "info");
+
+        // Real email attempt, gated by the Email notifications toggle -
+        // no-ops instantly if it's off. Also logs to the real email_logs
+        // table (visible in admin > Email Logs) regardless of whether
+        // Resend is configured yet.
+        sendMentorEmailNotification(
+          currentProfile.email,
+          `Upcoming Mentoring Session ${whenLabel === "today" ? "Today" : "Tomorrow"}`,
+          `You have a mentoring session ${message}.`,
+          "mentor_alert",
+        ).catch((err) =>
+          console.error("Failed to send session reminder email:", err),
+        );
+
+        sentReminders.push(reminderKey);
+        updated = true;
       }
+
+      if (updated) {
+        localStorage.setItem(
+          "sent_session_reminders",
+          JSON.stringify(sentReminders),
+        );
+      }
+    } catch (err) {
+      console.error("Failed to check for upcoming sessions:", err);
     }
   };
 
@@ -4797,21 +5292,37 @@ export default function DashboardPage() {
         return;
       }
 
-      // Admin/staff/program_manager belong on the admin dashboard, not here
+      // Admin/staff belong on the admin dashboard, program managers on
+      // their own dashboard - neither belongs here.
       if (
         userRow.primary_role === "admin" ||
-        userRow.primary_role === "staff" ||
-        userRow.primary_role === "program_manager"
+        userRow.primary_role === "staff"
       ) {
         router.push("/admin/dashboard");
         return;
       }
+      if (userRow.primary_role === "program_manager") {
+        router.push("/program-manager/dashboard");
+        return;
+      }
+
+      // Best-effort avatar fetch - profiles row may not exist for every
+      // account (see the signup RLS note from earlier), so don't block
+      // login on it.
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("avatar")
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
 
       const loadedProfile = {
         name: userRow.name || userRow.email.split("@")[0],
         email: userRow.email,
         role: userRow.primary_role || "Member",
         primaryRole: userRow.primary_role ?? undefined,
+        avatar: profileRow?.avatar ?? undefined,
       };
 
       setProfile(loadedProfile);
@@ -4825,9 +5336,6 @@ export default function DashboardPage() {
       const savedSessionReminders = localStorage.getItem(
         "session_reminders_enabled",
       );
-      const savedBrowserNotifications = localStorage.getItem(
-        "browser_notifications_enabled",
-      );
 
       if (savedEmailNotifications !== null) {
         setSettings((prev) => ({
@@ -4839,12 +5347,6 @@ export default function DashboardPage() {
         setSettings((prev) => ({
           ...prev,
           mentorAlerts: savedSessionReminders === "true",
-        }));
-      }
-      if (savedBrowserNotifications !== null) {
-        setSettings((prev) => ({
-          ...prev,
-          reportAlerts: savedBrowserNotifications === "true",
         }));
       }
 
@@ -4869,21 +5371,54 @@ export default function DashboardPage() {
     };
   }, [router]);
 
-  const saveProfile = () => {
-    setProfile(editForm);
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      localStorage.setItem(`profile_${currentUser}`, JSON.stringify(editForm));
+  const saveProfile = async () => {
+    const trimmedName = editForm.name.trim();
+    if (!trimmedName) {
+      showToast("Name can't be empty.", "error");
+      return;
     }
-    setEditSaved(true);
-    showToast("Profile updated successfully!", "success");
-    setTimeout(() => {
-      setEditSaved(false);
-      setPanel("profile");
-    }, 1200);
+
+    try {
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        showToast("You're not signed in. Please log in again.", "error");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("users")
+        .update({ name: trimmedName })
+        .eq("id", authData.user.id);
+      if (error) throw error;
+
+      // Best-effort: keep the profiles table in sync too, but don't block
+      // on it - some accounts may not have a profiles row yet (see the
+      // signup RLS note from earlier).
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ name: trimmedName })
+        .eq("user_id", authData.user.id);
+      if (profileError) {
+        console.warn("Failed to sync profiles table:", profileError);
+      }
+
+      const updated = { ...profile, name: trimmedName };
+      setProfile(updated);
+      setEditForm(updated);
+      setEditSaved(true);
+      showToast("Profile updated successfully!", "success");
+      setTimeout(() => {
+        setEditSaved(false);
+        setPanel("profile");
+      }, 1200);
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+      showToast("Failed to save profile. Please try again.", "error");
+    }
   };
 
-  const savePassword = () => {
+  const savePassword = async () => {
     setPasswordError("");
     if (!passwords.current)
       return setPasswordError("Enter your current password.");
@@ -4891,13 +5426,39 @@ export default function DashboardPage() {
       return setPasswordError("New password must be at least 6 characters.");
     if (passwords.newPass !== passwords.confirm)
       return setPasswordError("Passwords do not match.");
-    setPasswordSaved(true);
-    showToast("Password updated successfully!", "success");
-    setPasswords({ current: "", newPass: "", confirm: "" });
-    setTimeout(() => {
-      setPasswordSaved(false);
-      setPanel("profile");
-    }, 1200);
+
+    try {
+      // Verify the current password before changing it, since Supabase's
+      // updateUser() doesn't check it on its own (it trusts the existing
+      // session).
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: profile.email,
+        password: passwords.current,
+      });
+      if (reauthError) {
+        setPasswordError("Current password is incorrect.");
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: passwords.newPass,
+      });
+      if (error) {
+        setPasswordError(error.message || "Failed to update password.");
+        return;
+      }
+
+      setPasswordSaved(true);
+      showToast("Password updated successfully!", "success");
+      setPasswords({ current: "", newPass: "", confirm: "" });
+      setTimeout(() => {
+        setPasswordSaved(false);
+        setPanel("profile");
+      }, 1200);
+    } catch (err) {
+      console.error("Failed to update password:", err);
+      setPasswordError("Something went wrong. Please try again.");
+    }
   };
 
   const handleLogout = async () => {
@@ -5099,80 +5660,6 @@ export default function DashboardPage() {
                   />
                 </div>
               )}
-
-              <div className="flex items-center justify-between py-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">
-                    Browser notifications
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Show desktop alerts for important events
-                  </p>
-                </div>
-                <Toggle
-                  value={settings.reportAlerts}
-                  onChange={(v) => {
-                    updateSetting("reportAlerts", v);
-                    if (v) {
-                      if ("Notification" in window) {
-                        if (Notification.permission === "default") {
-                          Notification.requestPermission().then(
-                            (permission) => {
-                              if (permission === "granted") {
-                                showToast(
-                                  "Browser notifications enabled!",
-                                  "success",
-                                );
-                                localStorage.setItem(
-                                  "browser_notifications_enabled",
-                                  "true",
-                                );
-                              }
-                            },
-                          );
-                        } else if (Notification.permission === "granted") {
-                          showToast(
-                            "Browser notifications enabled!",
-                            "success",
-                          );
-                          localStorage.setItem(
-                            "browser_notifications_enabled",
-                            "true",
-                          );
-                          new Notification("Notifications Enabled", {
-                            body: "You'll now receive important updates.",
-                            icon: "/logo.png",
-                          });
-                        } else {
-                          showToast(
-                            "Please allow notifications in your browser settings",
-                            "error",
-                          );
-                          setSettings((prev) => ({
-                            ...prev,
-                            reportAlerts: false,
-                          }));
-                        }
-                      } else {
-                        showToast(
-                          "Your browser doesn't support notifications",
-                          "error",
-                        );
-                        setSettings((prev) => ({
-                          ...prev,
-                          reportAlerts: false,
-                        }));
-                      }
-                    } else {
-                      localStorage.setItem(
-                        "browser_notifications_enabled",
-                        "false",
-                      );
-                      showToast("Browser notifications disabled", "info");
-                    }
-                  }}
-                />
-              </div>
             </div>
           </div>
 
@@ -5250,8 +5737,16 @@ export default function DashboardPage() {
       >
         <div className="flex flex-col items-center gap-2 py-4">
           <div className="relative">
-            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
-              {profile.name.charAt(0).toUpperCase()}
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg overflow-hidden">
+              {profile.avatar ? (
+                <img
+                  src={profile.avatar}
+                  alt={profile.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                profile.name.charAt(0).toUpperCase()
+              )}
             </div>
             <button
               onClick={() => {
@@ -5262,16 +5757,23 @@ export default function DashboardPage() {
                   const file = (e.target as HTMLInputElement).files?.[0];
                   if (file) {
                     const reader = new FileReader();
-                    reader.onload = (event) => {
+                    reader.onload = async (event) => {
                       const avatarUrl = event.target?.result as string;
                       const updatedProfile = { ...profile, avatar: avatarUrl };
                       setProfile(updatedProfile);
-                      const currentUser = localStorage.getItem("currentUser");
-                      if (currentUser) {
-                        localStorage.setItem(
-                          `profile_${currentUser}`,
-                          JSON.stringify(updatedProfile),
-                        );
+                      const { data: authData } = await supabase.auth.getUser();
+                      if (authData.user) {
+                        const { error } = await supabase
+                          .from("profiles")
+                          .upsert(
+                            { user_id: authData.user.id, avatar: avatarUrl },
+                            { onConflict: "user_id" },
+                          );
+                        if (error) {
+                          console.error("Failed to save avatar:", error);
+                          showToast("Failed to save profile picture.", "error");
+                          return;
+                        }
                       }
                       showToast("Profile picture updated!", "success");
                     };
@@ -5350,11 +5852,13 @@ export default function DashboardPage() {
             <input
               type="email"
               value={editForm.email}
-              onChange={(e) =>
-                setEditForm({ ...editForm, email: e.target.value })
-              }
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              disabled
+              readOnly
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              This is your login email and can't be changed here.
+            </p>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -5363,11 +5867,13 @@ export default function DashboardPage() {
             <input
               type="text"
               value={editForm.role}
-              onChange={(e) =>
-                setEditForm({ ...editForm, role: e.target.value })
-              }
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              disabled
+              readOnly
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              Contact an admin to change your role.
+            </p>
           </div>
           <button
             onClick={saveProfile}
@@ -5416,7 +5922,11 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <main className="px-4 md:px-6 py-6 max-w-7xl mx-auto">
-        <RoleBasedDashboardContent showToast={showToast} router={router} />
+        <RoleBasedDashboardContent
+          showToast={showToast}
+          router={router}
+          authProfile={profile}
+        />
       </main>
 
       <style jsx>{`

@@ -1,132 +1,139 @@
+// app/set-password/page.tsx
 "use client";
+export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 
-// Disable SSR for the entire page by using a dynamic import with ssr: false.
-const SetPasswordPageContent = () => {
+// Landing page for a real Supabase invite link (see
+// app/api/admin/approve-access/route.ts, which generates the invite via
+// supabaseAdmin.auth.admin.generateLink({ type: "invite", ... , options:
+// { redirectTo: ".../set-password" } }) and emails it via
+// sendAccessInviteEmail). Clicking the link in that email auto-authenticates
+// the browser with a real Supabase session - but the account still has NO
+// password set, so this page's only job is to force the user to set one
+// via supabase.auth.updateUser before they're allowed into the app.
+//
+// This replaces an older page that only understood a homegrown
+// localStorage("access_requests") verification-token scheme, which never
+// matched what the real invite flow actually sends.
+export default function SetPasswordPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token");
 
+  const [checking, setChecking] = useState(true);
+  const [hasSession, setHasSession] = useState(false);
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [validToken, setValidToken] = useState<boolean | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
-    // Only run on the client side
-    if (typeof window === "undefined") return;
+    let cancelled = false;
 
-    if (!token) {
-      setError(
-        "Invalid or missing verification token. Please contact Jody for a new link.",
-      );
-      setValidToken(false);
-      return;
-    }
+    const checkSession = async () => {
+      // The Supabase client auto-detects the invite tokens in the URL and
+      // establishes a session on load, but that can take a tick - give it
+      // a moment, then check.
+      const { data } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (data.user) {
+        setHasSession(true);
+        setName(
+          (data.user.user_metadata?.name as string | undefined) ||
+            data.user.email ||
+            "",
+        );
+      }
+      setChecking(false);
+    };
 
-    // Check if token exists and is valid
-    const requests = JSON.parse(
-      localStorage.getItem("access_requests") || "[]",
-    );
-    const request = requests.find((r: any) => r.verificationToken === token);
+    checkSession();
 
-    if (request && request.status === "approved" && !request.passwordSet) {
-      setValidToken(true);
-      setError("");
-    } else if (request && request.passwordSet) {
-      setError("Your password has already been set. Please login.");
-      setValidToken(false);
-    } else {
-      setError(
-        "Invalid verification token. Please contact Jody for a new link.",
-      );
-      setValidToken(false);
-    }
-  }, [token]);
+    // In case the session finishes establishing itself just after the
+    // initial check.
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (session?.user) {
+        setHasSession(true);
+        setName(
+          (session.user.user_metadata?.name as string | undefined) ||
+            session.user.email ||
+            "",
+        );
+        setChecking(false);
+      }
+    });
 
-  const handleSetPassword = async (e: React.FormEvent) => {
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
 
-    // Validate password
     if (password.length < 8) {
       setError("Password must be at least 8 characters long.");
-      setLoading(false);
       return;
     }
-
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
-      setLoading(false);
       return;
     }
 
+    setSubmitting(true);
     try {
-      const users = JSON.parse(localStorage.getItem("users") || "[]");
-      const requests = JSON.parse(
-        localStorage.getItem("access_requests") || "[]",
-      );
-      const request = requests.find((r: any) => r.verificationToken === token);
-
-      if (!request) {
-        setError("Invalid request. Please contact Jody.");
-        setLoading(false);
+      const { error: updateError } = await supabase.auth.updateUser({
+        password,
+      });
+      if (updateError) {
+        setError(updateError.message || "Failed to set password.");
+        setSubmitting(false);
         return;
       }
 
-      const userIndex = users.findIndex((u: any) => u.email === request.email);
+      setSuccess(true);
 
-      if (userIndex === -1) {
-        users.push({
-          email: request.email,
-          name: request.name,
-          password: password,
-          passwordSet: true,
-          primaryRole: request.requestedRole,
-          status: "active",
-          createdAt: new Date().toISOString(),
-        });
-      } else {
-        users[userIndex].password = password;
-        users[userIndex].passwordSet = true;
-        users[userIndex].status = "active";
+      // Route them to the dashboard that matches their role, same logic
+      // used at login.
+      const { data: authData } = await supabase.auth.getUser();
+      let destination = "/";
+      if (authData.user) {
+        const { data: userRow } = await supabase
+          .from("users")
+          .select("primary_role")
+          .eq("id", authData.user.id)
+          .maybeSingle();
+        const role = userRow?.primary_role || "entrepreneur";
+        if (role === "admin" || role === "staff") {
+          destination = "/admin/dashboard";
+        } else if (role === "program_manager") {
+          destination = "/program-manager/dashboard";
+        }
       }
 
-      localStorage.setItem("users", JSON.stringify(users));
-
-      const updatedRequests = requests.map((r: any) =>
-        r.verificationToken === token ? { ...r, passwordSet: true } : r,
-      );
-      localStorage.setItem("access_requests", JSON.stringify(updatedRequests));
-
-      setSuccess(true);
-      setLoading(false);
-
       setTimeout(() => {
-        router.push("/login");
-      }, 2000);
+        router.replace(destination);
+      }, 1500);
     } catch (err) {
       console.error("Error setting password:", err);
-      setError("An error occurred. Please try again.");
-      setLoading(false);
+      setError("Something went wrong. Please try again.");
+      setSubmitting(false);
     }
   };
 
-  // Show loading state while checking token
-  if (validToken === null) {
+  if (checking) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto" />
-          <p className="text-sm text-gray-500 mt-2">Verifying your token...</p>
+          <p className="text-sm text-gray-500 mt-2">Verifying your invite link...</p>
         </div>
       </div>
     );
@@ -136,13 +143,13 @@ const SetPasswordPageContent = () => {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">
-            Set Your Password
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900">Set Your Password</h1>
           <p className="text-sm text-gray-500 mt-2">
             {success
               ? "Your password has been set successfully!"
-              : "Create a secure password for your account"}
+              : hasSession
+                ? `Welcome${name ? `, ${name}` : ""} — create a password to activate your account`
+                : "This invite link is invalid or has expired"}
           </p>
         </div>
 
@@ -156,18 +163,12 @@ const SetPasswordPageContent = () => {
           <div className="text-center">
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
               <p className="text-sm text-green-600">
-                ✅ Password set successfully! Redirecting to login...
+                ✅ Password set! Taking you to your dashboard...
               </p>
             </div>
-            <button
-              onClick={() => router.push("/login")}
-              className="w-full py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
-            >
-              Go to Login
-            </button>
           </div>
-        ) : validToken ? (
-          <form onSubmit={handleSetPassword} className="space-y-4">
+        ) : hasSession ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 New Password
@@ -195,54 +196,41 @@ const SetPasswordPageContent = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Confirm Password
               </label>
-              <div className="relative">
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Confirm your password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showConfirmPassword ? "Hide" : "Show"}
-                </button>
-              </div>
+              <input
+                type={showPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Confirm your password"
+                required
+              />
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={submitting}
               className="w-full py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Setting password..." : "Set Password"}
+              {submitting ? "Setting password..." : "Set Password"}
             </button>
           </form>
         ) : (
           <div className="text-center">
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-              <p className="text-sm text-yellow-700">{error}</p>
+              <p className="text-sm text-yellow-700">
+                This link is invalid or has expired. Please contact Jody for a new invite,
+                or log in if you've already set your password.
+              </p>
             </div>
             <button
-              onClick={() => router.push("/request-access")}
+              onClick={() => router.push("/login")}
               className="w-full py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
             >
-              Request New Access
+              Go to Login
             </button>
           </div>
         )}
       </div>
     </div>
   );
-};
-
-// This is the key part for disables SSR for the entire page.
-const SetPasswordPage = dynamic(() => Promise.resolve(SetPasswordPageContent), {
-  ssr: false,
-});
-
-export default SetPasswordPage;
+}

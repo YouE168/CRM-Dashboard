@@ -23,8 +23,17 @@ import {
   getMentorsStats,
   getMenteesForMentor,
   subscribeToMentorsChanges,
+  getGoalsForParticipant,
+  getNotesForParticipant,
+  addMenteeNote,
+  getSessionsForParticipant,
+  addMenteeSession,
+  subscribeToMenteeData,
   type MentorRow,
   type MentorsStats,
+  type MenteeGoalRow,
+  type MenteeNoteRow,
+  type MenteeSessionRow,
 } from "@/lib/supabase/dashboard-data";
 import { supabase } from "@/lib/supabase/client";
 
@@ -39,100 +48,12 @@ interface Mentee {
   sessionsCompleted: number;
 }
 
-interface Goal {
-  id: string;
-  title: string;
-  description: string;
-  dueDate: string;
-  completed: boolean;
-  category: string;
-}
-
-interface Note {
-  id: number;
-  date: string;
-  note: string;
-  author: string;
-}
-
-interface Session {
-  id: number;
-  date: string;
-  time: string;
-  topic: string;
-  notes: string;
-  meetingLink: string;
-  mentorName: string;
-  createdAt: string;
-}
-
-// ============================================================
-// NOTE: Goals, Notes, and Sessions (inside the mentee detail
-// modal below) are still stored in localStorage - this is a
-// deliberate next-phase item, not yet migrated to Supabase.
-// The KPI cards, Mentor Directory, and "My Mentees" list above
-// them are fully real/Supabase-backed as of this pass.
-// ============================================================
-
-const getMenteeGoals = (mentee: Mentee): Goal[] => {
-  const savedGoals = localStorage.getItem(`goals_${mentee.email}`);
-  if (savedGoals) {
-    try {
-      return JSON.parse(savedGoals);
-    } catch {
-      return [];
-    }
-  }
-  return [];
-};
-
-const getMenteeNotes = (menteeId: string): Note[] => {
-  if (typeof window === "undefined") return [];
-  const saved = localStorage.getItem(`mentee_notes_${menteeId}`);
-  return saved ? JSON.parse(saved) : [];
-};
-
-const saveMenteeNote = (
-  menteeId: string,
-  note: string,
-  author: string,
-): Note => {
-  const existingNotes = getMenteeNotes(menteeId);
-  const newNote = {
-    id: Date.now(),
-    date: new Date().toISOString(),
-    note: note,
-    author: author,
-  };
-  existingNotes.unshift(newNote);
-  localStorage.setItem(
-    `mentee_notes_${menteeId}`,
-    JSON.stringify(existingNotes),
-  );
-  return newNote;
-};
-
-const saveSession = (
-  mentee: Mentee,
-  session: any,
-  mentorName: string,
-): Session => {
-  const existingSessions = JSON.parse(
-    localStorage.getItem(`mentee_sessions_${mentee.id}`) || "[]",
-  );
-  const newSession: Session = {
-    id: Date.now(),
-    ...session,
-    mentorName: mentorName,
-    createdAt: new Date().toISOString(),
-  };
-  existingSessions.push(newSession);
-  localStorage.setItem(
-    `mentee_sessions_${mentee.id}`,
-    JSON.stringify(existingSessions),
-  );
-  return newSession;
-};
+// Goals, Notes, and Sessions in the mentee detail modal below now read
+// and write through the real mentee_goals/mentee_notes/mentee_sessions
+// tables (same ones the mentee's own dashboard uses), replacing the old
+// localStorage("goals_*"/"mentee_notes_*"/"mentee_sessions_*") blobs -
+// those keys were never written to by the real mentee-facing app, so the
+// old version of this modal always showed stale or empty data.
 
 const avatarColors = [
   "bg-emerald-100 text-emerald-700",
@@ -267,31 +188,71 @@ function MenteeDetailsModal({
   onClose: () => void;
   currentMentorName: string;
 }) {
-  const [goals] = useState<Goal[]>(getMenteeGoals(mentee));
-  const [notes, setNotes] = useState<Note[]>(getMenteeNotes(mentee.id));
+  const [goals, setGoals] = useState<MenteeGoalRow[]>([]);
+  const [notes, setNotes] = useState<MenteeNoteRow[]>([]);
+  const [sessions, setSessions] = useState<MenteeSessionRow[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(true);
   const [newNote, setNewNote] = useState("");
   const [showAllGoals, setShowAllGoals] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [sessions, setSessions] = useState<Session[]>([]);
 
-  useEffect(() => {
-    const savedSessions = JSON.parse(
-      localStorage.getItem(`mentee_sessions_${mentee.id}`) || "[]",
-    );
-    setSessions(savedSessions);
+  const loadDetails = useCallback(async () => {
+    try {
+      const [goalsData, notesData, sessionsData] = await Promise.all([
+        getGoalsForParticipant(mentee.id),
+        getNotesForParticipant(mentee.id),
+        getSessionsForParticipant(mentee.id),
+      ]);
+      setGoals(goalsData);
+      setNotes(notesData);
+      setSessions(sessionsData);
+    } catch (err) {
+      console.error("Failed to load mentee details:", err);
+    } finally {
+      setLoadingDetails(false);
+    }
   }, [mentee.id]);
 
-  const handleAddNote = () => {
-    if (newNote.trim()) {
-      const savedNote = saveMenteeNote(mentee.id, newNote, currentMentorName);
-      setNotes([savedNote, ...notes]);
+  useEffect(() => {
+    loadDetails();
+    const unsubscribe = subscribeToMenteeData(loadDetails);
+    return unsubscribe;
+  }, [loadDetails]);
+
+  const handleAddNote = async () => {
+    if (!newNote.trim()) return;
+    try {
+      await addMenteeNote(mentee.id, newNote, currentMentorName);
       setNewNote("");
+      await loadDetails();
+    } catch (err) {
+      console.error("Failed to save note:", err);
+      alert("Couldn't save that note. Please try again.");
     }
   };
 
-  const handleScheduleSession = (session: any) => {
-    const newSession = saveSession(mentee, session, currentMentorName);
-    setSessions([newSession, ...sessions]);
+  const handleScheduleSession = async (session: {
+    date: string;
+    time: string;
+    topic: string;
+    notes: string;
+    meetingLink: string;
+  }) => {
+    try {
+      await addMenteeSession({
+        participant_id: mentee.id,
+        date: session.date,
+        time: session.time,
+        topic: session.topic,
+        notes: session.notes,
+        meeting_link: session.meetingLink,
+        mentor_name: currentMentorName,
+      });
+      await loadDetails();
+    } catch (err) {
+      console.error("Failed to schedule session:", err);
+      alert("Couldn't schedule that session. Please try again.");
+    }
   };
 
   const completedGoals = goals.filter((g) => g.completed).length;
@@ -322,6 +283,9 @@ function MenteeDetailsModal({
           </div>
 
           <div className="p-5 space-y-6">
+            {loadingDetails && (
+              <p className="text-sm text-gray-400">Loading mentee details…</p>
+            )}
             <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl">
               <div>
                 <p className="text-xs text-gray-400">Email</p>
@@ -382,9 +346,9 @@ function MenteeDetailsModal({
                             <p className="text-xs text-gray-600 mt-1">📝 {session.notes}</p>
                           )}
                         </div>
-                        {session.meetingLink && (
+                        {session.meeting_link && (
                           <button
-                            onClick={() => window.open(session.meetingLink, "_blank")}
+                            onClick={() => window.open(session.meeting_link!, "_blank")}
                             className="px-2 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"
                           >
                             <Video className="h-3 w-3 inline mr-1" />
@@ -437,7 +401,9 @@ function MenteeDetailsModal({
                             {goal.title}
                           </p>
                           <p className="text-xs text-gray-400">
-                            Due: {new Date(goal.dueDate).toLocaleDateString()}
+                            {goal.due_date
+                              ? `Due: ${new Date(goal.due_date).toLocaleDateString()}`
+                              : "No due date"}
                           </p>
                         </div>
                       </div>
@@ -488,7 +454,7 @@ function MenteeDetailsModal({
                       <div className="flex justify-between items-start mb-1">
                         <span className="text-xs font-medium text-amber-700">{note.author}</span>
                         <span className="text-xs text-gray-400">
-                          {new Date(note.date).toLocaleDateString()}
+                          {new Date(note.created_at).toLocaleDateString()}
                         </span>
                       </div>
                       <p className="text-sm text-gray-700">{note.note}</p>

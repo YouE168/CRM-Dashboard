@@ -1,7 +1,9 @@
 "use client";
+export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 import { ToastNotification } from "@/components/ui/toast-notification";
 import { OverviewTab } from "@/components/dashboard/overview-tab";
 import AnalyticsTab from "@/components/dashboard/analytics-tab";
@@ -15,11 +17,7 @@ import {
   LogOut,
   Eye,
   EyeOff,
-  ChevronLeft,
-  X,
   Camera,
-  Shield,
-  LayoutGrid,
 } from "lucide-react";
 
 type PanelType =
@@ -42,8 +40,6 @@ interface ProfileData {
   email: string;
   role: string;
   avatar?: string;
-  userType?: string;
-  primaryRole?: string;
 }
 
 interface SettingsData {
@@ -52,7 +48,6 @@ interface SettingsData {
   participantAlerts: boolean;
   reportAlerts: boolean;
   darkMode: boolean;
-  twoFactorAuth: boolean;
   dashboardLayout: string;
 }
 
@@ -63,7 +58,6 @@ interface ToastState {
   duration?: number;
 }
 
-// Toggle component
 function Toggle({
   value,
   onChange,
@@ -88,7 +82,6 @@ function Toggle({
   );
 }
 
-// Password Input component
 function PasswordInput({
   placeholder,
   value,
@@ -122,9 +115,7 @@ function PasswordInput({
 export default function ProgramManagerDashboardPage() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState<string>("");
 
-  // ✅ Only 4 tabs - NO Program Management
   const tabs = ["Overview", "Analytics", "Participants", "Mentors"];
   const [activeTab, setActiveTab] = useState("Overview");
 
@@ -135,10 +126,9 @@ export default function ProgramManagerDashboardPage() {
   const [profile, setProfile] = useState<ProfileData>({
     name: "",
     email: "",
-    role: "",
+    role: "Program Manager",
   });
 
-  // Toast notification state
   const [toast, setToast] = useState<ToastState>({
     message: "",
     type: "info",
@@ -157,36 +147,82 @@ export default function ProgramManagerDashboardPage() {
     setToast({ message: "", type: "info", visible: false });
   };
 
-  // CHECK AUTHENTICATION & GET USER ROLE
+  // Real auth + role check - replaces the old localStorage("currentUser")
+  // check, which never matched anything since real login doesn't set that
+  // key. Only admin/staff/program_manager may land here; everyone else
+  // gets bounced to their real home ("/").
   useEffect(() => {
-    const user = localStorage.getItem("currentUser");
-    if (!user) {
-      router.push("/login");
-      return;
-    }
+    let cancelled = false;
 
-    // Load user profile to get role
-    const savedProfile = localStorage.getItem(`profile_${user}`);
-    if (savedProfile) {
-      const parsed = JSON.parse(savedProfile);
-      setProfile(parsed);
+    const loadAuthAndProfile = async () => {
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        router.push("/login");
+        return;
+      }
 
-      // Check if user has program manager role
-      const role = parsed.userType || parsed.primaryRole || "staff";
-      if (role !== "program_manager" && role !== "admin" && role !== "staff") {
+      const { data: userRow, error: userError } = await supabase
+        .from("users")
+        .select("id, name, email, primary_role, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (userError || !userRow) {
+        router.push("/login");
+        return;
+      }
+
+      if (userRow.status && userRow.status !== "active") {
+        router.push("/login");
+        return;
+      }
+
+      if (
+        userRow.primary_role !== "program_manager" &&
+        userRow.primary_role !== "admin" &&
+        userRow.primary_role !== "staff"
+      ) {
         router.push("/");
         return;
       }
-      setUserRole(role);
-    } else {
-      // Default to staff
-      setUserRole("staff");
-    }
 
-    setIsAuthenticated(true);
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("avatar")
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      const loadedProfile: ProfileData = {
+        name: userRow.name || userRow.email.split("@")[0],
+        email: userRow.email,
+        role:
+          userRow.primary_role === "program_manager"
+            ? "Program Manager"
+            : userRow.primary_role === "admin"
+              ? "Admin"
+              : "Staff",
+        avatar: profileRow?.avatar ?? undefined,
+      };
+
+      setProfile(loadedProfile);
+      setEditForm(loadedProfile);
+      setIsAuthenticated(true);
+    };
+
+    loadAuthAndProfile();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  // Notifications
+  // Sample activity feed - no real "notifications" table exists yet for
+  // program managers, so this stays illustrative rather than pretending
+  // to be live data tied to nothing.
   const [notifications, setNotifications] = useState<Notification[]>([
     {
       id: 1,
@@ -218,14 +254,12 @@ export default function ProgramManagerDashboardPage() {
     setNotifications((p) => p.map((n) => ({ ...n, read: true })));
   const clearAll = () => setNotifications([]);
 
-  // Settings
   const [settings, setSettings] = useState<SettingsData>({
     emailNotifications: true,
     mentorAlerts: true,
     participantAlerts: true,
     reportAlerts: true,
     darkMode: false,
-    twoFactorAuth: true,
     dashboardLayout: "comfortable",
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -257,21 +291,50 @@ export default function ProgramManagerDashboardPage() {
     setTimeout(() => setSettingsSaved(false), 2000);
   };
 
-  const saveProfile = () => {
-    setProfile(editForm);
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      localStorage.setItem(`profile_${currentUser}`, JSON.stringify(editForm));
+  const saveProfile = async () => {
+    const trimmedName = editForm.name.trim();
+    if (!trimmedName) {
+      showToast("Name can't be empty.", "error");
+      return;
     }
-    setEditSaved(true);
-    showToast("Profile updated successfully!", "success");
-    setTimeout(() => {
-      setEditSaved(false);
-      setPanel("profile");
-    }, 1200);
+    try {
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        showToast("You're not signed in. Please log in again.", "error");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("users")
+        .update({ name: trimmedName })
+        .eq("id", authData.user.id);
+      if (error) throw error;
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ name: trimmedName })
+        .eq("user_id", authData.user.id);
+      if (profileError) {
+        console.warn("Failed to sync profiles table:", profileError);
+      }
+
+      const updated = { ...profile, name: trimmedName };
+      setProfile(updated);
+      setEditForm(updated);
+      setEditSaved(true);
+      showToast("Profile updated successfully!", "success");
+      setTimeout(() => {
+        setEditSaved(false);
+        setPanel("profile");
+      }, 1200);
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+      showToast("Failed to save profile. Please try again.", "error");
+    }
   };
 
-  const savePassword = () => {
+  const savePassword = async () => {
     setPasswordError("");
     if (!passwords.current)
       return setPasswordError("Enter your current password.");
@@ -279,61 +342,43 @@ export default function ProgramManagerDashboardPage() {
       return setPasswordError("New password must be at least 8 characters.");
     if (passwords.newPass !== passwords.confirm)
       return setPasswordError("Passwords do not match.");
-    setPasswordSaved(true);
-    showToast("Password updated successfully!", "success");
-    setPasswords({ current: "", newPass: "", confirm: "" });
-    setTimeout(() => {
-      setPasswordSaved(false);
-      setPanel("profile");
-    }, 1200);
+
+    try {
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: profile.email,
+        password: passwords.current,
+      });
+      if (reauthError) {
+        setPasswordError("Current password is incorrect.");
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: passwords.newPass,
+      });
+      if (error) {
+        setPasswordError(error.message || "Failed to update password.");
+        return;
+      }
+
+      setPasswordSaved(true);
+      showToast("Password updated successfully!", "success");
+      setPasswords({ current: "", newPass: "", confirm: "" });
+      setTimeout(() => {
+        setPasswordSaved(false);
+        setPanel("profile");
+      }, 1200);
+    } catch (err) {
+      console.error("Failed to update password:", err);
+      setPasswordError("Something went wrong. Please try again.");
+    }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("currentUser");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     router.push("/login");
   };
 
-  // LOAD USER PROFILE FROM LOCALSTORAGE
-  useEffect(() => {
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      const savedProfile = localStorage.getItem(`profile_${currentUser}`);
-      if (savedProfile) {
-        const parsedProfile = JSON.parse(savedProfile);
-        setProfile(parsedProfile);
-        setEditForm(parsedProfile);
-      } else {
-        const userName = currentUser.split("@")[0];
-        const displayName =
-          userName.charAt(0).toUpperCase() + userName.slice(1);
-        const newProfile = {
-          name: displayName,
-          email: currentUser,
-          role: "Program Manager",
-        };
-        setProfile(newProfile);
-        setEditForm(newProfile);
-      }
-    }
-  }, []);
-
-  // Apply saved settings on load
-  useEffect(() => {
-    if (settings.darkMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-    if (settings.dashboardLayout === "compact") {
-      document.body.style.zoom = "0.9";
-    } else if (settings.dashboardLayout === "spacious") {
-      document.body.style.zoom = "1.1";
-    } else {
-      document.body.style.zoom = "1";
-    }
-  }, []);
-
-  // Show loading while checking authentication
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -344,11 +389,10 @@ export default function ProgramManagerDashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Admin Header */}
+      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
         <div className="px-4 md:px-6 py-3">
           <div className="flex items-center justify-between">
-            {/* Logo */}
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 rounded-lg overflow-hidden shadow-md">
                 <img
@@ -373,10 +417,10 @@ export default function ProgramManagerDashboardPage() {
                 <h1 className="text-xl font-bold text-gray-800">
                   Rural Community Partners
                 </h1>
+                <p className="text-xs text-gray-500">Program Manager</p>
               </div>
             </div>
 
-            {/* Navigation Tabs - Only 4 tabs */}
             <nav className="hidden md:flex items-center gap-1">
               {tabs.map((tab) => (
                 <button
@@ -393,7 +437,6 @@ export default function ProgramManagerDashboardPage() {
               ))}
             </nav>
 
-            {/* Icons */}
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPanel("notifications")}
@@ -425,7 +468,6 @@ export default function ProgramManagerDashboardPage() {
         </div>
       </header>
 
-      {/* Toast Notification */}
       {toast.visible && (
         <ToastNotification
           message={toast.message}
@@ -490,62 +532,6 @@ export default function ProgramManagerDashboardPage() {
         icon={Settings}
       >
         <div className="space-y-6">
-          {/* Profile Settings */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">
-              Profile Settings
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Display Name
-                </label>
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={(e) =>
-                    setProfile({ ...profile, name: e.target.value })
-                  }
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={profile.email}
-                  onChange={(e) =>
-                    setProfile({ ...profile, email: e.target.value })
-                  }
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Role
-                </label>
-                <select
-                  value={profile.role}
-                  onChange={(e) =>
-                    setProfile({ ...profile, role: e.target.value })
-                  }
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                >
-                  <option value="Program Manager">Program Manager</option>
-                  <option value="Senior Program Manager">
-                    Senior Program Manager
-                  </option>
-                  <option value="Program Coordinator">
-                    Program Coordinator
-                  </option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Notification Settings */}
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Notifications
@@ -594,7 +580,6 @@ export default function ProgramManagerDashboardPage() {
             </div>
           </div>
 
-          {/* Appearance Settings */}
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               Appearance
@@ -626,7 +611,7 @@ export default function ProgramManagerDashboardPage() {
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    <span className="text-lg mr-1">▦</span>Compact
+                    Compact
                   </button>
                   <button
                     onClick={() => {
@@ -639,7 +624,7 @@ export default function ProgramManagerDashboardPage() {
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    <span className="text-lg mr-1">▣</span>Comfortable
+                    Comfortable
                   </button>
                   <button
                     onClick={() => {
@@ -652,32 +637,22 @@ export default function ProgramManagerDashboardPage() {
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    <span className="text-lg mr-1">◧</span>Spacious
+                    Spacious
                   </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">
-                  Current layout:{" "}
-                  <span className="font-medium">
-                    {settings.dashboardLayout}
-                  </span>
-                </p>
               </div>
             </div>
           </div>
 
-          {/* Security Settings */}
           <div className="border-t pt-4">
-            <div className="space-y-3">
-              <button
-                onClick={() => setPanel("change-password")}
-                className="w-full text-left px-3 py-2 text-sm text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
-              >
-                Change Password →
-              </button>
-            </div>
+            <button
+              onClick={() => setPanel("change-password")}
+              className="w-full text-left px-3 py-2 text-sm text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+            >
+              Change Password →
+            </button>
           </div>
 
-          {/* Save Button */}
           <div className="pt-2">
             <button
               onClick={saveSettings}
@@ -723,16 +698,23 @@ export default function ProgramManagerDashboardPage() {
                   const file = (e.target as HTMLInputElement).files?.[0];
                   if (file) {
                     const reader = new FileReader();
-                    reader.onload = (event) => {
+                    reader.onload = async (event) => {
                       const avatarUrl = event.target?.result as string;
                       const updatedProfile = { ...profile, avatar: avatarUrl };
                       setProfile(updatedProfile);
-                      const currentUser = localStorage.getItem("currentUser");
-                      if (currentUser) {
-                        localStorage.setItem(
-                          `profile_${currentUser}`,
-                          JSON.stringify(updatedProfile),
-                        );
+                      const { data: authData } = await supabase.auth.getUser();
+                      if (authData.user) {
+                        const { error } = await supabase
+                          .from("profiles")
+                          .upsert(
+                            { user_id: authData.user.id, avatar: avatarUrl },
+                            { onConflict: "user_id" },
+                          );
+                        if (error) {
+                          console.error("Failed to save avatar:", error);
+                          showToast("Failed to save profile picture.", "error");
+                          return;
+                        }
                       }
                       showToast("Profile picture updated!", "success");
                     };
@@ -825,11 +807,13 @@ export default function ProgramManagerDashboardPage() {
             <input
               type="email"
               value={editForm.email}
-              onChange={(e) =>
-                setEditForm({ ...editForm, email: e.target.value })
-              }
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              disabled
+              readOnly
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              This is your login email and can't be changed here.
+            </p>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -838,50 +822,13 @@ export default function ProgramManagerDashboardPage() {
             <input
               type="text"
               value={editForm.role}
-              onChange={(e) =>
-                setEditForm({ ...editForm, role: e.target.value })
-              }
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              disabled
+              readOnly
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              Profile Picture
-            </label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  const input = document.createElement("input");
-                  input.type = "file";
-                  input.accept = "image/*";
-                  input.onchange = (e) => {
-                    const file = (e.target as HTMLInputElement).files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        const avatarUrl = event.target?.result as string;
-                        setEditForm({ ...editForm, avatar: avatarUrl });
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  };
-                  input.click();
-                }}
-                className="flex-1 px-3 py-2 text-sm text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
-              >
-                Upload Picture
-              </button>
-              {editForm.avatar && (
-                <button
-                  onClick={() =>
-                    setEditForm({ ...editForm, avatar: undefined })
-                  }
-                  className="px-3 py-2 text-sm text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Contact an admin to change your role.
+            </p>
           </div>
           <button
             onClick={saveProfile}
@@ -943,7 +890,7 @@ export default function ProgramManagerDashboardPage() {
         </div>
       </SlidePanel>
 
-      {/* Main Content - Only 4 tabs */}
+      {/* Main Content - Only 4 tabs, real data via dashboard-data.ts */}
       <main className="px-4 md:px-6 py-6 max-w-7xl mx-auto">
         {activeTab === "Overview" && <OverviewTab />}
         {activeTab === "Analytics" && (

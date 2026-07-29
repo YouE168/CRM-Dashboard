@@ -42,7 +42,6 @@ export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
       "RCP Small Business Mentorship",
       "SEED Micro-Grant",
       "Business Professional Services",
-      "Microloan Program",
       "SEK Catalyst: Empowered by KU",
     ],
     permissions: {
@@ -66,7 +65,6 @@ export const ROLE_CONFIGS: Record<UserRole, RoleConfig> = {
       "RCP Small Business Mentorship",
       "SEED Micro-Grant",
       "Business Professional Services",
-      "Microloan Program",
       "SEK Catalyst: Empowered by KU",
     ],
     permissions: {

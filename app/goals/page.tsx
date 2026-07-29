@@ -1,20 +1,29 @@
 "use client";
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
+import {
+  getParticipantRecordsForUser,
+  getGoalsForParticipant,
+  addMenteeGoal,
+  updateMenteeGoal,
+  deleteMenteeGoal,
+  toggleGoalCompleted,
+  subscribeToMenteeData,
+  type MenteeGoalRow,
+} from "@/lib/supabase/dashboard-data";
 import {
   ArrowLeft,
   CheckCircle,
   Circle,
-  Target,
   Award,
   Calendar,
   Plus,
   Edit2,
   Trash2,
   X,
-  Save,
 } from "lucide-react";
 
 interface Goal {
@@ -26,9 +35,21 @@ interface Goal {
   category: string;
 }
 
+function mapRow(row: MenteeGoalRow): Goal {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || "",
+    dueDate: row.due_date || "",
+    completed: row.completed,
+    category: row.category || "Personal",
+  };
+}
+
 export default function GoalsPage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [participantId, setParticipantId] = useState<string | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
@@ -50,126 +71,128 @@ export default function GoalsPage() {
     "Personal",
   ];
 
-  useEffect(() => {
-    const currentUser = localStorage.getItem("currentUser");
-    if (!currentUser) {
-      router.push("/login");
-      return;
+  const loadGoals = async (pid: string) => {
+    try {
+      const rows = await getGoalsForParticipant(pid);
+      setGoals(rows.map(mapRow));
+    } catch (err) {
+      console.error("Failed to load goals:", err);
     }
-    const savedProfile = localStorage.getItem(`profile_${currentUser}`);
-    if (savedProfile) setProfile(JSON.parse(savedProfile));
+  };
 
-    // Load goals from localStorage
-    const savedGoals = localStorage.getItem(`goals_${currentUser}`);
-    if (savedGoals) {
-      setGoals(JSON.parse(savedGoals));
-    } else {
-      // Default goals
-      const defaultGoals: Goal[] = [
-        {
-          id: "1",
-          title: "Complete Business Profile",
-          description: "Fill out your complete business profile",
-          dueDate: "2025-06-15",
-          completed: true,
-          category: "Onboarding",
-        },
-        {
-          id: "2",
-          title: "First Mentor Session",
-          description: "Schedule and complete your first mentoring session",
-          dueDate: "2025-06-20",
-          completed: true,
-          category: "Mentorship",
-        },
-        {
-          id: "3",
-          title: "Complete Business Plan",
-          description: "Finish your business plan with mentor feedback",
-          dueDate: "2025-06-30",
-          completed: false,
-          category: "Planning",
-        },
-        {
-          id: "4",
-          title: "Financial Projections",
-          description: "Create 12-month financial projections",
-          dueDate: "2025-07-10",
-          completed: false,
-          category: "Financial",
-        },
-        {
-          id: "5",
-          title: "Marketing Strategy",
-          description: "Develop a comprehensive marketing plan",
-          dueDate: "2025-07-15",
-          completed: false,
-          category: "Marketing",
-        },
-      ];
-      setGoals(defaultGoals);
-      localStorage.setItem(
-        `goals_${currentUser}`,
-        JSON.stringify(defaultGoals),
-      );
-    }
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: userRow, error: userError } = await supabase
+        .from("users")
+        .select("email, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (userError || !userRow || (userRow.status && userRow.status !== "active")) {
+        router.push("/login");
+        return;
+      }
+
+      try {
+        const records = await getParticipantRecordsForUser(
+          authData.user.id,
+          userRow.email,
+        );
+        const myRecord = records.find((r) => r.mentor) || records[0] || null;
+
+        if (!cancelled) {
+          setParticipantId(myRecord?.id ?? null);
+          if (myRecord) {
+            await loadGoals(myRecord.id);
+          }
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to load participant record:", err);
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  const saveGoalsToStorage = (updatedGoals: Goal[]) => {
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      localStorage.setItem(
-        `goals_${currentUser}`,
-        JSON.stringify(updatedGoals),
-      );
+  // Keep in sync with realtime changes (e.g. mentor edits a goal too)
+  useEffect(() => {
+    if (!participantId) return;
+    const unsubscribe = subscribeToMenteeData(() => loadGoals(participantId));
+    return unsubscribe;
+  }, [participantId]);
+
+  const toggleGoal = async (goal: Goal) => {
+    try {
+      await toggleGoalCompleted(goal.id, !goal.completed);
+      if (participantId) await loadGoals(participantId);
+    } catch (err) {
+      console.error("Failed to update goal:", err);
     }
   };
 
-  const toggleGoal = (id: string) => {
-    const updatedGoals = goals.map((goal) =>
-      goal.id === id ? { ...goal, completed: !goal.completed } : goal,
-    );
-    setGoals(updatedGoals);
-    saveGoalsToStorage(updatedGoals);
+  const addGoal = async () => {
+    if (!newGoal.title.trim() || !participantId) return;
+    try {
+      await addMenteeGoal({
+        participant_id: participantId,
+        title: newGoal.title.trim(),
+        description: newGoal.description.trim() || undefined,
+        due_date: newGoal.dueDate || undefined,
+        category: newGoal.category,
+      });
+      await loadGoals(participantId);
+      setNewGoal({
+        title: "",
+        description: "",
+        dueDate: new Date().toISOString().split("T")[0],
+        category: "Personal",
+      });
+      setShowAddModal(false);
+    } catch (err) {
+      console.error("Failed to add goal:", err);
+    }
   };
 
-  const addGoal = () => {
-    if (!newGoal.title.trim()) return;
-    const newGoalObj: Goal = {
-      id: Date.now().toString(),
-      title: newGoal.title,
-      description: newGoal.description,
-      dueDate: newGoal.dueDate,
-      completed: false,
-      category: newGoal.category,
-    };
-    const updatedGoals = [...goals, newGoalObj];
-    setGoals(updatedGoals);
-    saveGoalsToStorage(updatedGoals);
-    setNewGoal({
-      title: "",
-      description: "",
-      dueDate: new Date().toISOString().split("T")[0],
-      category: "Personal",
-    });
-    setShowAddModal(false);
+  const updateGoal = async () => {
+    if (!editingGoal || !participantId) return;
+    try {
+      await updateMenteeGoal(editingGoal.id, {
+        title: editingGoal.title,
+        description: editingGoal.description,
+        due_date: editingGoal.dueDate,
+        category: editingGoal.category,
+      });
+      await loadGoals(participantId);
+      setEditingGoal(null);
+    } catch (err) {
+      console.error("Failed to update goal:", err);
+    }
   };
 
-  const updateGoal = () => {
-    if (!editingGoal) return;
-    const updatedGoals = goals.map((goal) =>
-      goal.id === editingGoal.id ? editingGoal : goal,
-    );
-    setGoals(updatedGoals);
-    saveGoalsToStorage(updatedGoals);
-    setEditingGoal(null);
-  };
-
-  const deleteGoal = (id: string) => {
-    if (confirm("Are you sure you want to delete this goal?")) {
-      const updatedGoals = goals.filter((goal) => goal.id !== id);
-      setGoals(updatedGoals);
-      saveGoalsToStorage(updatedGoals);
+  const deleteGoal = async (id: string) => {
+    if (!participantId) return;
+    if (!confirm("Are you sure you want to delete this goal?")) return;
+    try {
+      await deleteMenteeGoal(id);
+      await loadGoals(participantId);
+    } catch (err) {
+      console.error("Failed to delete goal:", err);
     }
   };
 
@@ -178,7 +201,13 @@ export default function GoalsPage() {
   const overallProgress =
     totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  if (!profile) return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -202,126 +231,147 @@ export default function GoalsPage() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm hover:bg-emerald-700 flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Add Goal
-            </button>
+            {participantId && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm hover:bg-emerald-700 flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Add Goal
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 md:px-6 py-8">
-        {/* Progress Card */}
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-6 text-white mb-6">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h2 className="text-2xl font-bold">Your Progress</h2>
-              <p className="text-emerald-100 mt-1">Keep up the great work!</p>
-            </div>
-            <div className="text-right">
-              <div className="text-4xl font-bold">{overallProgress}%</div>
-              <p className="text-emerald-100 text-sm">Complete</p>
-            </div>
+        {!participantId ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
+            <Award className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 font-medium">
+              Your account isn't linked to a program yet
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              An admin needs to add you as a participant before you can track
+              goals. Reach out if this seems like a mistake.
+            </p>
           </div>
-          <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-white rounded-full transition-all duration-500"
-              style={{ width: `${overallProgress}%` }}
-            />
-          </div>
-          <div className="flex justify-between mt-4 text-sm">
-            <span>{completedCount} Completed</span>
-            <span>{totalCount - completedCount} Remaining</span>
-          </div>
-        </div>
-
-        {/* Goals List */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-            <h3 className="font-semibold text-gray-900">
-              📋 All Goals ({totalCount})
-            </h3>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {goals.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">
-                No goals yet. Click "Add Goal" to get started!
+        ) : (
+          <>
+            {/* Progress Card */}
+            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-6 text-white mb-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold">Your Progress</h2>
+                  <p className="text-emerald-100 mt-1">
+                    Keep up the great work!
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-4xl font-bold">{overallProgress}%</div>
+                  <p className="text-emerald-100 text-sm">Complete</p>
+                </div>
               </div>
-            ) : (
-              goals.map((goal) => (
+              <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden">
                 <div
-                  key={goal.id}
-                  className="p-4 hover:bg-gray-50 transition-colors group"
-                >
-                  <div className="flex items-start gap-3">
-                    <button
-                      onClick={() => toggleGoal(goal.id)}
-                      className="mt-0.5 flex-shrink-0"
+                  className="h-full bg-white rounded-full transition-all duration-500"
+                  style={{ width: `${overallProgress}%` }}
+                />
+              </div>
+              <div className="flex justify-between mt-4 text-sm">
+                <span>{completedCount} Completed</span>
+                <span>{totalCount - completedCount} Remaining</span>
+              </div>
+            </div>
+
+            {/* Goals List */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="font-semibold text-gray-900">
+                  📋 All Goals ({totalCount})
+                </h3>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {goals.length === 0 ? (
+                  <div className="p-8 text-center text-gray-400">
+                    No goals yet. Click "Add Goal" to get started!
+                  </div>
+                ) : (
+                  goals.map((goal) => (
+                    <div
+                      key={goal.id}
+                      className="p-4 hover:bg-gray-50 transition-colors group"
                     >
-                      {goal.completed ? (
-                        <CheckCircle className="h-6 w-6 text-emerald-500" />
-                      ) : (
-                        <Circle className="h-6 w-6 text-gray-300 hover:text-emerald-400 transition-colors" />
-                      )}
-                    </button>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p
-                          className={`font-medium ${goal.completed ? "text-gray-500 line-through" : "text-gray-900"}`}
+                      <div className="flex items-start gap-3">
+                        <button
+                          onClick={() => toggleGoal(goal)}
+                          className="mt-0.5 flex-shrink-0"
                         >
-                          {goal.title}
-                        </p>
-                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">
-                          {goal.category}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {goal.description}
-                      </p>
-                      <div className="flex items-center gap-4 mt-2">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3 text-gray-400" />
-                          <span className="text-xs text-gray-400">
-                            Due: {new Date(goal.dueDate).toLocaleDateString()}
-                          </span>
+                          {goal.completed ? (
+                            <CheckCircle className="h-6 w-6 text-emerald-500" />
+                          ) : (
+                            <Circle className="h-6 w-6 text-gray-300 hover:text-emerald-400 transition-colors" />
+                          )}
+                        </button>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p
+                              className={`font-medium ${goal.completed ? "text-gray-500 line-through" : "text-gray-900"}`}
+                            >
+                              {goal.title}
+                            </p>
+                            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">
+                              {goal.category}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {goal.description}
+                          </p>
+                          {goal.dueDate && (
+                            <div className="flex items-center gap-4 mt-2">
+                              <div className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3 text-gray-400" />
+                                <span className="text-xs text-gray-400">
+                                  Due: {new Date(goal.dueDate).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => setEditingGoal(goal)}
+                            className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteGoal(goal.id)}
+                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => setEditingGoal(goal)}
-                        className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => deleteGoal(goal.id)}
-                        className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+                  ))
+                )}
+              </div>
+            </div>
 
-        {/* Achievement Banner */}
-        {completedCount === totalCount && totalCount > 0 && (
-          <div className="mt-6 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl p-6 border border-yellow-200 text-center">
-            <Award className="h-12 w-12 text-yellow-600 mx-auto mb-3" />
-            <h3 className="text-xl font-bold text-gray-900">
-              🎉 Congratulations!
-            </h3>
-            <p className="text-gray-600 mt-1">
-              You've completed all your goals! Amazing work!
-            </p>
-          </div>
+            {/* Achievement Banner */}
+            {completedCount === totalCount && totalCount > 0 && (
+              <div className="mt-6 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl p-6 border border-yellow-200 text-center">
+                <Award className="h-12 w-12 text-yellow-600 mx-auto mb-3" />
+                <h3 className="text-xl font-bold text-gray-900">
+                  🎉 Congratulations!
+                </h3>
+                <p className="text-gray-600 mt-1">
+                  You've completed all your goals! Amazing work!
+                </p>
+              </div>
+            )}
+          </>
         )}
       </main>
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Mail, Lock, CheckCircle, Shield } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, CheckCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
 // Forgot Password Modal Component
@@ -208,9 +208,11 @@ export default function LoginPage() {
             .single();
 
           const role = userData?.primary_role || "entrepreneur";
-          
-          if (role === "admin" || role === "staff" || role === "program_manager") {
+
+          if (role === "admin" || role === "staff") {
             router.replace("/admin/dashboard");
+          } else if (role === "program_manager") {
+            router.replace("/program-manager/dashboard");
           } else {
             router.replace("/");
           }
@@ -292,12 +294,10 @@ export default function LoginPage() {
       const userRole = userRow.primary_role || "entrepreneur";
 
       // ✅ Use replace instead of push to prevent back button issues
-      if (
-        userRole === "admin" ||
-        userRole === "staff" ||
-        userRole === "program_manager"
-      ) {
+      if (userRole === "admin" || userRole === "staff") {
         router.replace("/admin/dashboard");
+      } else if (userRole === "program_manager") {
+        router.replace("/program-manager/dashboard");
       } else {
         router.replace("/");
       }
@@ -313,12 +313,21 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
         <div className="text-center mb-8">
-          <div className="h-16 w-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Shield className="h-8 w-8 text-emerald-600" />
+          <div className="flex justify-center mb-4">
+            <img
+              src="/logo.png"
+              alt="Rural Community Partners"
+              className="h-20 w-auto object-contain"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome Back</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Rural Community Partners
+          </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Sign in to your Rural Community Partners account
+            Sign in to your dashboard
           </p>
         </div>
 

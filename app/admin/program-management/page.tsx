@@ -4,6 +4,24 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
+import {
+  getProgramAccessParticipants,
+  setProgramAccessByName,
+  getAllParticipantsForMatching,
+  assignParticipantMentor,
+  getMentors,
+  type MentorMatchParticipantRow,
+  getAllPrograms,
+  updateProgramContact,
+  getProgramTracking,
+  getProgramTrackingForProgram,
+  upsertProgramTracking,
+  type ProgramTrackingRow,
+  getProgramResources,
+  addProgramResource,
+  deleteProgramResource,
+  type ProgramResourceRow,
+} from "@/lib/supabase/dashboard-data";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -22,6 +40,8 @@ import {
   UserMinus,
   Lock,
   Unlock,
+  BarChart3,
+  DollarSign,
 } from "lucide-react";
 
 interface ProgramResource {
@@ -57,6 +77,7 @@ interface Program {
 }
 
 interface Participant {
+  user_id?: string;
   email: string;
   name: string;
   programs: string[];
@@ -69,6 +90,7 @@ interface Participant {
 }
 
 interface Mentor {
+  id: string;
   email: string;
   name: string;
   expertise?: string[];
@@ -226,6 +248,9 @@ export default function ProgramManagementPage() {
   const [activeTab, setActiveTab] = useState<string>("sessions");
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [mentors, setMentors] = useState<Mentor[]>([]);
+  const [matchingParticipants, setMatchingParticipants] = useState<
+    MentorMatchParticipantRow[]
+  >([]);
   const [isAddingSession, setIsAddingSession] = useState(false);
   const [isAddingResource, setIsAddingResource] = useState(false);
   const [newSession, setNewSession] = useState<any>({});
@@ -233,6 +258,159 @@ export default function ProgramManagementPage() {
   const [selectedParticipant, setSelectedParticipant] =
     useState<Participant | null>(null);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [currentAdminUserId, setCurrentAdminUserId] = useState<string | null>(
+    null,
+  );
+  const [programResourcesAdmin, setProgramResourcesAdmin] = useState<
+    ProgramResourceRow[]
+  >([]);
+  // Tracking is per (program, participant) - budget/grants/outcomes differ
+  // for each entrepreneur, so Jody picks a participant from a dropdown
+  // before entering their numbers. programTrackingByParticipant holds every
+  // participant's row already entered for the selected program, keyed by
+  // participant_id, so the dropdown can show who already has data.
+  const [programTrackingByParticipant, setProgramTrackingByParticipant] =
+    useState<Record<string, ProgramTrackingRow>>({});
+  const [trackingParticipantId, setTrackingParticipantId] = useState<
+    string | null
+  >(null);
+  const [trackingForm, setTrackingForm] = useState<any>({});
+  const [loadingProgramExtras, setLoadingProgramExtras] = useState(false);
+  const [savingTracking, setSavingTracking] = useState(false);
+
+  const emptyTrackingForm = {
+    budget: 0,
+    spent: 0,
+    grants_received: 0,
+    grants_pending: 0,
+    businesses_launched: 0,
+    businesses_expanded: 0,
+    jobs_created: 0,
+    jobs_retained: 0,
+    capital_accessed: 0,
+    revenue_growth_pct: 0,
+  };
+
+  // Load real tracking (all participants) + resources whenever a
+  // different program is selected in the left-hand list.
+  useEffect(() => {
+    if (!selectedProgram) {
+      setProgramResourcesAdmin([]);
+      setProgramTrackingByParticipant({});
+      setTrackingParticipantId(null);
+      setTrackingForm({});
+      return;
+    }
+    let cancelled = false;
+    setLoadingProgramExtras(true);
+    setTrackingParticipantId(null);
+    Promise.all([
+      getProgramTrackingForProgram(selectedProgram.id).catch(() => ({})),
+      getProgramResources(selectedProgram.id).catch(() => []),
+    ]).then(([tracking, resources]) => {
+      if (cancelled) return;
+      setProgramTrackingByParticipant(tracking);
+      setProgramResourcesAdmin(resources);
+      setLoadingProgramExtras(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProgram?.id]);
+
+  // Load the selected participant's own numbers (or a blank form) into the
+  // editable fields whenever the participant picker changes.
+  useEffect(() => {
+    if (!trackingParticipantId) {
+      setTrackingForm({});
+      return;
+    }
+    setTrackingForm(
+      programTrackingByParticipant[trackingParticipantId] || emptyTrackingForm,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackingParticipantId, programTrackingByParticipant]);
+
+  const reloadProgramResources = async () => {
+    if (!selectedProgram) return;
+    try {
+      const resources = await getProgramResources(selectedProgram.id);
+      setProgramResourcesAdmin(resources);
+    } catch (err) {
+      console.error("Failed to reload resources:", err);
+    }
+  };
+
+  const saveTracking = async () => {
+    if (!selectedProgram || !trackingParticipantId) return;
+    setSavingTracking(true);
+    try {
+      await upsertProgramTracking(selectedProgram.id, trackingParticipantId, {
+        budget: Number(trackingForm.budget) || 0,
+        spent: Number(trackingForm.spent) || 0,
+        grants_received: Number(trackingForm.grants_received) || 0,
+        grants_pending: Number(trackingForm.grants_pending) || 0,
+        businesses_launched: Number(trackingForm.businesses_launched) || 0,
+        businesses_expanded: Number(trackingForm.businesses_expanded) || 0,
+        jobs_created: Number(trackingForm.jobs_created) || 0,
+        jobs_retained: Number(trackingForm.jobs_retained) || 0,
+        capital_accessed: Number(trackingForm.capital_accessed) || 0,
+        revenue_growth_pct: Number(trackingForm.revenue_growth_pct) || 0,
+      });
+      const refreshed = await getProgramTrackingForProgram(selectedProgram.id);
+      setProgramTrackingByParticipant(refreshed);
+      alert("✅ Tracking data saved!");
+    } catch (err) {
+      console.error("Failed to save tracking:", err);
+      alert("Failed to save tracking data. Please try again.");
+    } finally {
+      setSavingTracking(false);
+    }
+  };
+
+  const addResourceReal = async () => {
+    if (!selectedProgram || !newResource.name) return;
+    try {
+      await addProgramResource({
+        program_id: selectedProgram.id,
+        name: newResource.name,
+        type: newResource.type || "document",
+        url: newResource.url,
+        description: newResource.description,
+      });
+      await reloadProgramResources();
+      setIsAddingResource(false);
+      setNewResource({});
+    } catch (err) {
+      console.error("Failed to add resource:", err);
+      alert("Failed to add resource. Please try again.");
+    }
+  };
+
+  const removeResourceReal = async (id: string) => {
+    if (!confirm("Remove this resource?")) return;
+    try {
+      await deleteProgramResource(id);
+      await reloadProgramResources();
+    } catch (err) {
+      console.error("Failed to remove resource:", err);
+      alert("Failed to remove resource. Please try again.");
+    }
+  };
+
+  const saveContactInfo = async () => {
+    if (!selectedProgram) return;
+    try {
+      await updateProgramContact(selectedProgram.id, {
+        contact_email: selectedProgram.contactEmail,
+        contact_phone: selectedProgram.contactPhone,
+      });
+      alert("✅ Contact information saved!");
+    } catch (err) {
+      console.error("Failed to save contact info:", err);
+      alert("Failed to save contact info. Please try again.");
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -245,10 +423,12 @@ export default function ProgramManagementPage() {
       }
 
       if (cancelled) return;
+      setCurrentAdminUserId(authData.user.id);
 
       loadPrograms();
       loadParticipants();
       loadMentors();
+      loadMatchingParticipants();
     };
 
     checkAuth();
@@ -258,78 +438,97 @@ export default function ProgramManagementPage() {
     };
   }, [router]);
 
-  const loadPrograms = () => {
-    let saved = localStorage.getItem("entrepreneur_programs_data");
-    if (!saved) {
-      console.log("📋 No programs found, initializing with defaults...");
-      const defaultData = { programs: DEFAULT_PROGRAMS };
-      localStorage.setItem(
-        "entrepreneur_programs_data",
-        JSON.stringify(defaultData),
-      );
-      setPrograms(DEFAULT_PROGRAMS);
-      setLoading(false);
-      return;
-    }
+  // Real programs from the programs table - replaces the old
+  // localStorage("entrepreneur_programs_data")/DEFAULT_PROGRAMS mock,
+  // which used fake ids ("prog-1") that never matched the real
+  // programs.id used by user_programs/program_tracking/program_resources.
+  const loadPrograms = async () => {
     try {
-      const data = JSON.parse(saved);
-      console.log("📊 Loaded programs:", data.programs?.length || 0);
-      const loadedPrograms = (data.programs || DEFAULT_PROGRAMS).map(
-        (program: Program, idx: number) => ({
-          ...program,
-          id: program.id || `prog-${Date.now()}-${idx}`,
-        }),
+      const real = await getAllPrograms();
+      setPrograms(
+        real.map((p) => ({
+          id: p.id,
+          name: p.name,
+          description: p.description || "",
+          status: (p.status as Program["status"]) || "Active",
+          startDate: p.start_date
+            ? new Date(p.start_date).toLocaleDateString("en-US", {
+                month: "long",
+                year: "numeric",
+              })
+            : "",
+          contactEmail: p.contact_email || "",
+          contactPhone: p.contact_phone || "",
+          managedBy: (p.managed_by as Program["managedBy"]) || "admin",
+          resources: [],
+          upcomingSessions: [],
+        })),
       );
-      setPrograms(loadedPrograms);
-    } catch {
-      setPrograms(DEFAULT_PROGRAMS);
+    } catch (err) {
+      console.error("Failed to load programs:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const loadParticipants = () => {
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    const loadedParticipants = users
-      .filter(
-        (u: any) =>
-          u.primaryRole === "entrepreneur" || u.primaryRole === "mentee",
-      )
-      .map((u: any) => {
-        const profile = JSON.parse(
-          localStorage.getItem(`profile_${u.email}`) || "{}",
-        );
-        return {
-          email: u.email,
-          name: profile.name || u.fullName || u.email.split("@")[0],
-          programs: profile.selectedPrograms || [],
-          mentor: profile.mentor || "Not assigned",
-          status: profile.status || "active",
-          joinedAt: u.createdAt || new Date().toISOString(),
-          role: u.primaryRole,
-          businessProfessionalStatus:
-            profile.businessProfessionalStatus || "pending",
-          approvedPrograms: profile.approvedPrograms || [],
-        };
-      });
-    setParticipants(loadedParticipants);
+  // Real participant list + real program approvals from Supabase
+  // (user_programs.approved), replacing the old
+  // localStorage("users")/localStorage(`profile_${email}`) reads, which
+  // are always empty now that signup/login use real Supabase auth. Note:
+  // the "programs" (self-reported interest), "mentor", and
+  // "businessProfessionalStatus" fields below have no real backing table
+  // yet, so the Approvals and Mentor Matching tabs (which filter on
+  // "programs") will still show empty until those are wired up too - only
+  // the Program Access tab is fully real right now.
+  const loadParticipants = async () => {
+    try {
+      const real = await getProgramAccessParticipants();
+      setParticipants(
+        real.map((p) => ({
+          user_id: p.user_id,
+          email: p.email,
+          name: p.name,
+          programs: [],
+          mentor: "Not assigned",
+          status: "active",
+          joinedAt: "",
+          role: p.primary_role,
+          businessProfessionalStatus: "pending",
+          approvedPrograms: p.approvedProgramNames,
+        })),
+      );
+    } catch (err) {
+      console.error("Failed to load participants:", err);
+    }
   };
 
-  const loadMentors = () => {
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    const loadedMentors = users
-      .filter((u: any) => u.primaryRole === "mentor")
-      .map((u: any) => {
-        const profile = JSON.parse(
-          localStorage.getItem(`profile_${u.email}`) || "{}",
-        );
-        return {
-          email: u.email,
-          name: profile.name || u.fullName || u.email.split("@")[0],
-          expertise: profile.expertise || [],
-          available: true,
-        };
-      });
-    setMentors(loadedMentors);
+  const loadMentors = async () => {
+    try {
+      const real = await getMentors();
+      setMentors(
+        real.map((m) => ({
+          id: m.id,
+          email: m.email || "",
+          name: m.name,
+          expertise: m.specialty ? [m.specialty] : [],
+          available: m.status === "active",
+        })),
+      );
+    } catch (err) {
+      console.error("Failed to load mentors:", err);
+    }
+  };
+
+  // Real participants table rows for mentor matching - this is the
+  // actual mentorship enrollment record, separate from the
+  // users/user_programs data behind the Program Access tab.
+  const loadMatchingParticipants = async () => {
+    try {
+      const real = await getAllParticipantsForMatching();
+      setMatchingParticipants(real);
+    } catch (err) {
+      console.error("Failed to load participants for matching:", err);
+    }
   };
 
   const savePrograms = (updatedPrograms: Program[]) => {
@@ -340,60 +539,60 @@ export default function ProgramManagementPage() {
     setPrograms(updatedPrograms);
   };
 
-  const approveProgramAccess = (
-    participantEmail: string,
+  // Real writes to user_programs.approved via Supabase. Takes the whole
+  // participant object (not just email) since we need their real user_id.
+  const approveProgramAccess = async (
+    participant: Participant,
     programName: string,
   ) => {
-    const profile = JSON.parse(
-      localStorage.getItem(`profile_${participantEmail}`) || "{}",
-    );
-    if (!profile.approvedPrograms) {
-      profile.approvedPrograms = [];
-    }
-    if (!profile.approvedPrograms.includes(programName)) {
-      profile.approvedPrograms.push(programName);
-      localStorage.setItem(
-        `profile_${participantEmail}`,
-        JSON.stringify(profile),
+    if (!participant.user_id) return;
+    try {
+      await setProgramAccessByName(
+        participant.user_id,
+        programName,
+        true,
+        currentAdminUserId || undefined,
       );
       setParticipants((prev) =>
         prev.map((p) =>
-          p.email === participantEmail
-            ? { ...p, approvedPrograms: profile.approvedPrograms }
+          p.email === participant.email
+            ? {
+                ...p,
+                approvedPrograms: Array.from(
+                  new Set([...(p.approvedPrograms || []), programName]),
+                ),
+              }
             : p,
         ),
       );
-      alert(
-        `✅ ${programName} approved for ${profile.name || participantEmail}`,
-      );
+    } catch (err) {
+      console.error("Failed to approve program access:", err);
+      alert("Failed to approve program access. Please try again.");
     }
   };
 
-  const removeProgramAccess = (
-    participantEmail: string,
+  const removeProgramAccess = async (
+    participant: Participant,
     programName: string,
   ) => {
-    const profile = JSON.parse(
-      localStorage.getItem(`profile_${participantEmail}`) || "{}",
-    );
-    if (profile.approvedPrograms) {
-      profile.approvedPrograms = profile.approvedPrograms.filter(
-        (p: string) => p !== programName,
-      );
-      localStorage.setItem(
-        `profile_${participantEmail}`,
-        JSON.stringify(profile),
-      );
+    if (!participant.user_id) return;
+    try {
+      await setProgramAccessByName(participant.user_id, programName, false);
       setParticipants((prev) =>
         prev.map((p) =>
-          p.email === participantEmail
-            ? { ...p, approvedPrograms: profile.approvedPrograms }
+          p.email === participant.email
+            ? {
+                ...p,
+                approvedPrograms: (p.approvedPrograms || []).filter(
+                  (name) => name !== programName,
+                ),
+              }
             : p,
         ),
       );
-      alert(
-        `❌ ${programName} access removed for ${profile.name || participantEmail}`,
-      );
+    } catch (err) {
+      console.error("Failed to remove program access:", err);
+      alert("Failed to remove program access. Please try again.");
     }
   };
 
@@ -460,43 +659,6 @@ export default function ProgramManagementPage() {
     setSelectedProgram(updatedProgram);
   };
 
-  const addResource = () => {
-    if (!selectedProgram) return;
-    const resource = {
-      id: `res-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      name: newResource.name || "New Resource",
-      type: newResource.type || "document",
-      url: newResource.url || "",
-      description: newResource.description || "",
-    };
-    const updatedProgram = {
-      ...selectedProgram,
-      resources: [...(selectedProgram.resources || []), resource],
-    };
-    const updatedPrograms = programs.map((p) =>
-      p.id === selectedProgram.id ? updatedProgram : p,
-    );
-    savePrograms(updatedPrograms);
-    setSelectedProgram(updatedProgram);
-    setIsAddingResource(false);
-    setNewResource({});
-    alert("✅ Resource added successfully!");
-  };
-
-  const removeResource = (resourceId: string) => {
-    if (!selectedProgram) return;
-    if (!confirm("Remove this resource?")) return;
-    const updatedProgram = {
-      ...selectedProgram,
-      resources: selectedProgram.resources.filter((r) => r.id !== resourceId),
-    };
-    const updatedPrograms = programs.map((p) =>
-      p.id === selectedProgram.id ? updatedProgram : p,
-    );
-    savePrograms(updatedPrograms);
-    setSelectedProgram(updatedProgram);
-  };
-
   const updateParticipantStatus = (
     email: string,
     status: "approved" | "pending" | "rejected",
@@ -524,34 +686,42 @@ export default function ProgramManagementPage() {
     );
   };
 
-  const updateParticipantMentor = (email: string, mentor: string) => {
-    const profile = JSON.parse(
-      localStorage.getItem(`profile_${email}`) || "{}",
-    );
-    profile.mentor = mentor;
-    localStorage.setItem(`profile_${email}`, JSON.stringify(profile));
-    setParticipants((prev) =>
-      prev.map((p) => (p.email === email ? { ...p, mentor } : p)),
-    );
+  // Real write to participants.mentor - this is what the mentee/
+  // entrepreneur dashboard's "Your Mentor" card reads.
+  const updateParticipantMentorReal = async (
+    participantId: string,
+    mentor: string | null,
+  ) => {
+    try {
+      await assignParticipantMentor(participantId, mentor);
+      setMatchingParticipants((prev) =>
+        prev.map((p) => (p.id === participantId ? { ...p, mentor } : p)),
+      );
+    } catch (err) {
+      console.error("Failed to update mentor match:", err);
+      alert("Failed to update mentor assignment. Please try again.");
+    }
   };
 
   const matchMentorToParticipant = (
-    participantEmail: string,
-    mentorEmail: string,
+    participantId: string,
+    mentorId: string,
   ) => {
-    if (!mentorEmail) {
+    if (!mentorId) {
       alert("Please select a mentor");
       return;
     }
-    const mentorName =
-      mentors.find((m) => m.email === mentorEmail)?.name || mentorEmail;
-    updateParticipantMentor(participantEmail, mentorName);
-    alert(`✅ ${mentorName} matched with participant!`);
+    const mentorName = mentors.find((m) => m.id === mentorId)?.name;
+    if (!mentorName) {
+      alert("Couldn't find that mentor. Please try again.");
+      return;
+    }
+    updateParticipantMentorReal(participantId, mentorName);
   };
 
-  const removeMentorMatch = (participantEmail: string) => {
+  const removeMentorMatch = (participantId: string) => {
     if (!confirm("Remove mentor assignment for this participant?")) return;
-    updateParticipantMentor(participantEmail, "Not assigned");
+    updateParticipantMentorReal(participantId, null);
   };
 
   if (loading) {
@@ -567,6 +737,14 @@ export default function ProgramManagementPage() {
 
   const isJodyProgram = selectedProgram?.managedBy === "jody";
   const isMentorProgram = selectedProgram?.managedBy === "multiple_mentors";
+  // Participants enrolled in the currently selected program - used by the
+  // Tracking tab's "select a participant" dropdown, since each
+  // entrepreneur's budget/grants/outcomes are entered individually.
+  const trackingProgramParticipants = selectedProgram
+    ? matchingParticipants.filter(
+        (p) => p.program_name === selectedProgram.name,
+      )
+    : [];
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -592,6 +770,7 @@ export default function ProgramManagementPage() {
               loadPrograms();
               loadParticipants();
               loadMentors();
+              loadMatchingParticipants();
               alert("🔄 Data refreshed!");
             }}
             className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-2"
@@ -767,6 +946,18 @@ export default function ProgramManagementPage() {
                         Mentor Matching
                       </button>
                     )}
+                    <button
+                      key="tab-tracking"
+                      onClick={() => setActiveTab("tracking")}
+                      className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+                        activeTab === "tracking"
+                          ? "border-emerald-500 text-emerald-600"
+                          : "border-transparent text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      Tracking
+                    </button>
                     <button
                       key="tab-resources"
                       onClick={() => setActiveTab("resources")}
@@ -1271,12 +1462,12 @@ export default function ProgramManagementPage() {
                                               onClick={() => {
                                                 if (isApproved) {
                                                   removeProgramAccess(
-                                                    p.email,
+                                                    p,
                                                     programName,
                                                   );
                                                 } else {
                                                   approveProgramAccess(
-                                                    p.email,
+                                                    p,
                                                     programName,
                                                   );
                                                 }
@@ -1339,14 +1530,14 @@ export default function ProgramManagementPage() {
                         </h4>
                         <div className="flex flex-wrap gap-2">
                           {mentors.length > 0 ? (
-                            mentors.map((mentor) => (
+                            mentors.map((mentor, idx) => (
                               <span
-                                key={mentor.email}
+                                key={mentor.id || `mentor-${idx}`}
                                 className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm flex items-center gap-1"
                               >
                                 {mentor.name}
                                 <span className="text-xs text-blue-500">
-                                  ({mentor.email})
+                                  ({mentor.email || "no email"})
                                 </span>
                               </span>
                             ))
@@ -1379,75 +1570,248 @@ export default function ProgramManagementPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {participants
-                              .filter((p) =>
-                                p.programs.includes(selectedProgram.name),
-                              )
-                              .map((p, idx) => (
-                                <tr
-                                  key={`matching-${p.email}-${idx}`}
-                                  className="border-b border-gray-100 hover:bg-gray-50"
+                            {matchingParticipants.length === 0 ? (
+                              <tr key="no-matching-participants">
+                                <td
+                                  colSpan={4}
+                                  className="text-center py-8 text-gray-400"
                                 >
-                                  <td className="py-2 px-3 text-sm text-gray-900">
-                                    {p.name}
-                                  </td>
-                                  <td className="py-2 px-3 text-sm text-gray-500">
-                                    {p.email}
-                                  </td>
-                                  <td className="py-2 px-3 text-sm">
-                                    <span
-                                      className={`font-medium ${p.mentor !== "Not assigned" ? "text-emerald-600" : "text-gray-400"}`}
-                                    >
-                                      {p.mentor}
-                                    </span>
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <div className="flex gap-2">
-                                      {p.mentor !== "Not assigned" ? (
-                                        <button
-                                          key={`unassign-${p.email}`}
-                                          onClick={() =>
-                                            removeMentorMatch(p.email)
-                                          }
-                                          className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
-                                        >
-                                          <UserMinus className="h-3 w-3" />
-                                          Unassign
-                                        </button>
-                                      ) : (
-                                        <select
-                                          key={`assign-${p.email}`}
-                                          onChange={(e) => {
-                                            if (e.target.value) {
-                                              matchMentorToParticipant(
-                                                p.email,
-                                                e.target.value,
-                                              );
+                                  <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                  <p>No participants found</p>
+                                  <p className="text-xs mt-1">
+                                    Participants show up here once they have
+                                    a record in the participants table
+                                  </p>
+                                </td>
+                              </tr>
+                            ) : (
+                              matchingParticipants
+                                .filter(
+                                  (p) => p.program_name === selectedProgram.name,
+                                )
+                                .map((p) => (
+                                  <tr
+                                    key={`matching-${p.id}`}
+                                    className="border-b border-gray-100 hover:bg-gray-50"
+                                  >
+                                    <td className="py-2 px-3 text-sm text-gray-900">
+                                      {p.name}
+                                    </td>
+                                    <td className="py-2 px-3 text-sm text-gray-500">
+                                      {p.email}
+                                    </td>
+                                    <td className="py-2 px-3 text-sm">
+                                      <span
+                                        className={`font-medium ${p.mentor ? "text-emerald-600" : "text-gray-400"}`}
+                                      >
+                                        {p.mentor || "Not assigned"}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      <div className="flex gap-2">
+                                        {p.mentor ? (
+                                          <button
+                                            key={`unassign-${p.id}`}
+                                            onClick={() =>
+                                              removeMentorMatch(p.id)
                                             }
-                                          }}
-                                          className="text-xs border rounded-lg px-2 py-1 bg-white"
-                                          defaultValue=""
-                                        >
-                                          <option value="">
-                                            Assign mentor...
-                                          </option>
-                                          {mentors.map((mentor) => (
-                                            <option
-                                              key={mentor.email}
-                                              value={mentor.email}
-                                            >
-                                              {mentor.name}
+                                            className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                                          >
+                                            <UserMinus className="h-3 w-3" />
+                                            Unassign
+                                          </button>
+                                        ) : (
+                                          <select
+                                            key={`assign-${p.id}`}
+                                            onChange={(e) => {
+                                              if (e.target.value) {
+                                                matchMentorToParticipant(
+                                                  p.id,
+                                                  e.target.value,
+                                                );
+                                              }
+                                            }}
+                                            className="text-xs border rounded-lg px-2 py-1 bg-white"
+                                            defaultValue=""
+                                          >
+                                            <option value="">
+                                              Assign mentor...
                                             </option>
-                                          ))}
-                                        </select>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
+                                            {mentors.map((mentor) => (
+                                              <option
+                                                key={mentor.id}
+                                                value={mentor.id}
+                                              >
+                                                {mentor.name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))
+                            )}
                           </tbody>
                         </table>
                       </div>
+                    </div>
+                  )}
+
+                  {/* TRACKING TAB */}
+                  {activeTab === "tracking" && (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 mb-4">
+                        <p className="text-sm text-blue-700 flex items-center gap-2">
+                          <BarChart3 className="h-4 w-4" />
+                          Each participant's budget, grants and outcomes are
+                          tracked individually — select who you're entering
+                          numbers for.
+                        </p>
+                      </div>
+                      {loadingProgramExtras ? (
+                        <div className="text-center py-8 text-gray-400">
+                          Loading...
+                        </div>
+                      ) : trackingProgramParticipants.length === 0 ? (
+                        <div className="text-center py-8 text-gray-400">
+                          <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
+                          <p className="text-sm font-medium text-gray-500">
+                            No participants enrolled in this program yet
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            Approve someone for this program first, then come
+                            back to enter their tracking numbers.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">
+                              Participant
+                            </label>
+                            <select
+                              value={trackingParticipantId || ""}
+                              onChange={(e) =>
+                                setTrackingParticipantId(
+                                  e.target.value || null,
+                                )
+                              }
+                              className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                            >
+                              <option value="">Select a participant...</option>
+                              {trackingProgramParticipants.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name || p.email || "Unnamed"}
+                                  {programTrackingByParticipant[p.id]
+                                    ? " ✓ has data"
+                                    : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {!trackingParticipantId ? (
+                            <div className="text-center py-8 text-gray-400 text-sm">
+                              Pick a participant above to view or edit their
+                              tracking numbers.
+                            </div>
+                          ) : (
+                            <>
+                              <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                                <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                  <DollarSign className="h-4 w-4" />
+                                  Budget &amp; Grants
+                                </h4>
+                                <div className="grid grid-cols-2 gap-3">
+                                  {(
+                                    [
+                                      ["budget", "Budget ($)"],
+                                      ["spent", "Spent ($)"],
+                                      [
+                                        "grants_received",
+                                        "Grants Received ($)",
+                                      ],
+                                      ["grants_pending", "Grants Pending ($)"],
+                                      [
+                                        "capital_accessed",
+                                        "Capital Accessed ($)",
+                                      ],
+                                      [
+                                        "revenue_growth_pct",
+                                        "Revenue Growth (%)",
+                                      ],
+                                    ] as const
+                                  ).map(([key, label]) => (
+                                    <div key={key}>
+                                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                                        {label}
+                                      </label>
+                                      <input
+                                        type="number"
+                                        value={trackingForm[key] ?? 0}
+                                        onChange={(e) =>
+                                          setTrackingForm({
+                                            ...trackingForm,
+                                            [key]: e.target.value,
+                                          })
+                                        }
+                                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                                <h4 className="font-medium text-gray-900 mb-3">
+                                  Outcomes
+                                </h4>
+                                <div className="grid grid-cols-2 gap-3">
+                                  {(
+                                    [
+                                      [
+                                        "businesses_launched",
+                                        "Businesses Launched",
+                                      ],
+                                      [
+                                        "businesses_expanded",
+                                        "Businesses Expanded",
+                                      ],
+                                      ["jobs_created", "Jobs Created"],
+                                      ["jobs_retained", "Jobs Retained"],
+                                    ] as const
+                                  ).map(([key, label]) => (
+                                    <div key={key}>
+                                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                                        {label}
+                                      </label>
+                                      <input
+                                        type="number"
+                                        value={trackingForm[key] ?? 0}
+                                        onChange={(e) =>
+                                          setTrackingForm({
+                                            ...trackingForm,
+                                            [key]: e.target.value,
+                                          })
+                                        }
+                                        className="w-full border rounded-lg px-3 py-2 text-sm"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <button
+                                onClick={saveTracking}
+                                disabled={savingTracking}
+                                className="w-full py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                              >
+                                {savingTracking
+                                  ? "Saving..."
+                                  : "💾 Save Tracking Data"}
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -1460,7 +1824,11 @@ export default function ProgramManagementPage() {
                           Manage program resources
                         </p>
                       </div>
-                      {selectedProgram.resources.length === 0 ? (
+                      {loadingProgramExtras ? (
+                        <div className="text-center py-8 text-gray-400">
+                          Loading...
+                        </div>
+                      ) : programResourcesAdmin.length === 0 ? (
                         <div
                           key="no-resources"
                           className="text-center py-8 text-gray-400"
@@ -1469,100 +1837,39 @@ export default function ProgramManagementPage() {
                           <p>No resources added yet</p>
                         </div>
                       ) : (
-                        selectedProgram.resources.map((resource) => (
+                        programResourcesAdmin.map((resource) => (
                           <div
                             key={resource.id}
                             className="bg-gray-50 rounded-lg p-4 border border-gray-100"
                           >
                             <div className="flex items-start gap-3">
                               <div className="flex-1">
-                                <input
-                                  type="text"
-                                  value={resource.name}
-                                  onChange={(e) => {
-                                    const updated =
-                                      selectedProgram.resources.map((r) =>
-                                        r.id === resource.id
-                                          ? { ...r, name: e.target.value }
-                                          : r,
-                                      );
-                                    const prog = {
-                                      ...selectedProgram,
-                                      resources: updated,
-                                    };
-                                    setSelectedProgram(prog);
-                                    savePrograms(
-                                      programs.map((p) =>
-                                        p.id === selectedProgram.id ? prog : p,
-                                      ),
-                                    );
-                                  }}
-                                  className="w-full bg-transparent font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-emerald-500"
-                                  placeholder="Resource Name"
-                                />
-                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                  <select
-                                    value={resource.type}
-                                    onChange={(e) => {
-                                      const updated =
-                                        selectedProgram.resources.map((r) =>
-                                          r.id === resource.id
-                                            ? {
-                                                ...r,
-                                                type: e.target.value as any,
-                                              }
-                                            : r,
-                                        );
-                                      const prog = {
-                                        ...selectedProgram,
-                                        resources: updated,
-                                      };
-                                      setSelectedProgram(prog);
-                                      savePrograms(
-                                        programs.map((p) =>
-                                          p.id === selectedProgram.id
-                                            ? prog
-                                            : p,
-                                        ),
-                                      );
-                                    }}
-                                    className="bg-white border rounded-lg px-2 py-1 text-sm"
-                                  >
-                                    <option value="document">Document</option>
-                                    <option value="link">Link</option>
-                                    <option value="form">Form</option>
-                                    <option value="template">Template</option>
-                                  </select>
-                                  <input
-                                    type="text"
-                                    value={resource.url || ""}
-                                    onChange={(e) => {
-                                      const updated =
-                                        selectedProgram.resources.map((r) =>
-                                          r.id === resource.id
-                                            ? { ...r, url: e.target.value }
-                                            : r,
-                                        );
-                                      const prog = {
-                                        ...selectedProgram,
-                                        resources: updated,
-                                      };
-                                      setSelectedProgram(prog);
-                                      savePrograms(
-                                        programs.map((p) =>
-                                          p.id === selectedProgram.id
-                                            ? prog
-                                            : p,
-                                        ),
-                                      );
-                                    }}
-                                    className="bg-white border rounded-lg px-2 py-1 text-sm"
-                                    placeholder="URL (optional)"
-                                  />
+                                <p className="font-medium text-gray-900">
+                                  {resource.name}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-xs bg-white border rounded-full px-2 py-0.5 text-gray-500 capitalize">
+                                    {resource.type}
+                                  </span>
+                                  {resource.url && (
+                                    <a
+                                      href={resource.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-emerald-600 hover:underline truncate"
+                                    >
+                                      {resource.url}
+                                    </a>
+                                  )}
                                 </div>
+                                {resource.description && (
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {resource.description}
+                                  </p>
+                                )}
                               </div>
                               <button
-                                onClick={() => removeResource(resource.id)}
+                                onClick={() => removeResourceReal(resource.id)}
                                 className="text-gray-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-lg"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1619,9 +1926,21 @@ export default function ProgramManagementPage() {
                               }
                               className="w-full border rounded-lg px-3 py-2 text-sm"
                             />
+                            <input
+                              type="text"
+                              placeholder="Description (optional)"
+                              value={newResource.description || ""}
+                              onChange={(e) =>
+                                setNewResource({
+                                  ...newResource,
+                                  description: e.target.value,
+                                })
+                              }
+                              className="w-full border rounded-lg px-3 py-2 text-sm"
+                            />
                             <div className="flex gap-2">
                               <button
-                                onClick={addResource}
+                                onClick={addResourceReal}
                                 className="flex-1 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
                               >
                                 Add Resource
@@ -1705,7 +2024,7 @@ export default function ProgramManagementPage() {
                           </div>
                         </div>
                         <button
-                          onClick={() => alert("✅ Contact information saved!")}
+                          onClick={saveContactInfo}
                           className="w-full mt-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
                         >
                           💾 Save Contact Info

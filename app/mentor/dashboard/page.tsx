@@ -424,12 +424,16 @@ import {
   getGoalsForParticipant,
   getNotesForParticipant,
   addMenteeNote,
+  getMentorProfileByEmail,
+  getMentorAverageRating,
 } from "@/lib/supabase/dashboard-data";
 
 export default function MentorDashboardPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
   const [mentees, setMentees] = useState<Mentee[]>([]);
+  const [mentorRating, setMentorRating] = useState<number | null>(null);
+  const [mentorRatingCount, setMentorRatingCount] = useState(0);
   const [menteeGoalsMap, setMenteeGoalsMap] = useState<Record<string, { completed: boolean }[]>>({});
   const [selectedMentee, setSelectedMentee] = useState<Mentee | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -468,7 +472,11 @@ export default function MentorDashboardPage() {
       });
 
       try {
-        const realMentees = await getMenteesForMentor(mentorName);
+        const [realMentees, mentorRow, avgRating] = await Promise.all([
+          getMenteesForMentor(mentorName),
+          getMentorProfileByEmail(userRow.email),
+          getMentorAverageRating(mentorName).catch(() => null),
+        ]);
         const menteeList: Mentee[] = realMentees.map((m) => ({
           id: m.id,
           name: m.name ?? "",
@@ -479,7 +487,19 @@ export default function MentorDashboardPage() {
           sessionsCompleted: m.sessions_completed ?? 0,
           startDate: new Date().toISOString().split("T")[0],
         }));
-        if (!cancelled) setMentees(menteeList);
+        if (!cancelled) {
+          setMentees(menteeList);
+          // Prefer the real, live average from mentor_ratings (participants
+          // rating this mentor in-app) once at least one rating exists;
+          // otherwise fall back to the static mentors.rating column.
+          if (avgRating && avgRating.count > 0) {
+            setMentorRating(avgRating.average);
+            setMentorRatingCount(avgRating.count);
+          } else {
+            setMentorRating(mentorRow?.rating ?? null);
+            setMentorRatingCount(0);
+          }
+        }
       } catch (err) {
         console.error("Failed to load mentees:", err);
       }
@@ -621,8 +641,14 @@ export default function MentorDashboardPage() {
                 <Star className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">4.8</p>
-                <p className="text-sm text-gray-500">Mentor Rating</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {mentorRating != null ? mentorRating.toFixed(1) : "—"}
+                </p>
+                <p className="text-sm text-gray-500">
+                  Mentor Rating
+                  {mentorRatingCount > 0 &&
+                    ` (${mentorRatingCount} rating${mentorRatingCount === 1 ? "" : "s"})`}
+                </p>
               </div>
             </div>
           </div>

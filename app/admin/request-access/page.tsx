@@ -1,12 +1,17 @@
 "use client";
+export const dynamic = "force-dynamic";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, Mail, Send, ArrowLeft, CheckCircle } from "lucide-react";
+import { Shield, Send, ArrowLeft, CheckCircle } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
+import { notifyJodyAccessRequest } from "@/lib/email-service";
 
 export default function RequestAccessPage() {
   const router = useRouter();
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -14,35 +19,65 @@ export default function RequestAccessPage() {
     requestedRole: "program_manager",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+    setSubmitting(true);
 
-    // Store access request in localStorage for Jody to review
-    const requests = JSON.parse(
-      localStorage.getItem("access_requests") || "[]",
-    );
-    requests.push({
-      ...formData,
-      submittedAt: new Date().toISOString(),
-      status: "pending",
-    });
-    localStorage.setItem("access_requests", JSON.stringify(requests));
+    try {
+      // Don't let someone pile up duplicate pending requests for the same
+      // email - this is best-effort (a race between two submissions could
+      // still slip through, but that's fine, the admin just sees two rows).
+      const { data: existing } = await supabase
+        .from("access_requests")
+        .select("id")
+        .eq("email", formData.email)
+        .eq("status", "pending")
+        .maybeSingle();
 
-    // Also open email to Jody
-    const subject = `Access Request: ${formData.name} - ${formData.requestedRole}`;
-    const body = `
-Access Request Details:
------------------------
-Name: ${formData.name}
-Email: ${formData.email}
-Requested Role: ${formData.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"}
-Reason: ${formData.reason}
+      if (existing) {
+        setError(
+          "You already have a pending access request. Please wait for review.",
+        );
+        setSubmitting(false);
+        return;
+      }
 
-Please review this request at: ${window.location.origin}/admin/access-requests
-    `;
+      const { error: insertError } = await supabase
+        .from("access_requests")
+        .insert({
+          name: formData.name,
+          email: formData.email,
+          reason: formData.reason,
+          requested_role: formData.requestedRole,
+          status: "pending",
+        });
 
-    window.location.href = `mailto:jody@hbcat.org?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    setSubmitted(true);
+      if (insertError) {
+        console.error("Failed to submit access request:", insertError);
+        setError("Something went wrong submitting your request. Please try again.");
+        setSubmitting(false);
+        return;
+      }
+
+      // Best-effort heads-up email to Jody - the request is already real
+      // and visible on her admin dashboard either way.
+      notifyJodyAccessRequest({
+        name: formData.name,
+        email: formData.email,
+        requestedRole: formData.requestedRole,
+        reason: formData.reason,
+      }).catch((err) =>
+        console.error("Failed to send access request notification:", err),
+      );
+
+      setSubmitted(true);
+    } catch (err) {
+      console.error("Access request error:", err);
+      setError("Something went wrong submitting your request. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -54,14 +89,14 @@ Please review this request at: ${window.location.origin}/admin/access-requests
           </div>
           <h2 className="text-2xl font-bold text-gray-900">Request Sent!</h2>
           <p className="text-gray-500 mt-2">
-            Your request has been sent to Jody. You will receive an email once
-            your account has been upgraded.
+            Your request has been sent to Jody for review. You'll receive an
+            email with instructions to set your password once approved.
           </p>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/login")}
             className="mt-6 px-6 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
           >
-            Back to Dashboard
+            Back to Login
           </button>
         </div>
       </div>
@@ -72,7 +107,7 @@ Please review this request at: ${window.location.origin}/admin/access-requests
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center px-4 py-8">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/login")}
           className="flex items-center gap-1 text-gray-500 hover:text-gray-700 mb-6"
         >
           <ArrowLeft className="h-4 w-4" /> Back
@@ -155,12 +190,15 @@ Please review this request at: ${window.location.origin}/admin/access-requests
             />
           </div>
 
+          {error && <p className="text-sm text-red-500">{error}</p>}
+
           <button
             type="submit"
-            className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium rounded-xl hover:from-emerald-700 hover:to-teal-700 transition-all shadow-md flex items-center justify-center gap-2"
+            disabled={submitting}
+            className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium rounded-xl hover:from-emerald-700 hover:to-teal-700 transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <Send className="h-4 w-4" />
-            Submit Request
+            {submitting ? "Submitting..." : "Submit Request"}
           </button>
         </form>
 

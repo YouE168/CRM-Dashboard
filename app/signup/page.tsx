@@ -295,7 +295,6 @@ export default function SignupPage() {
             id: authSignupData.user.id,
             email: formData.email,
             name: `${formData.firstName} ${formData.lastName}`,
-            full_name: `${formData.firstName} ${formData.lastName}`,
             primary_role: formData.primaryRole,
             status: "active",
             created_at: new Date().toISOString(),
@@ -319,7 +318,6 @@ export default function SignupPage() {
           phone: formData.phone || "",
           organization: formData.organization || "",
           position: formData.position || "",
-          approved_programs: [], // Empty by default
           created_at: new Date().toISOString(),
         });
 
@@ -359,6 +357,39 @@ export default function SignupPage() {
               `✅ Created ${userPrograms.length} user_programs entries`,
             );
             console.log(`✅ Only "Business Professional Services" is approved`);
+          }
+
+          // 3b. ✅ Create a participants row so this person is immediately
+          // visible in admin Mentor Matching / Tracking / Sessions and can
+          // rate their mentor once assigned. Without this row nothing in
+          // the mentoring system (mentor assignment, goals, sessions,
+          // tracking, ratings) can ever find them. Scoped to "Business
+          // Professional Services" since that's the program that's
+          // auto-approved and where Jody's onboarding meeting happens -
+          // mentor stays unassigned until she matches them there.
+          const defaultProgram = programsData.find(
+            (p: any) => p.name === "Business Professional Services",
+          );
+          if (defaultProgram) {
+            const { error: participantError } = await supabase
+              .from("participants")
+              .insert({
+                user_id: userData.id,
+                email: formData.email,
+                name: `${formData.firstName} ${formData.lastName}`,
+                phone: formData.phone || null,
+                program_id: defaultProgram.id,
+                program_name: defaultProgram.name,
+                mentor: null,
+                status: "active",
+              });
+
+            if (participantError) {
+              console.error(
+                "Error creating participant record:",
+                participantError,
+              );
+            }
           }
         }
 

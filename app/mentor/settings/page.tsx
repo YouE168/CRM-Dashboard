@@ -2,28 +2,28 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
+import {
+  getMentorProfileByEmail,
+  createMentorProfile,
+  updateMentorProfile,
+  getMenteesForMentor,
+  getAllSessionsForMentor,
+  addMenteeSession,
+  updateMenteeSession,
+  deleteMenteeSession,
+  subscribeToMenteeData,
+  type MenteeSessionRow,
+} from "@/lib/supabase/dashboard-data";
 import {
   ArrowLeft,
   Save,
-  User,
-  Mail,
-  Phone,
-  Clock,
   Calendar,
-  DollarSign,
-  Users,
   Plus,
   Trash2,
   Edit2,
   Check,
   X,
-  Award,
-  Target,
-  BookOpen,
-  MessageCircle,
-  Eye,
-  ChevronDown,
-  Sparkles,
 } from "lucide-react";
 
 interface SessionHistory {
@@ -37,16 +37,6 @@ interface Mentee {
   id: string;
   name: string;
   email: string;
-  phone: string;
-  program: string;
-  startDate: string;
-  sessionsCompleted: number;
-  nextSession?: {
-    date: string;
-    time: string;
-    topic: string;
-  };
-  sessionHistory: SessionHistory[];
 }
 
 interface MentorProfile {
@@ -57,146 +47,7 @@ interface MentorProfile {
   hourlyRate: number;
   availability: string[];
   bio: string;
-  mentees: Mentee[];
 }
-
-interface User {
-  email: string;
-  password: string;
-  roles: string[];
-  roleLabels: string[];
-  primaryRole: string;
-  fullName: string;
-  createdAt: string;
-  status: string;
-}
-
-// Function to send notification to dashboard
-const sendNotification = (
-  message: string,
-  type: string,
-  actionLink?: string,
-) => {
-  const existingNotifs = localStorage.getItem("user_notifications");
-  const notifications = existingNotifs ? JSON.parse(existingNotifs) : [];
-
-  notifications.unshift({
-    id: Date.now(),
-    msg: message,
-    time: "Just now",
-    read: false,
-    type: type,
-    actionLink: actionLink,
-  });
-
-  const trimmed = notifications.slice(0, 50);
-  localStorage.setItem("user_notifications", JSON.stringify(trimmed));
-};
-
-// Get real mentees from actual entrepreneur users
-const getRealMentees = (): Mentee[] => {
-  const allUsers: User[] = JSON.parse(localStorage.getItem("users") || "[]");
-
-  // Filter users who are entrepreneurs (not admin, not mentor)
-  const entrepreneurUsers = allUsers.filter(
-    (user) =>
-      user.email !== "admin@ruralcommunity.org" &&
-      user.primaryRole !== "mentor" &&
-      (user.roles?.includes("entrepreneur") ||
-        user.primaryRole === "entrepreneur"),
-  );
-
-  // Get mentee goals and sessions from localStorage
-  const mentees: Mentee[] = entrepreneurUsers.map((user, index) => {
-    // Get saved sessions for this mentee
-    const savedSessions = JSON.parse(
-      localStorage.getItem(`mentee_sessions_${user.email}`) || "[]",
-    );
-    const savedGoals = JSON.parse(
-      localStorage.getItem(`goals_${user.email}`) || "[]",
-    );
-
-    // Get profile for phone and program
-    const userProfile = JSON.parse(
-      localStorage.getItem(`profile_${user.email}`) || "{}",
-    );
-
-    // Calculate sessions completed from saved sessions
-    const sessionsCompleted = savedSessions.length;
-
-    // Get next session (first upcoming session)
-    const today = new Date();
-    const upcomingSessions = savedSessions.filter(
-      (s: any) => new Date(s.date) >= today,
-    );
-    const nextSession =
-      upcomingSessions.length > 0
-        ? {
-            date: upcomingSessions[0].date,
-            time: upcomingSessions[0].time,
-            topic: upcomingSessions[0].topic,
-          }
-        : undefined;
-
-    // Convert saved sessions to session history format
-    const sessionHistory: SessionHistory[] = savedSessions.map(
-      (session: any) => ({
-        date: session.date,
-        topic: session.topic,
-        duration: session.duration || 60,
-        notes: session.notes || "",
-      }),
-    );
-
-    return {
-      id: index.toString(),
-      name: user.fullName || user.email.split("@")[0],
-      email: user.email,
-      phone: userProfile.phone || "",
-      program: userProfile.selectedPrograms?.[0] || "Business Catalyst Program",
-      startDate:
-        user.createdAt?.split("T")[0] || new Date().toISOString().split("T")[0],
-      sessionsCompleted: sessionsCompleted,
-      nextSession: nextSession,
-      sessionHistory: sessionHistory,
-    };
-  });
-
-  return mentees;
-};
-
-// Get notes for a mentee from localStorage
-const getMenteeNotes = (menteeEmail: string): any[] => {
-  if (typeof window === "undefined") return [];
-  const saved = localStorage.getItem(`mentee_notes_${menteeEmail}`);
-  return saved ? JSON.parse(saved) : [];
-};
-
-// Save note for a mentee
-const saveMenteeNote = (menteeEmail: string, note: string, author: string) => {
-  const existingNotes = getMenteeNotes(menteeEmail);
-  const newNote = {
-    id: Date.now(),
-    date: new Date().toISOString(),
-    note: note,
-    author: author,
-  };
-  existingNotes.unshift(newNote);
-  localStorage.setItem(
-    `mentee_notes_${menteeEmail}`,
-    JSON.stringify(existingNotes),
-  );
-  return newNote;
-};
-
-// Get profile for a user
-const getUserProfile = (email: string): any => {
-  const profile = localStorage.getItem(`profile_${email}`);
-  if (profile) {
-    return JSON.parse(profile);
-  }
-  return null;
-};
 
 // Edit Session Modal
 function EditSessionModal({
@@ -274,7 +125,10 @@ function EditSessionModal({
               type="number"
               value={formData.duration}
               onChange={(e) =>
-                setFormData({ ...formData, duration: parseInt(e.target.value) })
+                setFormData({
+                  ...formData,
+                  duration: parseInt(e.target.value) || 0,
+                })
               }
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5"
             />
@@ -321,7 +175,10 @@ function AddSessionModal({
 }: {
   mentees: Mentee[];
   onClose: () => void;
-  onSave: (menteeId: string, session: any) => void;
+  onSave: (
+    menteeId: string,
+    session: { date: string; topic: string; duration: number; notes: string },
+  ) => void;
 }) {
   const [selectedMentee, setSelectedMentee] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -363,7 +220,7 @@ function AddSessionModal({
             >
               <option value="">Choose a mentee...</option>
               {mentees.map((mentee) => (
-                <option key={mentee.id} value={mentee.email}>
+                <option key={mentee.id} value={mentee.id}>
                   {mentee.name} ({mentee.email})
                 </option>
               ))}
@@ -401,7 +258,7 @@ function AddSessionModal({
             <input
               type="number"
               value={duration}
-              onChange={(e) => setDuration(parseInt(e.target.value))}
+              onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5"
             />
           </div>
@@ -457,13 +314,21 @@ function MentorSettingsContent() {
     hourlyRate: 50,
     availability: [],
     bio: "",
-    mentees: [],
   });
+  const [mentorId, setMentorId] = useState<string | null>(null);
+  // The name used to match mentee_sessions.mentor_name / participants -
+  // pinned to what was loaded, since mentee_sessions links by name string
+  // rather than a real foreign key. Renaming your profile won't retroactively
+  // relink old sessions until the page is reloaded - a pre-existing fragility
+  // in this table's design, not something fixed here.
+  const [mentorName, setMentorName] = useState("");
+  const [mentees, setMentees] = useState<Mentee[]>([]);
+  const [sessions, setSessions] = useState<MenteeSessionRow[]>([]);
   const [newExpertise, setNewExpertise] = useState("");
   const [newAvailability, setNewAvailability] = useState("");
   const [selectedSession, setSelectedSession] = useState<{
+    id: string;
     session: SessionHistory;
-    menteeId: string;
     menteeName: string;
   } | null>(null);
   const [showEditSessionModal, setShowEditSessionModal] = useState(false);
@@ -485,89 +350,127 @@ function MentorSettingsContent() {
     );
   };
 
-  // Load real mentees and profile
-  useEffect(() => {
-    const currentUser = localStorage.getItem("currentUser");
-    if (!currentUser) {
-      router.push("/login");
-      return;
+  const loadMenteesAndSessions = async (name: string) => {
+    try {
+      const [realMentees, realSessions] = await Promise.all([
+        getMenteesForMentor(name),
+        getAllSessionsForMentor(name),
+      ]);
+      setMentees(
+        realMentees.map((m) => ({
+          id: m.id,
+          name: m.name ?? "",
+          email: m.email ?? "",
+        })),
+      );
+      setSessions(realSessions);
+    } catch (err) {
+      console.error("Failed to load mentees/sessions:", err);
     }
-
-    // Load mentor profile
-    const savedMentorProfile = localStorage.getItem(
-      `mentor_profile_${currentUser}`,
-    );
-    if (savedMentorProfile) {
-      const parsedProfile = JSON.parse(savedMentorProfile);
-      setProfile(parsedProfile);
-    } else {
-      // Get user's name from profile
-      const userProfile = getUserProfile(currentUser);
-      setProfile({
-        name: userProfile?.name || currentUser.split("@")[0],
-        email: currentUser,
-        phone: userProfile?.phone || "",
-        expertise: ["Business Strategy", "Marketing", "Financial Planning"],
-        hourlyRate: 50,
-        availability: ["Monday 2-5 PM", "Wednesday 10-12 PM", "Friday 1-4 PM"],
-        bio: "Experienced business mentor helping entrepreneurs succeed.",
-        mentees: [],
-      });
-    }
-
-    setLoading(false);
-  }, [router]);
-
-  // Refresh mentees list (real data from entrepreneurs)
-  const refreshMentees = () => {
-    const realMentees = getRealMentees();
-    setProfile((prev) => ({ ...prev, mentees: realMentees }));
   };
 
+  // Auth + load real mentor profile, mentees, and sessions from Supabase
   useEffect(() => {
-    refreshMentees();
-  }, []);
+    let cancelled = false;
 
-  const saveProfile = () => {
+    const load = async () => {
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: userRow, error: userError } = await supabase
+        .from("users")
+        .select("name, email, primary_role, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (
+        userError ||
+        !userRow ||
+        (userRow.status && userRow.status !== "active")
+      ) {
+        router.push("/login");
+        return;
+      }
+
+      const fallbackName = userRow.name || userRow.email.split("@")[0];
+
+      try {
+        // Mentors added via the admin Mentors tab already have a row here.
+        // Self-signed-up mentors won't yet - create one so the page works
+        // either way.
+        let mentorRow = await getMentorProfileByEmail(userRow.email);
+        if (!mentorRow) {
+          mentorRow = await createMentorProfile({
+            name: fallbackName,
+            email: userRow.email,
+          });
+        }
+
+        if (cancelled) return;
+
+        setMentorId(mentorRow.id);
+        setMentorName(mentorRow.name);
+        setProfile({
+          name: mentorRow.name,
+          email: mentorRow.email || userRow.email,
+          phone: mentorRow.phone || "",
+          expertise: mentorRow.expertise || [],
+          hourlyRate: mentorRow.hourly_rate ?? 50,
+          availability: mentorRow.availability || [],
+          bio: mentorRow.bio || "",
+        });
+
+        await loadMenteesAndSessions(mentorRow.name);
+      } catch (err) {
+        console.error("Failed to load mentor profile:", err);
+      }
+
+      if (!cancelled) setLoading(false);
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  // Keep mentees/sessions in sync with realtime changes (e.g. another tab
+  // logging a session, or an admin editing the mentee list)
+  useEffect(() => {
+    if (!mentorName) return;
+    const unsubscribe = subscribeToMenteeData(() => {
+      loadMenteesAndSessions(mentorName);
+    });
+    return unsubscribe;
+  }, [mentorName]);
+
+  const saveProfile = async () => {
+    if (!mentorId) return;
     setSaving(true);
-    const user = localStorage.getItem("currentUser");
-    if (user) {
-      // Save to mentor's personal profile
-      localStorage.setItem(
-        `mentor_profile_${user}`,
-        JSON.stringify({
-          ...profile,
-          mentees: [], // Don't save mentees in profile, always get from real users
-        }),
-      );
-
-      // ALSO SAVE TO CENTRAL LOCATION for entrepreneurs to read
-      // This is the key change - saves to shared location
-      const sharedProfile = {
+    try {
+      await updateMentorProfile(mentorId, {
         name: profile.name,
         email: profile.email,
         phone: profile.phone,
-        hourlyRate: profile.hourlyRate,
         bio: profile.bio,
-        expertise: profile.expertise,
+        hourly_rate: profile.hourlyRate,
         availability: profile.availability,
-        rating: 4.8, // This could be calculated from actual ratings
-        totalSessions: profile.mentees.reduce(
-          (acc, mentee) => acc + mentee.sessionsCompleted,
-          0,
-        ),
-      };
-      localStorage.setItem(
-        "mentor_profile_data",
-        JSON.stringify(sharedProfile),
-      );
-    }
-    setTimeout(() => {
+        expertise: profile.expertise,
+      });
+      showToast("Profile saved successfully!");
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+      showToast("Failed to save profile. Please try again.", "error");
+    } finally {
       setSaving(false);
-      showToast(
-        "Profile saved successfully! Your mentees will see your updated info.",
-      );
-    }, 500);
+    }
   };
 
   const addExpertise = () => {
@@ -610,85 +513,58 @@ function MentorSettingsContent() {
     });
   };
 
-  // Save a session for a mentee
-  const saveSessionToMentee = (menteeEmail: string, session: any) => {
-    const existingSessions = JSON.parse(
-      localStorage.getItem(`mentee_sessions_${menteeEmail}`) || "[]",
-    );
-    const newSession = {
-      id: Date.now(),
-      date: session.date,
-      time: session.time || "10:00 AM",
-      topic: session.topic,
-      duration: session.duration,
-      notes: session.notes,
-      createdAt: new Date().toISOString(),
-    };
-    existingSessions.push(newSession);
-    localStorage.setItem(
-      `mentee_sessions_${menteeEmail}`,
-      JSON.stringify(existingSessions),
-    );
-
-    sendNotification(`✅ Session logged with ${profile.name}`, "session");
-    showToast("Session logged successfully!");
-    refreshMentees(); // Refresh to show new session
+  // Log a new session against a real mentee (participant_id)
+  const addSessionToMentee = async (
+    menteeId: string,
+    session: { date: string; topic: string; duration: number; notes: string },
+  ) => {
+    try {
+      await addMenteeSession({
+        participant_id: menteeId,
+        date: session.date,
+        topic: session.topic,
+        duration: session.duration,
+        notes: session.notes,
+        mentor_name: mentorName,
+      });
+      showToast("Session logged successfully!");
+      setShowSessionModal(false);
+      await loadMenteesAndSessions(mentorName);
+    } catch (err) {
+      console.error("Failed to log session:", err);
+      showToast("Failed to log session. Please try again.", "error");
+    }
   };
 
-  const addSessionToMentee = (menteeEmail: string, session: any) => {
-    saveSessionToMentee(menteeEmail, session);
-    setShowSessionModal(false);
-  };
-
-  const updateSession = (
+  const updateSession = async (
+    sessionId: string,
     updatedSession: SessionHistory,
-    menteeEmail: string,
-    menteeName: string,
   ) => {
-    const existingSessions = JSON.parse(
-      localStorage.getItem(`mentee_sessions_${menteeEmail}`) || "[]",
-    );
-    const updatedSessions = existingSessions.map((s: any) =>
-      s.date === updatedSession.date
-        ? {
-            ...s,
-            topic: updatedSession.topic,
-            duration: updatedSession.duration,
-            notes: updatedSession.notes,
-          }
-        : s,
-    );
-    localStorage.setItem(
-      `mentee_sessions_${menteeEmail}`,
-      JSON.stringify(updatedSessions),
-    );
-
-    sendNotification(`✏️ Session updated for ${menteeName}`, "session");
-    showToast("Session updated successfully!");
-    refreshMentees();
-    setShowEditSessionModal(false);
+    try {
+      await updateMenteeSession(sessionId, {
+        date: updatedSession.date,
+        topic: updatedSession.topic,
+        duration: updatedSession.duration,
+        notes: updatedSession.notes,
+      });
+      showToast("Session updated successfully!");
+      setShowEditSessionModal(false);
+      await loadMenteesAndSessions(mentorName);
+    } catch (err) {
+      console.error("Failed to update session:", err);
+      showToast("Failed to update session. Please try again.", "error");
+    }
   };
 
-  const deleteSession = (
-    menteeEmail: string,
-    sessionDate: string,
-    menteeName: string,
-  ) => {
-    if (confirm("Delete this session?")) {
-      const existingSessions = JSON.parse(
-        localStorage.getItem(`mentee_sessions_${menteeEmail}`) || "[]",
-      );
-      const updatedSessions = existingSessions.filter(
-        (s: any) => s.date !== sessionDate,
-      );
-      localStorage.setItem(
-        `mentee_sessions_${menteeEmail}`,
-        JSON.stringify(updatedSessions),
-      );
-
-      sendNotification(`🗑️ Session deleted for ${menteeName}`, "session");
+  const deleteSession = async (sessionId: string) => {
+    if (!confirm("Delete this session?")) return;
+    try {
+      await deleteMenteeSession(sessionId);
       showToast("Session deleted");
-      refreshMentees();
+      await loadMenteesAndSessions(mentorName);
+    } catch (err) {
+      console.error("Failed to delete session:", err);
+      showToast("Failed to delete session. Please try again.", "error");
     }
   };
 
@@ -700,15 +576,20 @@ function MentorSettingsContent() {
     );
   }
 
-  // Get all sessions from all mentees for display
-  const allSessions = profile.mentees
-    .flatMap((mentee) =>
-      mentee.sessionHistory.map((session) => ({
-        ...session,
-        menteeName: mentee.name,
-        menteeEmail: mentee.email,
-      })),
-    )
+  // Get all sessions for display, joined with mentee names
+  const menteeById = Object.fromEntries(mentees.map((m) => [m.id, m]));
+  const allSessions = sessions
+    .map((s) => ({
+      id: s.id,
+      date: s.date,
+      topic: s.topic || "",
+      duration: s.duration,
+      notes: s.notes || "",
+      menteeId: s.participant_id || "",
+      menteeName:
+        (s.participant_id && menteeById[s.participant_id]?.name) ||
+        "Unknown mentee",
+    }))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (
@@ -806,11 +687,14 @@ function MentorSettingsContent() {
                   <input
                     type="email"
                     value={profile.email}
-                    onChange={(e) =>
-                      setProfile({ ...profile, email: e.target.value })
-                    }
-                    className="w-full max-w-md border border-gray-200 rounded-xl px-4 py-2.5"
+                    disabled
+                    readOnly
+                    className="w-full max-w-md border border-gray-200 rounded-xl px-4 py-2.5 bg-gray-50 text-gray-500 cursor-not-allowed"
                   />
+                  <p className="text-xs text-gray-400 mt-1">
+                    This is your login email and can't be changed here.
+                    Contact an admin if it needs to change.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -835,7 +719,7 @@ function MentorSettingsContent() {
                     onChange={(e) =>
                       setProfile({
                         ...profile,
-                        hourlyRate: parseInt(e.target.value),
+                        hourlyRate: parseInt(e.target.value) || 0,
                       })
                     }
                     className="w-32 border border-gray-200 rounded-xl px-4 py-2.5"
@@ -916,9 +800,9 @@ function MentorSettingsContent() {
               </div>
             ) : (
               <div className="space-y-3">
-                {allSessions.map((session, idx) => (
+                {allSessions.map((session) => (
                   <div
-                    key={idx}
+                    key={session.id}
                     className="bg-white rounded-xl p-4 border border-gray-100 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between">
@@ -948,13 +832,13 @@ function MentorSettingsContent() {
                         <button
                           onClick={() => {
                             setSelectedSession({
+                              id: session.id,
                               session: {
                                 date: session.date,
                                 topic: session.topic,
                                 duration: session.duration,
                                 notes: session.notes || "",
                               },
-                              menteeId: session.menteeEmail,
                               menteeName: session.menteeName,
                             });
                             setShowEditSessionModal(true);
@@ -964,13 +848,7 @@ function MentorSettingsContent() {
                           <Edit2 className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() =>
-                            deleteSession(
-                              session.menteeEmail,
-                              session.date,
-                              session.menteeName,
-                            )
-                          }
+                          onClick={() => deleteSession(session.id)}
                           className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -1026,13 +904,7 @@ function MentorSettingsContent() {
         <EditSessionModal
           session={selectedSession.session}
           menteeName={selectedSession.menteeName}
-          onSave={(updated) =>
-            updateSession(
-              updated,
-              selectedSession.menteeId,
-              selectedSession.menteeName,
-            )
-          }
+          onSave={(updated) => updateSession(selectedSession.id, updated)}
           onClose={() => setShowEditSessionModal(false)}
         />
       )}
@@ -1040,7 +912,7 @@ function MentorSettingsContent() {
       {/* Add Session Modal */}
       {showSessionModal && (
         <AddSessionModal
-          mentees={profile.mentees}
+          mentees={mentees}
           onClose={() => setShowSessionModal(false)}
           onSave={addSessionToMentee}
         />

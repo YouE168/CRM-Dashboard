@@ -253,6 +253,31 @@ export async function getMenteesForMentor(mentorName: string): Promise<MenteeRow
   return data;
 }
 
+export interface MyParticipantRow {
+  id: string;
+  mentor: string | null;
+  program_name: string | null;
+  status: string;
+}
+
+// Find this logged-in entrepreneur/mentee's own participant record(s), so
+// we know their real participant_id (used for mentee_notes/mentee_goals/
+// mentee_sessions) and which mentor (if any) they're assigned to. Matches
+// by user_id first, falling back to email for older rows that predate the
+// user_id link.
+export async function getParticipantRecordsForUser(
+  userId: string,
+  email: string,
+): Promise<MyParticipantRow[]> {
+  const { data, error } = await supabase
+    .from("participants")
+    .select("id, mentor, program_name, status")
+    .or(`user_id.eq.${userId},email.eq.${email}`)
+    .order("joined_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
 export function subscribeToMentorsChanges(onChange: () => void) {
   const channelName = `mentors-${Math.random().toString(36).slice(2)}`;
   const channel = supabase
@@ -588,6 +613,16 @@ export interface MentorProfileRow {
   status: string;
 }
 
+export async function getMentorProfileByName(name: string): Promise<MentorProfileRow | null> {
+  const { data, error } = await supabase
+    .from("mentors")
+    .select("*")
+    .eq("name", name)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 export async function getMentorProfileByEmail(email: string): Promise<MentorProfileRow | null> {
   const { data, error } = await supabase
     .from("mentors")
@@ -604,6 +639,37 @@ export async function updateMentorProfile(
 ): Promise<void> {
   const { error } = await supabase.from("mentors").update(updates).eq("id", id);
   if (error) throw error;
+}
+
+// Self-signup mentors don't automatically get a row in the `mentors` roster
+// table (that's normally added by an admin via the Mentors tab). This lets
+// the mentor settings page create one on first visit so the profile/session
+// features work even before an admin has added them.
+export async function createMentorProfile(mentor: {
+  name: string;
+  email: string;
+  phone?: string | null;
+  bio?: string | null;
+  hourly_rate?: number;
+  availability?: string[];
+  expertise?: string[];
+}): Promise<MentorProfileRow> {
+  const { data, error } = await supabase
+    .from("mentors")
+    .insert({
+      name: mentor.name,
+      email: mentor.email,
+      phone: mentor.phone ?? null,
+      bio: mentor.bio ?? null,
+      hourly_rate: mentor.hourly_rate ?? 50,
+      availability: mentor.availability ?? [],
+      expertise: mentor.expertise ?? [],
+      status: "active",
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 export interface MenteeGoalRow {
@@ -631,6 +697,42 @@ export async function toggleGoalCompleted(id: string, completed: boolean): Promi
     .from("mentee_goals")
     .update({ completed, updated_at: new Date().toISOString() })
     .eq("id", id);
+  if (error) throw error;
+}
+
+export async function addMenteeGoal(goal: {
+  participant_id: string;
+  title: string;
+  description?: string;
+  due_date?: string;
+  category?: string;
+}): Promise<void> {
+  const { error } = await supabase.from("mentee_goals").insert({
+    participant_id: goal.participant_id,
+    title: goal.title,
+    description: goal.description ?? null,
+    due_date: goal.due_date ?? null,
+    category: goal.category ?? null,
+    completed: false,
+  });
+  if (error) throw error;
+}
+
+export async function updateMenteeGoal(
+  id: string,
+  updates: Partial<{
+    title: string;
+    description: string;
+    due_date: string;
+    category: string;
+  }>,
+): Promise<void> {
+  const { error } = await supabase.from("mentee_goals").update(updates).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteMenteeGoal(id: string): Promise<void> {
+  const { error } = await supabase.from("mentee_goals").delete().eq("id", id);
   if (error) throw error;
 }
 
@@ -663,6 +765,57 @@ export async function addMenteeNote(
     author,
   });
   if (error) throw error;
+}
+
+// Notes across a set of mentees at once - used by the mentor's own "Notes
+// for Mentees and Entrepreneurs" card to show what they've recently sent
+// across all their mentees, not just one at a time.
+export async function getNotesForParticipants(
+  participantIds: string[],
+): Promise<MenteeNoteRow[]> {
+  if (participantIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("mentee_notes")
+    .select("*")
+    .in("participant_id", participantIds)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export interface MenteeNoteWithContext extends MenteeNoteRow {
+  menteeName: string;
+  mentorName: string;
+}
+
+// Admin oversight: every mentor-to-mentee note across the whole system,
+// joined with the mentee's name (author already stores the mentor's name).
+export async function getAllMenteeNotesWithContext(): Promise<
+  MenteeNoteWithContext[]
+> {
+  const [{ data: notes, error: notesError }, { data: participants, error: participantsError }] =
+    await Promise.all([
+      supabase
+        .from("mentee_notes")
+        .select("*")
+        .order("created_at", { ascending: false }),
+      supabase.from("participants").select("id, name, mentor"),
+    ]);
+  if (notesError) throw notesError;
+  if (participantsError) throw participantsError;
+
+  const participantById = Object.fromEntries(
+    (participants || []).map((p) => [p.id, p]),
+  );
+
+  return (notes || []).map((n) => {
+    const participant = n.participant_id ? participantById[n.participant_id] : null;
+    return {
+      ...n,
+      menteeName: participant?.name || "Unknown mentee",
+      mentorName: n.author || participant?.mentor || "Unknown mentor",
+    };
+  });
 }
 
 export interface MenteeSessionRow {
@@ -744,4 +897,421 @@ export function subscribeToMenteeData(onChange: () => void) {
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+export interface ProgramRow {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  managed_by: string;
+}
+
+// Real programs catalog for the admin Program Management page -
+// replaces the old localStorage("entrepreneur_programs_data") /
+// DEFAULT_PROGRAMS mock array, so the ids used there line up with the
+// real programs.id referenced by user_programs/program_tracking/
+// program_resources.
+export async function getAllPrograms(): Promise<ProgramRow[]> {
+  const { data, error } = await supabase
+    .from("programs")
+    .select(
+      "id, name, description, status, start_date, end_date, contact_email, contact_phone, managed_by",
+    )
+    .order("name");
+  if (error) throw error;
+  return data;
+}
+
+export async function updateProgramContact(
+  programId: string,
+  fields: { contact_email?: string; contact_phone?: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from("programs")
+    .update(fields)
+    .eq("id", programId);
+  if (error) throw error;
+}
+
+export interface UserProgramRow {
+  user_program_id: string;
+  program_id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
+  icon: string | null;
+  color: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  progress: number;
+  approved: boolean;
+}
+
+// Real enrolled programs for a user - joins user_programs (per-user
+// enrollment + progress + approval) with programs (the shared catalog).
+// Replaces the old localStorage("entrepreneur_programs_data") blob, which
+// let users create arbitrary custom programs with no real backing.
+export async function getProgramsForUser(userId: string): Promise<UserProgramRow[]> {
+  const [{ data: enrollments, error: enrollError }, { data: programs, error: programError }] =
+    await Promise.all([
+      supabase.from("user_programs").select("*").eq("user_id", userId),
+      supabase.from("programs").select("*"),
+    ]);
+  if (enrollError) throw enrollError;
+  if (programError) throw programError;
+
+  const programById = Object.fromEntries((programs || []).map((p) => [p.id, p]));
+
+  return (enrollments || [])
+    .map((e) => {
+      const program = programById[e.program_id];
+      if (!program) return null;
+      return {
+        user_program_id: e.id,
+        program_id: program.id,
+        name: program.name,
+        description: program.description,
+        status: program.status,
+        start_date: program.start_date,
+        end_date: program.end_date,
+        icon: program.icon,
+        color: program.color,
+        contact_email: program.contact_email,
+        contact_phone: program.contact_phone,
+        progress: e.progress,
+        approved: e.approved,
+      };
+    })
+    .filter((p): p is UserProgramRow => p !== null);
+}
+
+export interface MentorMatchParticipantRow {
+  id: string;
+  email: string | null;
+  name: string | null;
+  program_name: string | null;
+  mentor: string | null;
+  status: string;
+}
+
+// Real participants table rows for the admin "Mentor Matching" tab -
+// this is the actual mentorship enrollment/assignment record (also used
+// by getParticipantRecordsForUser and getMenteesForMentor), separate
+// from user_programs (business-services approval).
+export async function getAllParticipantsForMatching(): Promise<
+  MentorMatchParticipantRow[]
+> {
+  const { data, error } = await supabase
+    .from("participants")
+    .select("id, email, name, program_name, mentor, status")
+    .order("name");
+  if (error) throw error;
+  return data;
+}
+
+// Assign (or clear, with mentorName = null) the mentor for a participant.
+// This is the one real write behind "Your Mentor" on the mentee dashboard.
+export async function assignParticipantMentor(
+  participantId: string,
+  mentorName: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from("participants")
+    .update({ mentor: mentorName })
+    .eq("id", participantId);
+  if (error) throw error;
+}
+
+export interface ProgramAccessParticipant {
+  user_id: string;
+  email: string;
+  name: string;
+  primary_role: string;
+  approvedProgramNames: string[];
+}
+
+// Real participant list for the admin "Program Access" panel - every
+// entrepreneur/mentee account plus which programs they're approved for
+// (from user_programs.approved), replacing the old
+// localStorage("users")/localStorage(`profile_${email}`) reads that were
+// always empty under real Supabase auth.
+export async function getProgramAccessParticipants(): Promise<
+  ProgramAccessParticipant[]
+> {
+  const [{ data: users, error: usersError }, { data: enrollments, error: enrollError }, { data: programs, error: programError }] =
+    await Promise.all([
+      supabase
+        .from("users")
+        .select("id, email, name, primary_role")
+        .in("primary_role", ["entrepreneur", "mentee"]),
+      supabase.from("user_programs").select("user_id, program_id, approved"),
+      supabase.from("programs").select("id, name"),
+    ]);
+  if (usersError) throw usersError;
+  if (enrollError) throw enrollError;
+  if (programError) throw programError;
+
+  const programNameById = Object.fromEntries(
+    (programs || []).map((p) => [p.id, p.name]),
+  );
+
+  return (users || []).map((u) => ({
+    user_id: u.id,
+    email: u.email || "",
+    name: u.name || u.email || "",
+    primary_role: u.primary_role || "",
+    approvedProgramNames: (enrollments || [])
+      .filter((e) => e.user_id === u.id && e.approved)
+      .map((e) => programNameById[e.program_id])
+      .filter((name): name is string => !!name),
+  }));
+}
+
+// Approve/revoke a user's access to a specific program by name. Looks up
+// the program's id, then upserts the user_programs row (in case the user
+// signed up before this program existed and never got an enrollment row).
+export async function setProgramAccessByName(
+  userId: string,
+  programName: string,
+  approved: boolean,
+  approvedByUserId?: string,
+): Promise<void> {
+  const { data: program, error: programError } = await supabase
+    .from("programs")
+    .select("id")
+    .eq("name", programName)
+    .maybeSingle();
+  if (programError) throw programError;
+  if (!program) throw new Error(`Program "${programName}" not found`);
+
+  const { error } = await supabase.from("user_programs").upsert(
+    {
+      user_id: userId,
+      program_id: program.id,
+      approved,
+      approved_by: approved ? approvedByUserId || null : null,
+      approved_at: approved ? new Date().toISOString() : null,
+    },
+    { onConflict: "user_id,program_id" },
+  );
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------
+// Program tracking - admin-entered financial/outcomes numbers, one row
+// per (program, participant) since budget/grants/outcomes are specific
+// to each entrepreneur, not a single program-wide number. Jody selects
+// a participant from the admin Program Management Tracking tab and
+// enters their numbers; that participant sees them read-only in
+// "My Tracking".
+// ---------------------------------------------------------------------
+export interface ProgramTrackingRow {
+  program_id: string;
+  participant_id: string;
+  budget: number;
+  spent: number;
+  grants_received: number;
+  grants_pending: number;
+  businesses_launched: number;
+  businesses_expanded: number;
+  jobs_created: number;
+  jobs_retained: number;
+  capital_accessed: number;
+  revenue_growth_pct: number;
+  updated_at: string;
+}
+
+export async function getProgramTracking(
+  programId: string,
+  participantId: string,
+): Promise<ProgramTrackingRow | null> {
+  const { data, error } = await supabase
+    .from("program_tracking")
+    .select("*")
+    .eq("program_id", programId)
+    .eq("participant_id", participantId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// All tracking rows entered so far for a program, keyed by participant_id -
+// used by the admin Tracking tab to show which participants already have
+// numbers entered when picking who to edit.
+export async function getProgramTrackingForProgram(
+  programId: string,
+): Promise<Record<string, ProgramTrackingRow>> {
+  const { data, error } = await supabase
+    .from("program_tracking")
+    .select("*")
+    .eq("program_id", programId);
+  if (error) throw error;
+  return Object.fromEntries(
+    (data || []).map((row) => [row.participant_id, row]),
+  );
+}
+
+export async function upsertProgramTracking(
+  programId: string,
+  participantId: string,
+  fields: Partial<
+    Omit<ProgramTrackingRow, "program_id" | "participant_id" | "updated_at">
+  >,
+): Promise<void> {
+  const { error } = await supabase.from("program_tracking").upsert(
+    {
+      program_id: programId,
+      participant_id: participantId,
+      ...fields,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "program_id,participant_id" },
+  );
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------
+// Program resources - admin-managed documents/links per program.
+// ---------------------------------------------------------------------
+export interface ProgramResourceRow {
+  id: string;
+  program_id: string;
+  name: string;
+  type: string;
+  url: string | null;
+  description: string | null;
+}
+
+export async function getProgramResources(
+  programId: string,
+): Promise<ProgramResourceRow[]> {
+  const { data, error } = await supabase
+    .from("program_resources")
+    .select("id, program_id, name, type, url, description")
+    .eq("program_id", programId)
+    .order("created_at");
+  if (error) throw error;
+  return data;
+}
+
+export async function addProgramResource(resource: {
+  program_id: string;
+  name: string;
+  type: string;
+  url?: string;
+  description?: string;
+}): Promise<void> {
+  const { error } = await supabase.from("program_resources").insert({
+    program_id: resource.program_id,
+    name: resource.name,
+    type: resource.type,
+    url: resource.url || null,
+    description: resource.description || null,
+  });
+  if (error) throw error;
+}
+
+export async function deleteProgramResource(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("program_resources")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------
+// Mentor ratings - one updatable 1-5 rating per participant->mentor pair,
+// set by the mentee/entrepreneur from their real "Your Mentor" card.
+// ---------------------------------------------------------------------
+export async function getMentorRatingForParticipant(
+  participantId: string,
+  mentorName: string,
+): Promise<{ rating: number; comment: string | null } | null> {
+  const { data, error } = await supabase
+    .from("mentor_ratings")
+    .select("rating, comment")
+    .eq("participant_id", participantId)
+    .eq("mentor_name", mentorName)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function setMentorRating(
+  participantId: string,
+  mentorName: string,
+  rating: number,
+  comment?: string,
+): Promise<void> {
+  const { error } = await supabase.from("mentor_ratings").upsert(
+    {
+      participant_id: participantId,
+      mentor_name: mentorName,
+      rating,
+      comment: comment || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "participant_id,mentor_name" },
+  );
+  if (error) throw error;
+}
+
+// Real average rating for a mentor, computed from mentor_ratings rather
+// than trusting the static mentors.rating column (which nothing writes
+// to). Falls back to null if no one has rated them yet - callers should
+// fall back to the stored mentors.rating in that case.
+export async function getMentorAverageRating(
+  mentorName: string,
+): Promise<{ average: number; count: number } | null> {
+  const { data, error } = await supabase
+    .from("mentor_ratings")
+    .select("rating")
+    .eq("mentor_name", mentorName);
+  if (error) throw error;
+  if (!data || data.length === 0) return null;
+  const sum = data.reduce((acc, r) => acc + r.rating, 0);
+  return { average: sum / data.length, count: data.length };
+}
+
+// Sends a real notification email via /api/send-notification-email, gated
+// by the user's "Email notifications" toggle. Attempts real delivery via
+// Resend server-side if configured; otherwise the API route logs it to the
+// real email_logs table instead of failing. Returns false without hitting
+// the network at all if the toggle is off.
+export async function sendMentorEmailNotification(
+  to: string,
+  subject: string,
+  body: string,
+  type: string = "general",
+): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (localStorage.getItem("email_notifications_enabled") !== "true") {
+    return false;
+  }
+
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) return false;
+
+    const res = await fetch("/api/send-notification-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ to, subject, body, type }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to send email notification:", err);
+    return false;
+  }
 }
