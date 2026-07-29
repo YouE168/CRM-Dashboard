@@ -28,7 +28,7 @@ import { RoundtableSignupForm } from "@/components/roundtable-signup-form";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 // Add Supabase client:
 import { supabase } from "@/lib/supabase/client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import {
   MessageCircle,
   Send,
@@ -208,7 +208,20 @@ function PasswordInput({
   );
 }
 
+// Next.js requires any page that calls useSearchParams() to be wrapped in
+// a Suspense boundary, or the build fails while prerendering this route
+// (this page reads ?panel= for deep-linking into Access Requests). The
+// actual page body lives in AdminDashboardContent below; this default
+// export just supplies that boundary.
 export default function AdminDashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminDashboardContent />
+    </Suspense>
+  );
+}
+
+function AdminDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
