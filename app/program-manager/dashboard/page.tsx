@@ -10,6 +10,8 @@ import AnalyticsTab from "@/components/dashboard/analytics-tab";
 import { ParticipantsTab } from "@/components/dashboard/participants-tab";
 import { MentorsTab } from "@/components/dashboard/mentors-tab";
 import { SlidePanel } from "@/components/slide-panel";
+import { NotificationPanel } from "@/components/dashboard/notification-panel";
+import { notificationService } from "@/lib/notification-service";
 import {
   Bell,
   Settings,
@@ -27,13 +29,6 @@ type PanelType =
   | "edit-profile"
   | "change-password"
   | null;
-
-interface Notification {
-  id: number;
-  msg: string;
-  time: string;
-  read: boolean;
-}
 
 interface ProfileData {
   name: string;
@@ -220,39 +215,19 @@ export default function ProgramManagerDashboardPage() {
     };
   }, [router]);
 
-  // Sample activity feed - no real "notifications" table exists yet for
-  // program managers, so this stays illustrative rather than pretending
-  // to be live data tied to nothing.
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: 1,
-      msg: "James Williams completed onboarding",
-      time: "2h ago",
-      read: false,
-    },
-    {
-      id: 2,
-      msg: "3 surveys overdue for follow-up",
-      time: "5h ago",
-      read: false,
-    },
-    {
-      id: 3,
-      msg: "Invoice #INV-042 awaiting approval",
-      time: "1d ago",
-      read: false,
-    },
-    {
-      id: 4,
-      msg: "New mentor match: Susan White → Michael Martinez",
-      time: "2d ago",
-      read: false,
-    },
-  ]);
-  const unreadCount = notifications.filter((n) => !n.read).length;
-  const markAllRead = () =>
-    setNotifications((p) => p.map((n) => ({ ...n, read: true })));
-  const clearAll = () => setNotifications([]);
+  // Real notifications, same notifications table + service the admin
+  // dashboard uses (backed by public.notifications, RLS-scoped to the
+  // signed-in user). Replaces the hardcoded sample feed that used to live
+  // here.
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const unsubscribe = notificationService.subscribe(() => {
+      setUnreadCount(notificationService.getUnreadCount());
+    });
+    setUnreadCount(notificationService.getUnreadCount());
+    return () => unsubscribe();
+  }, []);
 
   const [settings, setSettings] = useState<SettingsData>({
     emailNotifications: true,
@@ -484,44 +459,7 @@ export default function ProgramManagerDashboardPage() {
         title="Notifications"
         icon={Bell}
       >
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-xs text-gray-400">{unreadCount} unread</span>
-          <div className="flex gap-2">
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllRead}
-                className="text-xs text-emerald-600 hover:underline"
-              >
-                Mark all read
-              </button>
-            )}
-            {notifications.length > 0 && (
-              <button
-                onClick={clearAll}
-                className="text-xs text-red-400 hover:underline"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-        </div>
-        {notifications.length === 0 ? (
-          <div className="text-center text-gray-400 text-sm py-12">
-            No notifications
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {notifications.map((n) => (
-              <div
-                key={n.id}
-                className={`p-3 rounded-lg border ${n.read ? "bg-white border-gray-100 opacity-60" : "bg-emerald-50 border-emerald-100"}`}
-              >
-                <p className="text-sm text-gray-700">{n.msg}</p>
-                <p className="text-xs text-gray-400 mt-1">{n.time}</p>
-              </div>
-            ))}
-          </div>
-        )}
+        <NotificationPanel />
       </SlidePanel>
 
       {/* Settings Panel */}
