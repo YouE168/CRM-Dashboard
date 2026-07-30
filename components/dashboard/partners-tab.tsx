@@ -10,9 +10,10 @@ import {
   deletePartnerCollaboration,
   addPartnerResource,
   deletePartnerResource,
+  setProgramAccessByName,
   type PartnerOverviewRow,
 } from "@/lib/supabase/dashboard-data";
-import { Handshake, Briefcase, GraduationCap, Trash2, Plus } from "lucide-react";
+import { Handshake, Briefcase, GraduationCap, Trash2, Plus, ExternalLink } from "lucide-react";
 
 export function PartnersTab() {
   const [partners, setPartners] = useState<PartnerOverviewRow[]>([]);
@@ -21,8 +22,11 @@ export function PartnersTab() {
   const [addingCollab, setAddingCollab] = useState(false);
   const [newCollabTitle, setNewCollabTitle] = useState("");
   const [newCollabProgramId, setNewCollabProgramId] = useState("");
+  const [newCollabLink, setNewCollabLink] = useState("");
   const [addingResource, setAddingResource] = useState(false);
   const [newResourceTitle, setNewResourceTitle] = useState("");
+  const [newResourceLink, setNewResourceLink] = useState("");
+  const [togglingProgram, setTogglingProgram] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -49,6 +53,22 @@ export function PartnersTab() {
   ) => {
     if (!selected) return;
     await savePartnerProfileData(selected.userId, { [field]: Number(value) || 0 } as any);
+  };
+
+  // Lets Jody approve/revoke a partner's program access right from this
+  // chip instead of switching to the Programs view and hunting them down
+  // in the Program Access table.
+  const toggleProgramAccess = async (programName: string, approved: boolean) => {
+    if (!selected) return;
+    setTogglingProgram(programName);
+    try {
+      await setProgramAccessByName(selected.userId, programName, !approved);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to update program access:", err);
+    } finally {
+      setTogglingProgram(null);
+    }
   };
 
   if (loading) {
@@ -136,23 +156,30 @@ export function PartnersTab() {
                 </div>
 
                 <div className="bg-white rounded-xl border border-gray-100 p-4">
-                  <h4 className="font-medium text-gray-900 text-sm mb-2">Programs</h4>
+                  <h4 className="font-medium text-gray-900 text-sm mb-1">Programs</h4>
+                  <p className="text-[11px] text-gray-400 mb-2">
+                    Click a program to approve or revoke access.
+                  </p>
                   {selected.programs.length === 0 ? (
                     <p className="text-xs text-gray-400">Not enrolled in any program yet.</p>
                   ) : (
                     <div className="flex flex-wrap gap-1">
                       {selected.programs.map((p) => (
-                        <span
+                        <button
                           key={p.user_program_id}
-                          className={`text-[11px] px-2 py-0.5 rounded-full ${
+                          onClick={() => toggleProgramAccess(p.name, p.approved)}
+                          disabled={togglingProgram === p.name}
+                          className={`text-[11px] px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 ${
                             p.approved
-                              ? "bg-orange-100 text-orange-700"
-                              : "bg-yellow-100 text-yellow-700"
+                              ? "bg-orange-100 text-orange-700 hover:bg-red-100 hover:text-red-700"
+                              : "bg-yellow-100 text-yellow-700 hover:bg-orange-100 hover:text-orange-700"
                           }`}
+                          title={p.approved ? "Click to revoke access" : "Click to approve access"}
                         >
-                          {p.name}
-                          {!p.approved && " (pending)"}
-                        </span>
+                          {togglingProgram === p.name
+                            ? "…"
+                            : `${p.name}${!p.approved ? " (pending)" : ""}`}
+                        </button>
                       ))}
                     </div>
                   )}
@@ -194,14 +221,25 @@ export function PartnersTab() {
                           onChange={(e) => setNewCollabTitle(e.target.value)}
                           className="flex-1 border rounded-lg px-2 py-1 text-sm"
                         />
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Link URL (optional)"
+                          value={newCollabLink}
+                          onChange={(e) => setNewCollabLink(e.target.value)}
+                          className="flex-1 border rounded-lg px-2 py-1 text-sm"
+                        />
                         <button
                           onClick={async () => {
                             if (!newCollabTitle.trim()) return;
                             await addPartnerCollaboration(selected.userId, {
                               title: newCollabTitle.trim(),
+                              link: newCollabLink.trim() || undefined,
                               program_id: newCollabProgramId || undefined,
                             });
                             setNewCollabTitle("");
+                            setNewCollabLink("");
                             setNewCollabProgramId("");
                             setAddingCollab(false);
                           }}
@@ -225,6 +263,17 @@ export function PartnersTab() {
                               </span>
                             )}
                             <p className="text-sm font-medium text-gray-800">{c.title}</p>
+                            {c.link && (
+                              <a
+                                href={c.link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-orange-600 hover:text-orange-700 flex items-center gap-1 mt-0.5"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                {c.link}
+                              </a>
+                            )}
                             <div className="flex flex-wrap gap-1 mt-1">
                               {c.project_type && (
                                 <span className="text-[11px] bg-orange-50 text-orange-700 px-2 py-0.5 rounded-full">
@@ -272,25 +321,38 @@ export function PartnersTab() {
                     </button>
                   </div>
                   {addingResource && (
-                    <div className="px-4 py-3 border-b border-gray-100 flex gap-2">
+                    <div className="px-4 py-3 border-b border-gray-100 space-y-2">
                       <input
                         type="text"
                         placeholder="Title"
                         value={newResourceTitle}
                         onChange={(e) => setNewResourceTitle(e.target.value)}
-                        className="flex-1 border rounded-lg px-2 py-1 text-sm"
+                        className="w-full border rounded-lg px-2 py-1 text-sm"
                       />
-                      <button
-                        onClick={async () => {
-                          if (!newResourceTitle.trim()) return;
-                          await addPartnerResource(selected.userId, { title: newResourceTitle.trim() });
-                          setNewResourceTitle("");
-                          setAddingResource(false);
-                        }}
-                        className="px-3 py-1 bg-orange-600 text-white rounded-lg text-sm"
-                      >
-                        Add
-                      </button>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Link URL (optional)"
+                          value={newResourceLink}
+                          onChange={(e) => setNewResourceLink(e.target.value)}
+                          className="flex-1 border rounded-lg px-2 py-1 text-sm"
+                        />
+                        <button
+                          onClick={async () => {
+                            if (!newResourceTitle.trim()) return;
+                            await addPartnerResource(selected.userId, {
+                              title: newResourceTitle.trim(),
+                              link: newResourceLink.trim() || undefined,
+                            });
+                            setNewResourceTitle("");
+                            setNewResourceLink("");
+                            setAddingResource(false);
+                          }}
+                          className="px-3 py-1 bg-orange-600 text-white rounded-lg text-sm"
+                        >
+                          Add
+                        </button>
+                      </div>
                     </div>
                   )}
                   {selected.resources.length === 0 ? (
@@ -299,7 +361,20 @@ export function PartnersTab() {
                     <div className="divide-y divide-gray-100">
                       {selected.resources.map((r) => (
                         <div key={r.id} className="px-4 py-3 flex justify-between items-center">
-                          <p className="text-sm font-medium text-gray-800">{r.title}</p>
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{r.title}</p>
+                            {r.link && (
+                              <a
+                                href={r.link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-orange-600 hover:text-orange-700 flex items-center gap-1 mt-0.5"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                {r.link}
+                              </a>
+                            )}
+                          </div>
                           <button
                             onClick={async () => {
                               await deletePartnerResource(r.id);
