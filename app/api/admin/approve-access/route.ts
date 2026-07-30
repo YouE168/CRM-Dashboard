@@ -67,6 +67,23 @@ export async function POST(request: Request) {
       );
     }
 
+    // If this email was invited before, deleted from Auth, and is now being
+    // invited again, generateLink issues a BRAND NEW auth user id - but the
+    // old public.users row (same email, old id) can still be sitting here
+    // since deleting a user in Authentication -> Users doesn't touch this
+    // table. That stale row would collide with the unique constraint on
+    // email below, so clear it out first if it's not the row we're about
+    // to write anyway.
+    const { data: staleRow } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .neq("id", linkData.user.id)
+      .maybeSingle();
+    if (staleRow) {
+      await supabaseAdmin.from("users").delete().eq("id", staleRow.id);
+    }
+
     // Create their public.users row with the approved role
     const { error: insertError } = await supabaseAdmin.from("users").upsert(
       {

@@ -256,16 +256,16 @@ export async function sendAccessInviteEmail(emailData: {
     <html>
       <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0;">
         <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #059669, #0d9488); color: white; padding: 30px 20px; text-align: center; border-radius: 12px 12px 0 0;">
-            <h1 style="margin: 0; font-size: 24px;">🏠 Rural Community Partners</h1>
-            <p style="margin: 5px 0 0; opacity: 0.9;">Welcome to the team!</p>
+          <div style="background-color: #059669; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; padding: 30px 20px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff;">🏠 Rural Community Partners</h1>
+            <p style="margin: 5px 0 0; color: #ffffff;">Welcome to the team!</p>
           </div>
           <div style="padding: 30px; background: #f9fafb; border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb;">
             <h2>Hello ${emailData.name}! 👋</h2>
             <p>Your access request has been <strong>approved</strong> as a <strong>${roleDisplay}</strong>.</p>
             <p>Click the button below to set your password and activate your account:</p>
             <div style="text-align: center; margin: 24px 0;">
-              <a href="${emailData.actionLink}" style="display: inline-block; background: linear-gradient(135deg, #059669, #0d9488); color: white; padding: 14px 35px; text-decoration: none; border-radius: 8px; font-weight: bold;">
+              <a href="${emailData.actionLink}" style="display: inline-block; background-color: #059669; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 8px; font-weight: bold;">
                 🔑 Set Your Password
               </a>
             </div>
