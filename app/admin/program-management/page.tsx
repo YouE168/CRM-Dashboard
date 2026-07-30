@@ -42,6 +42,7 @@ import {
   Unlock,
   BarChart3,
   DollarSign,
+  Clock,
 } from "lucide-react";
 
 interface ProgramResource {
@@ -289,6 +290,8 @@ export default function ProgramManagementPage() {
     jobs_retained: 0,
     capital_accessed: 0,
     revenue_growth_pct: 0,
+    staff_hours: 0,
+    outcomes_notes: "",
   };
 
   // Load real tracking (all participants) + resources whenever a
@@ -356,6 +359,8 @@ export default function ProgramManagementPage() {
         jobs_retained: Number(trackingForm.jobs_retained) || 0,
         capital_accessed: Number(trackingForm.capital_accessed) || 0,
         revenue_growth_pct: Number(trackingForm.revenue_growth_pct) || 0,
+        staff_hours: Number(trackingForm.staff_hours) || 0,
+        outcomes_notes: trackingForm.outcomes_notes || null,
       });
       const refreshed = await getProgramTrackingForProgram(selectedProgram.id);
       setProgramTrackingByParticipant(refreshed);
@@ -1762,6 +1767,28 @@ export default function ProgramManagementPage() {
                                 </div>
                               </div>
                               <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                                <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                  <Clock className="h-4 w-4" />
+                                  Staff Time
+                                </h4>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                                    Staff Hours
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={trackingForm.staff_hours ?? 0}
+                                    onChange={(e) =>
+                                      setTrackingForm({
+                                        ...trackingForm,
+                                        staff_hours: e.target.value,
+                                      })
+                                    }
+                                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                                  />
+                                </div>
+                              </div>
+                              <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
                                 <h4 className="font-medium text-gray-900 mb-3">
                                   Outcomes
                                 </h4>
@@ -1797,6 +1824,24 @@ export default function ProgramManagementPage() {
                                       />
                                     </div>
                                   ))}
+                                </div>
+                                <div className="mt-3">
+                                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                                    Notes (attendance, session counts, loan
+                                    pipeline, or anything else specific to
+                                    this program)
+                                  </label>
+                                  <textarea
+                                    value={trackingForm.outcomes_notes ?? ""}
+                                    onChange={(e) =>
+                                      setTrackingForm({
+                                        ...trackingForm,
+                                        outcomes_notes: e.target.value,
+                                      })
+                                    }
+                                    rows={3}
+                                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                                  />
                                 </div>
                               </div>
                               <button

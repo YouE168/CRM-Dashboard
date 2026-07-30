@@ -310,14 +310,16 @@ export default function SignupPage() {
         }
 
         // 2. Create profile in Supabase
+        // Note: the real profiles table's primary key IS the user id (no
+        // separate user_id column), and it has no "position" column - that
+        // field currently has no home in the schema.
         const { error: profileError } = await supabase.from("profiles").insert({
-          user_id: userData.id,
+          id: userData.id,
           name: `${formData.firstName} ${formData.lastName}`,
           email: formData.email,
           primary_role: formData.primaryRole,
           phone: formData.phone || "",
           organization: formData.organization || "",
-          position: formData.position || "",
           created_at: new Date().toISOString(),
         });
 

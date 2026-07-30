@@ -37,48 +37,74 @@ export type Database = {
         };
         Relationships: [];
       };
+      // NOTE: this table's primary key (id) IS the auth user id - there is
+      // no separate user_id column. There is also no "position" column.
       profiles: {
         Row: {
           id: string;
-          user_id: string;
           name: string | null;
           email: string | null;
+          role: string | null;
+          user_type: string | null;
           primary_role: string | null;
           phone: string | null;
           organization: string | null;
-          position: string | null;
           bio: string | null;
           expertise: string[] | null;
+          availability: string[] | null;
+          hourly_rate: number | null;
+          rating: number | null;
+          total_sessions: number | null;
+          selected_programs: string[] | null;
+          mentor: string | null;
+          status: string | null;
+          business_professional_status: string | null;
           avatar: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
-          id?: string;
-          user_id: string;
+          id: string;
           name?: string | null;
           email?: string | null;
+          role?: string | null;
+          user_type?: string | null;
           primary_role?: string | null;
           phone?: string | null;
           organization?: string | null;
-          position?: string | null;
           bio?: string | null;
           expertise?: string[] | null;
+          availability?: string[] | null;
+          hourly_rate?: number | null;
+          rating?: number | null;
+          total_sessions?: number | null;
+          selected_programs?: string[] | null;
+          mentor?: string | null;
+          status?: string | null;
+          business_professional_status?: string | null;
           avatar?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
-          user_id?: string;
           name?: string | null;
           email?: string | null;
+          role?: string | null;
+          user_type?: string | null;
           primary_role?: string | null;
           phone?: string | null;
           organization?: string | null;
-          position?: string | null;
           bio?: string | null;
           expertise?: string[] | null;
+          availability?: string[] | null;
+          hourly_rate?: number | null;
+          rating?: number | null;
+          total_sessions?: number | null;
+          selected_programs?: string[] | null;
+          mentor?: string | null;
+          status?: string | null;
+          business_professional_status?: string | null;
           avatar?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -190,6 +216,8 @@ export type Database = {
           jobs_retained: number;
           capital_accessed: number;
           revenue_growth_pct: number;
+          staff_hours: number;
+          outcomes_notes: string | null;
           updated_at: string;
         };
         Insert: {
@@ -206,6 +234,8 @@ export type Database = {
           jobs_retained?: number;
           capital_accessed?: number;
           revenue_growth_pct?: number;
+          staff_hours?: number;
+          outcomes_notes?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -222,6 +252,8 @@ export type Database = {
           jobs_retained?: number;
           capital_accessed?: number;
           revenue_growth_pct?: number;
+          staff_hours?: number;
+          outcomes_notes?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -1088,6 +1120,10 @@ export type Database = {
           referrals: number | null;
           internships: number | null;
           link: string | null;
+          project_type: string | null;
+          org_type: string | null;
+          hours_worked: number | null;
+          program_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -1099,6 +1135,10 @@ export type Database = {
           referrals?: number | null;
           internships?: number | null;
           link?: string | null;
+          project_type?: string | null;
+          org_type?: string | null;
+          hours_worked?: number | null;
+          program_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -1110,6 +1150,10 @@ export type Database = {
           referrals?: number | null;
           internships?: number | null;
           link?: string | null;
+          project_type?: string | null;
+          org_type?: string | null;
+          hours_worked?: number | null;
+          program_id?: string | null;
           created_at?: string;
         };
         Relationships: [];

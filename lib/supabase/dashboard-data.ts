@@ -592,8 +592,30 @@ export interface PartnerCollaborationRow {
   referrals: number | null;
   internships: number | null;
   link: string | null;
+  // Matches the "Business Engagement" fields Jody tracks for the Parker
+  // Dewey Micro-Internship program: project_type is the kind of work
+  // (Marketing/Video/Research/Admin/Other), org_type is what kind of
+  // partner this is (Business/Nonprofit/Coalition), hours_worked is the
+  // student's total logged hours on this engagement.
+  project_type: string | null;
+  org_type: string | null;
+  hours_worked: number | null;
+  // Ties this collaboration to a real row in the programs catalog (the
+  // same programs a partner picked "Program Interests" for at signup, via
+  // user_programs). Nullable so older free-text entries keep working.
+  program_id: string | null;
   created_at: string;
 }
+
+export const PARTNER_PROJECT_TYPES = [
+  "Marketing",
+  "Video",
+  "Research",
+  "Admin",
+  "Other",
+] as const;
+
+export const PARTNER_ORG_TYPES = ["Business", "Nonprofit", "Coalition"] as const;
 
 export async function getPartnerCollaborations(
   userId: string,
@@ -609,13 +631,25 @@ export async function getPartnerCollaborations(
 
 export async function addPartnerCollaboration(
   userId: string,
-  fields: { title: string; description?: string; link?: string },
+  fields: {
+    title: string;
+    description?: string;
+    link?: string;
+    project_type?: string;
+    org_type?: string;
+    hours_worked?: number;
+    program_id?: string;
+  },
 ): Promise<void> {
   const { error } = await supabase.from("partner_collaborations").insert({
     user_id: userId,
     title: fields.title,
     description: fields.description || null,
     link: fields.link || null,
+    project_type: fields.project_type || null,
+    org_type: fields.org_type || null,
+    hours_worked: fields.hours_worked ?? null,
+    program_id: fields.program_id || null,
     status: "Active",
     referrals: 0,
   });
@@ -627,7 +661,16 @@ export async function updatePartnerCollaboration(
   fields: Partial<
     Pick<
       PartnerCollaborationRow,
-      "title" | "description" | "status" | "referrals" | "internships" | "link"
+      | "title"
+      | "description"
+      | "status"
+      | "referrals"
+      | "internships"
+      | "link"
+      | "project_type"
+      | "org_type"
+      | "hours_worked"
+      | "program_id"
     >
   >,
 ): Promise<void> {
@@ -700,6 +743,115 @@ export async function deletePartnerResource(id: string): Promise<void> {
 
 export function subscribeToPartnerData(onChange: () => void) {
   const channelName = `partner-data-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on("postgres_changes", { event: "*", schema: "public", table: "partner_profile_data" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "partner_collaborations" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "partner_resources" }, onChange)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ---------------------------------------------------------------------
+// Admin "Partners" view - lets Jody/staff see every partner org's
+// self-reported numbers in one place instead of logging in as each one.
+// Relies on the "staff read/write all partner_* rows" RLS policies (see
+// partner_dashboard_schema.sql) - admin/staff/program_manager only.
+// ---------------------------------------------------------------------
+export interface PartnerOverviewRow {
+  userId: string;
+  name: string;
+  email: string;
+  organization: string | null;
+  profile: PartnerProfileData | null;
+  collaborations: PartnerCollaborationRow[];
+  resources: PartnerResourceRow[];
+  programs: UserProgramRow[];
+}
+
+export async function getAllPartnersOverview(): Promise<PartnerOverviewRow[]> {
+  const { data: partnerUsers, error: usersError } = await supabase
+    .from("users")
+    .select("id, name, email")
+    .eq("primary_role", "partner");
+  if (usersError) throw usersError;
+  if (!partnerUsers || partnerUsers.length === 0) return [];
+
+  const userIds = partnerUsers.map((u) => u.id);
+  // "organization" lives on the profiles table, not users.
+  const [
+    { data: orgProfiles, error: orgError },
+    { data: profiles, error: profilesError },
+    { data: collabs, error: collabsError },
+    { data: resources, error: resourcesError },
+    { data: enrollments, error: enrollError },
+    { data: allPrograms, error: programsError },
+  ] = await Promise.all([
+    supabase.from("profiles").select("id, organization").in("id", userIds),
+    supabase.from("partner_profile_data").select("*").in("user_id", userIds),
+    supabase
+      .from("partner_collaborations")
+      .select("*")
+      .in("user_id", userIds)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("partner_resources")
+      .select("*")
+      .in("user_id", userIds)
+      .order("created_at", { ascending: false }),
+    supabase.from("user_programs").select("*").in("user_id", userIds),
+    supabase.from("programs").select("*"),
+  ]);
+  if (orgError) throw orgError;
+  if (profilesError) throw profilesError;
+  if (collabsError) throw collabsError;
+  if (resourcesError) throw resourcesError;
+  if (enrollError) throw enrollError;
+  if (programsError) throw programsError;
+
+  const programById = Object.fromEntries((allPrograms || []).map((p) => [p.id, p]));
+  const programsByUser = (enrollments || []).reduce<Record<string, UserProgramRow[]>>(
+    (acc, e) => {
+      const program = programById[e.program_id];
+      if (!program) return acc;
+      const row: UserProgramRow = {
+        user_program_id: e.id,
+        program_id: program.id,
+        name: program.name,
+        description: program.description,
+        status: program.status,
+        start_date: program.start_date,
+        end_date: program.end_date,
+        icon: program.icon,
+        color: program.color,
+        contact_email: program.contact_email,
+        contact_phone: program.contact_phone,
+        progress: e.progress,
+        approved: e.approved,
+      };
+      (acc[e.user_id] ||= []).push(row);
+      return acc;
+    },
+    {},
+  );
+
+  return partnerUsers.map((u) => ({
+    userId: u.id,
+    name: u.name || u.email,
+    email: u.email,
+    organization:
+      (orgProfiles || []).find((p) => p.id === u.id)?.organization || null,
+    profile: (profiles || []).find((p) => p.user_id === u.id) || null,
+    collaborations: (collabs || []).filter((c) => c.user_id === u.id),
+    resources: (resources || []).filter((r) => r.user_id === u.id),
+    programs: programsByUser[u.id] || [],
+  }));
+}
+
+export function subscribeToAllPartnersData(onChange: () => void) {
+  const channelName = `admin-partners-${Math.random().toString(36).slice(2)}`;
   const channel = supabase
     .channel(channelName)
     .on("postgres_changes", { event: "*", schema: "public", table: "partner_profile_data" }, onChange)
@@ -1296,6 +1448,15 @@ export interface ProgramTrackingRow {
   jobs_retained: number;
   capital_accessed: number;
   revenue_growth_pct: number;
+  // Staff time and free-text outcomes recur across every program Jody
+  // tracks (SEED, Parker Dewey, LHEATs, etc.) but each has its own set of
+  // very specific fields (attendance, session counts, loan pipeline...).
+  // Rather than modeling a separate schema per program, staff_hours covers
+  // the universal "how much staff time went into this" number, and
+  // outcomes_notes is a free-text field for whatever's specific to that
+  // program/participant that isn't worth its own column.
+  staff_hours: number;
+  outcomes_notes: string | null;
   updated_at: string;
 }
 

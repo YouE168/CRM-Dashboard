@@ -187,7 +187,7 @@ export default function ProgramManagerDashboardPage() {
       const { data: profileRow } = await supabase
         .from("profiles")
         .select("avatar")
-        .eq("user_id", authData.user.id)
+        .eq("id", authData.user.id)
         .maybeSingle();
 
       if (cancelled) return;
@@ -289,7 +289,7 @@ export default function ProgramManagerDashboardPage() {
       const { error: profileError } = await supabase
         .from("profiles")
         .update({ name: trimmedName })
-        .eq("user_id", authData.user.id);
+        .eq("id", authData.user.id);
       if (profileError) {
         console.warn("Failed to sync profiles table:", profileError);
       }
@@ -645,8 +645,8 @@ export default function ProgramManagerDashboardPage() {
                         const { error } = await supabase
                           .from("profiles")
                           .upsert(
-                            { user_id: authData.user.id, avatar: avatarUrl },
-                            { onConflict: "user_id" },
+                            { id: authData.user.id, avatar: avatarUrl },
+                            { onConflict: "id" },
                           );
                         if (error) {
                           console.error("Failed to save avatar:", error);

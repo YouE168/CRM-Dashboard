@@ -32,6 +32,8 @@ import {
   updatePartnerCollaboration,
   deletePartnerCollaboration,
   type PartnerCollaborationRow,
+  PARTNER_PROJECT_TYPES,
+  PARTNER_ORG_TYPES,
   getPartnerResources,
   addPartnerResource,
   updatePartnerResource,
@@ -1969,15 +1971,22 @@ function PartnerDashboard({
   >([]);
   const [resources, setResources] = useState<PartnerResourceRow[]>([]);
   const [loadingPartnerData, setLoadingPartnerData] = useState(true);
+  // The real programs this partner selected/was approved for at signup
+  // (user_programs joined with the programs catalog) - lets collaborations
+  // be tied to an actual program instead of a free-text title only.
+  const [myPrograms, setMyPrograms] = useState<UserProgramRow[]>([]);
 
   const loadPartnerData = useCallback(
     async (uid: string) => {
       try {
-        const [profileRow, collabRows, resourceRows] = await Promise.all([
-          getPartnerProfileData(uid),
-          getPartnerCollaborations(uid),
-          getPartnerResources(uid),
-        ]);
+        const [profileRow, collabRows, resourceRows, programRows] =
+          await Promise.all([
+            getPartnerProfileData(uid),
+            getPartnerCollaborations(uid),
+            getPartnerResources(uid),
+            getProgramsForUser(uid).catch(() => []),
+          ]);
+        setMyPrograms(programRows);
         setProfileData(
           profileRow || {
             user_id: uid,
@@ -2156,6 +2165,12 @@ function PartnerDashboard({
         title: tempFormData.title || "New Collaboration",
         description: tempFormData.description || "",
         link: tempFormData.link || "",
+        project_type: tempFormData.project_type || undefined,
+        org_type: tempFormData.org_type || undefined,
+        hours_worked: tempFormData.hours_worked
+          ? Number(tempFormData.hours_worked)
+          : undefined,
+        program_id: tempFormData.program_id || undefined,
       });
       setCollaborations(await getPartnerCollaborations(userId));
       setShowAddModal(null);
@@ -2168,11 +2183,21 @@ function PartnerDashboard({
   };
 
   const updateCollaboration = (id: string, field: string, value: string) => {
+    const storedValue: string | number | null =
+      field === "hours_worked"
+        ? value === ""
+          ? null
+          : Number(value)
+        : field === "program_id"
+          ? value === ""
+            ? null
+            : value
+          : value;
     setCollaborations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)),
+      prev.map((c) => (c.id === id ? { ...c, [field]: storedValue } : c)),
     );
     debouncedWrite(`collab-${id}-${field}`, () =>
-      updatePartnerCollaboration(id, { [field]: value } as any),
+      updatePartnerCollaboration(id, { [field]: storedValue } as any),
     );
   };
 
@@ -2444,6 +2469,36 @@ function PartnerDashboard({
         ))}
       </div>
 
+      {/* Your Programs - the real programs this partner selected/was
+          approved for at signup (user_programs), so it's clear which
+          programs collaborations below can be tied to. */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h3 className="font-semibold text-gray-900 mb-3">📋 Your Programs</h3>
+        {myPrograms.length === 0 ? (
+          <p className="text-sm text-gray-400">
+            No programs selected yet. Contact Jody to get added to a
+            program.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {myPrograms.map((p) => (
+              <span
+                key={p.user_program_id}
+                className={`text-xs px-3 py-1 rounded-full ${
+                  p.approved
+                    ? "bg-orange-100 text-orange-700"
+                    : "bg-yellow-100 text-yellow-700"
+                }`}
+                title={p.approved ? "Approved" : "Pending approval"}
+              >
+                {p.name}
+                {!p.approved && " (pending)"}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Active Collaborations */}
@@ -2495,6 +2550,24 @@ function PartnerDashboard({
                   >
                     {isEditing ? (
                       <>
+                        <select
+                          value={collab.program_id || ""}
+                          onChange={(e) =>
+                            updateCollaboration(
+                              collab.id,
+                              "program_id",
+                              e.target.value,
+                            )
+                          }
+                          className="text-xs border rounded px-2 py-1 w-full mb-1 bg-orange-50"
+                        >
+                          <option value="">No program linked</option>
+                          {myPrograms.map((p) => (
+                            <option key={p.program_id} value={p.program_id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
                         <input
                           type="text"
                           value={collab.title}
@@ -2532,15 +2605,94 @@ function PartnerDashboard({
                           placeholder="Link URL"
                           className="text-xs text-orange-600 border rounded px-2 py-1 w-full mt-1"
                         />
+                        <div className="grid grid-cols-3 gap-1 mt-1">
+                          <select
+                            value={collab.project_type || ""}
+                            onChange={(e) =>
+                              updateCollaboration(
+                                collab.id,
+                                "project_type",
+                                e.target.value,
+                              )
+                            }
+                            className="text-xs border rounded px-1 py-1"
+                          >
+                            <option value="">Project type...</option>
+                            {PARTNER_PROJECT_TYPES.map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={collab.org_type || ""}
+                            onChange={(e) =>
+                              updateCollaboration(
+                                collab.id,
+                                "org_type",
+                                e.target.value,
+                              )
+                            }
+                            className="text-xs border rounded px-1 py-1"
+                          >
+                            <option value="">Org type...</option>
+                            {PARTNER_ORG_TYPES.map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            value={collab.hours_worked ?? ""}
+                            onChange={(e) =>
+                              updateCollaboration(
+                                collab.id,
+                                "hours_worked",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Hours"
+                            className="text-xs border rounded px-1 py-1 w-full"
+                          />
+                        </div>
                       </>
                     ) : (
                       <>
+                        {collab.program_id && (
+                          <span className="inline-block text-[11px] font-medium bg-orange-600 text-white px-2 py-0.5 rounded-full mb-1">
+                            {myPrograms.find(
+                              (p) => p.program_id === collab.program_id,
+                            )?.name || "Program"}
+                          </span>
+                        )}
                         <p className="font-medium text-gray-800">
                           {collab.title}
                         </p>
                         <p className="text-sm text-gray-500 mt-1">
                           {collab.description}
                         </p>
+                        {(collab.project_type ||
+                          collab.org_type ||
+                          collab.hours_worked) && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {collab.project_type && (
+                              <span className="text-[11px] bg-orange-50 text-orange-700 px-2 py-0.5 rounded-full">
+                                {collab.project_type}
+                              </span>
+                            )}
+                            {collab.org_type && (
+                              <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                                {collab.org_type}
+                              </span>
+                            )}
+                            {collab.hours_worked ? (
+                              <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                                {collab.hours_worked} hrs
+                              </span>
+                            ) : null}
+                          </div>
+                        )}
                         <div className="flex items-center justify-between mt-2">
                           <span className="text-xs text-gray-400">
                             {collab.referrals || collab.internships || 0} active
@@ -2884,6 +3036,27 @@ function PartnerDashboard({
               </button>
             </div>
             <div className="p-5 space-y-4">
+              <select
+                value={tempFormData.program_id || ""}
+                onChange={(e) =>
+                  setTempFormData({
+                    ...tempFormData,
+                    program_id: e.target.value,
+                  })
+                }
+                className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-orange-500 bg-orange-50"
+              >
+                <option value="">
+                  {myPrograms.length === 0
+                    ? "No programs on your account yet"
+                    : "Which program is this for? (optional)"}
+                </option>
+                {myPrograms.map((p) => (
+                  <option key={p.program_id} value={p.program_id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
               <input
                 type="text"
                 placeholder="Collaboration Title"
@@ -2911,6 +3084,54 @@ function PartnerDashboard({
                 value={tempFormData.link || ""}
                 onChange={(e) =>
                   setTempFormData({ ...tempFormData, link: e.target.value })
+                }
+                className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-orange-500"
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <select
+                  value={tempFormData.project_type || ""}
+                  onChange={(e) =>
+                    setTempFormData({
+                      ...tempFormData,
+                      project_type: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Project type (optional)</option>
+                  {PARTNER_PROJECT_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={tempFormData.org_type || ""}
+                  onChange={(e) =>
+                    setTempFormData({
+                      ...tempFormData,
+                      org_type: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Org type (optional)</option>
+                  {PARTNER_ORG_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <input
+                type="number"
+                placeholder="Hours worked (optional)"
+                value={tempFormData.hours_worked || ""}
+                onChange={(e) =>
+                  setTempFormData({
+                    ...tempFormData,
+                    hours_worked: e.target.value,
+                  })
                 }
                 className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-orange-500"
               />
@@ -5462,7 +5683,7 @@ export default function DashboardPage() {
       const { data: profileRow } = await supabase
         .from("profiles")
         .select("avatar")
-        .eq("user_id", authData.user.id)
+        .eq("id", authData.user.id)
         .maybeSingle();
 
       if (cancelled) return;
@@ -5548,7 +5769,7 @@ export default function DashboardPage() {
       const { error: profileError } = await supabase
         .from("profiles")
         .update({ name: trimmedName })
-        .eq("user_id", authData.user.id);
+        .eq("id", authData.user.id);
       if (profileError) {
         console.warn("Failed to sync profiles table:", profileError);
       }
@@ -5916,8 +6137,8 @@ export default function DashboardPage() {
                         const { error } = await supabase
                           .from("profiles")
                           .upsert(
-                            { user_id: authData.user.id, avatar: avatarUrl },
-                            { onConflict: "user_id" },
+                            { id: authData.user.id, avatar: avatarUrl },
+                            { onConflict: "id" },
                           );
                         if (error) {
                           console.error("Failed to save avatar:", error);

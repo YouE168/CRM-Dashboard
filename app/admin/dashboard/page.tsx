@@ -22,6 +22,7 @@ import { ParticipantsTab } from "@/components/dashboard/participants-tab";
 import { MentorsTab } from "@/components/dashboard/mentors-tab";
 import { LeadershipTab } from "@/components/dashboard/leadership-tab";
 import { ResourcesTab } from "@/components/dashboard/resources-tab";
+import { PartnersTab } from "@/components/dashboard/partners-tab";
 import { ReportsTab } from "@/components/dashboard/reports-tab";
 import { SlidePanel } from "@/components/slide-panel";
 import { RoundtableSignupForm } from "@/components/roundtable-signup-form";
@@ -424,7 +425,7 @@ function AdminDashboardContent() {
           supabase
             .from("profiles")
             .select("avatar")
-            .eq("user_id", authData.user.id)
+            .eq("id", authData.user.id)
             .maybeSingle(),
         ]);
 
@@ -740,8 +741,8 @@ function AdminDashboardContent() {
         const { error: avatarError } = await supabase
           .from("profiles")
           .upsert(
-            { user_id: authData.user.id, avatar: editForm.avatar || null },
-            { onConflict: "user_id" },
+            { id: authData.user.id, avatar: editForm.avatar || null },
+            { onConflict: "id" },
           );
         if (avatarError) {
           console.error("Failed to save avatar:", avatarError);
@@ -875,7 +876,13 @@ function AdminDashboardContent() {
     }
 
     if (isAdmin || isStaff) {
-      tabs.push("Leadership Roundtable", "Resources", "Reports", "Notes");
+      tabs.push(
+        "Leadership Roundtable",
+        "Partners",
+        "Resources",
+        "Reports",
+        "Notes",
+      );
     }
 
     return tabs;
@@ -1552,8 +1559,8 @@ function AdminDashboardContent() {
                         const { error } = await supabase
                           .from("profiles")
                           .upsert(
-                            { user_id: authData.user.id, avatar: avatarUrl },
-                            { onConflict: "user_id" },
+                            { id: authData.user.id, avatar: avatarUrl },
+                            { onConflict: "id" },
                           );
                         if (error) {
                           console.error("Failed to save avatar:", error);
@@ -1940,6 +1947,7 @@ function AdminDashboardContent() {
             showToast={showToast}
           />
         )}
+        {(isAdmin || isStaff) && activeTab === "Partners" && <PartnersTab />}
         {(isAdmin || isStaff) && activeTab === "Resources" && <ResourcesTab />}
         {(isAdmin || isStaff) && activeTab === "Reports" && (
           <ReportsTab
