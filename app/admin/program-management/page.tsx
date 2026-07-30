@@ -22,6 +22,7 @@ import {
   deleteProgramResource,
   type ProgramResourceRow,
 } from "@/lib/supabase/dashboard-data";
+import { PartnersTab } from "@/components/dashboard/partners-tab";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -243,6 +244,16 @@ const AVAILABLE_PROGRAMS = [
 
 export default function ProgramManagementPage() {
   const router = useRouter();
+  // Top-level view: "programs" is the existing per-program management
+  // (Participants/Program Access/Tracking come from user_programs +
+  // program_tracking - entrepreneur & mentee accounts). "partners" is a
+  // completely separate data source (partner_profile_data/
+  // partner_collaborations/partner_resources, one row per partner org,
+  // self-reported by the partner) - looks similar (programs, hours,
+  // outcomes) but is not the same records or the same table.
+  const [pageView, setPageView] = useState<"programs" | "partners">(
+    "programs",
+  );
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
@@ -785,6 +796,41 @@ export default function ProgramManagementPage() {
           </button>
         </div>
 
+        {/* Programs vs Partners - two different data sources that both
+            talk about "programs," so the toggle is labeled explicitly to
+            avoid confusion. */}
+        <div className="flex gap-2 mb-2">
+          <button
+            onClick={() => setPageView("programs")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              pageView === "programs"
+                ? "bg-emerald-600 text-white"
+                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            📋 Programs (Participants)
+          </button>
+          <button
+            onClick={() => setPageView("partners")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              pageView === "partners"
+                ? "bg-orange-600 text-white"
+                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            🤝 Partners
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 mb-6">
+          {pageView === "programs"
+            ? "Sessions, Program Access, Tracking, and Resources for mentee & entrepreneur participants enrolled in a program."
+            : "Self-reported collaborations, internships, and shared resources from partner organizations - a separate set of accounts and data from the participants above, even though both reference the same programs catalog."}
+        </p>
+
+        {pageView === "partners" ? (
+          <PartnersTab />
+        ) : (
+        <>
         {/* Program List */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -2095,6 +2141,8 @@ export default function ProgramManagementPage() {
             )}
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

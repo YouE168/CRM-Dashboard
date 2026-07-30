@@ -22,7 +22,6 @@ import { ParticipantsTab } from "@/components/dashboard/participants-tab";
 import { MentorsTab } from "@/components/dashboard/mentors-tab";
 import { LeadershipTab } from "@/components/dashboard/leadership-tab";
 import { ResourcesTab } from "@/components/dashboard/resources-tab";
-import { PartnersTab } from "@/components/dashboard/partners-tab";
 import { ReportsTab } from "@/components/dashboard/reports-tab";
 import { SlidePanel } from "@/components/slide-panel";
 import { RoundtableSignupForm } from "@/components/roundtable-signup-form";
@@ -876,13 +875,7 @@ function AdminDashboardContent() {
     }
 
     if (isAdmin || isStaff) {
-      tabs.push(
-        "Leadership Roundtable",
-        "Partners",
-        "Resources",
-        "Reports",
-        "Notes",
-      );
+      tabs.push("Leadership Roundtable", "Resources", "Reports", "Notes");
     }
 
     return tabs;
@@ -1947,7 +1940,6 @@ function AdminDashboardContent() {
             showToast={showToast}
           />
         )}
-        {(isAdmin || isStaff) && activeTab === "Partners" && <PartnersTab />}
         {(isAdmin || isStaff) && activeTab === "Resources" && <ResourcesTab />}
         {(isAdmin || isStaff) && activeTab === "Reports" && (
           <ReportsTab

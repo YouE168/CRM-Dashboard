@@ -1370,10 +1370,14 @@ export async function getProgramAccessParticipants(): Promise<
 > {
   const [{ data: users, error: usersError }, { data: enrollments, error: enrollError }, { data: programs, error: programError }] =
     await Promise.all([
+      // Any role that can pick programs at signup (see the "Program
+      // Interests" step in app/signup/page.tsx) needs to show up here,
+      // not just entrepreneur/mentee - partner and coalition accounts go
+      // through the same flow and were previously missing entirely.
       supabase
         .from("users")
         .select("id, email, name, primary_role")
-        .in("primary_role", ["entrepreneur", "mentee"]),
+        .in("primary_role", ["entrepreneur", "mentee", "partner", "coalition"]),
       supabase.from("user_programs").select("user_id, program_id, approved"),
       supabase.from("programs").select("id, name"),
     ]);
