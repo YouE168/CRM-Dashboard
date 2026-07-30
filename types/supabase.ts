@@ -1039,6 +1039,111 @@ export type Database = {
         };
         Relationships: [];
       };
+      partner_profile_data: {
+        Row: {
+          user_id: string;
+          hero_title: string | null;
+          hero_subtitle: string | null;
+          stat_active_partners: number;
+          stat_shared_resources: number;
+          stat_active_referrals: number;
+          metric_active_collaborations: number;
+          metric_internships_posted: number;
+          metric_student_placements: number;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          hero_title?: string | null;
+          hero_subtitle?: string | null;
+          stat_active_partners?: number;
+          stat_shared_resources?: number;
+          stat_active_referrals?: number;
+          metric_active_collaborations?: number;
+          metric_internships_posted?: number;
+          metric_student_placements?: number;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          hero_title?: string | null;
+          hero_subtitle?: string | null;
+          stat_active_partners?: number;
+          stat_shared_resources?: number;
+          stat_active_referrals?: number;
+          metric_active_collaborations?: number;
+          metric_internships_posted?: number;
+          metric_student_placements?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      partner_collaborations: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          description: string | null;
+          status: string;
+          referrals: number | null;
+          internships: number | null;
+          link: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          description?: string | null;
+          status?: string;
+          referrals?: number | null;
+          internships?: number | null;
+          link?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          description?: string | null;
+          status?: string;
+          referrals?: number | null;
+          internships?: number | null;
+          link?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      partner_resources: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          description: string | null;
+          type: string;
+          link: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          description?: string | null;
+          type?: string;
+          link?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          description?: string | null;
+          type?: string;
+          link?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import {
   getMentorProfileByEmail,
@@ -24,6 +24,23 @@ import {
   getProgramResources,
   type ProgramResourceRow,
   getMentorRatingForParticipant,
+  getPartnerProfileData,
+  savePartnerProfileData,
+  type PartnerProfileData,
+  getPartnerCollaborations,
+  addPartnerCollaboration,
+  updatePartnerCollaboration,
+  deletePartnerCollaboration,
+  type PartnerCollaborationRow,
+  getPartnerResources,
+  addPartnerResource,
+  updatePartnerResource,
+  deletePartnerResource,
+  type PartnerResourceRow,
+  subscribeToPartnerData,
+  getAdminNotes,
+  subscribeToAdminNotes,
+  type AdminNoteRow,
 } from "@/lib/supabase/dashboard-data";
 import { useRouter } from "next/navigation";
 import {
@@ -1939,64 +1956,156 @@ function PartnerDashboard({
   setShowAllNotes: (val: boolean) => void;
   markNoteAsRead: (id: number) => void;
 }) {
-  const [partnerData, setPartnerData] = useState(() => {
-    const saved = localStorage.getItem("partner_dashboard_data");
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return {
-      id: "partner-default",
-      lastUpdated: new Date().toISOString(),
-      hero: {
-        title: profile?.organization || "Welcome, Partner Organization!",
-        subtitle: "Collaborating for community impact",
-        stats: {
-          activePartners: 8,
-          sharedResources: 12,
-          activeReferrals: 24,
-        },
-      },
-      metrics: {
-        activeCollaborations: 3,
-        internshipsPosted: 2,
-        studentPlacements: 15,
-      },
-      collaborations: [
-        {
-          id: "collab-1",
-          title: "Workforce Development Partnership",
-          description: "Connecting job seekers with employers",
-          referrals: 3,
-          status: "Active",
-          link: "/partnerships/workforce",
-        },
-        {
-          id: "collab-2",
-          title: "Internship Host Partner",
-          description: "Providing internship opportunities for students",
-          internships: 2,
-          status: "Active",
-          link: "/partnerships/internships",
-        },
-      ],
-      sharedResources: [
-        {
-          id: "res-1",
-          title: "Training Materials",
-          description: "Business planning guides and templates",
-          type: "Available",
-          link: "/resources/training",
-        },
-        {
-          id: "res-2",
-          title: "Facility Access",
-          description: "Meeting space available for events",
-          type: "Pending",
-          link: "/resources/facility",
-        },
-      ],
+  // Real Supabase-backed state - replaces the old
+  // localStorage("partner_dashboard_data") blob. One profile-data row per
+  // partner user (hero/metrics) plus their own collaborations/resources
+  // lists.
+  const [userId, setUserId] = useState<string | null>(null);
+  const [profileData, setProfileData] = useState<PartnerProfileData | null>(
+    null,
+  );
+  const [collaborations, setCollaborations] = useState<
+    PartnerCollaborationRow[]
+  >([]);
+  const [resources, setResources] = useState<PartnerResourceRow[]>([]);
+  const [loadingPartnerData, setLoadingPartnerData] = useState(true);
+
+  const loadPartnerData = useCallback(
+    async (uid: string) => {
+      try {
+        const [profileRow, collabRows, resourceRows] = await Promise.all([
+          getPartnerProfileData(uid),
+          getPartnerCollaborations(uid),
+          getPartnerResources(uid),
+        ]);
+        setProfileData(
+          profileRow || {
+            user_id: uid,
+            hero_title:
+              profile?.organization ||
+              profile?.name ||
+              "Welcome, Partner Organization!",
+            hero_subtitle: "Collaborating for community impact",
+            stat_active_partners: 0,
+            stat_shared_resources: 0,
+            stat_active_referrals: 0,
+            metric_active_collaborations: 0,
+            metric_internships_posted: 0,
+            metric_student_placements: 0,
+            updated_at: new Date().toISOString(),
+          },
+        );
+        setCollaborations(collabRows);
+        setResources(resourceRows);
+      } catch (err) {
+        console.error("Failed to load partner dashboard data:", err);
+      } finally {
+        setLoadingPartnerData(false);
+      }
+    },
+    [profile?.organization, profile?.name],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (data.user) {
+        setUserId(data.user.id);
+        await loadPartnerData(data.user.id);
+      } else {
+        setLoadingPartnerData(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
-  });
+  }, [loadPartnerData]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const unsubscribe = subscribeToPartnerData(() => loadPartnerData(userId));
+    return unsubscribe;
+  }, [userId, loadPartnerData]);
+
+  // Real "Notes from Admin" - same admin_notes table/realtime the admin
+  // dashboard's own Notes tab uses, filtered to broadcasts addressed to
+  // "all" or "partner". Read/unread is tracked client-side only (this
+  // table has no per-recipient row to mark read against), scoped per
+  // signed-in user.
+  const [partnerAdminNotes, setPartnerAdminNotes] = useState<AdminNoteRow[]>(
+    [],
+  );
+  const [showAllPartnerNotes, setShowAllPartnerNotes] = useState(false);
+  const [readPartnerNoteIds, setReadPartnerNoteIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  useEffect(() => {
+    const loadNotes = async () => {
+      try {
+        const all = await getAdminNotes();
+        setPartnerAdminNotes(
+          all.filter(
+            (n) => n.recipient_type === "all" || n.recipient_type === "partner",
+          ),
+        );
+      } catch (err) {
+        console.error("Failed to load admin notes:", err);
+      }
+    };
+    loadNotes();
+    const unsubscribe = subscribeToAdminNotes(loadNotes);
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (!userId || typeof window === "undefined") return;
+    const saved = localStorage.getItem(`partner_read_notes_${userId}`);
+    if (saved) {
+      try {
+        setReadPartnerNoteIds(new Set(JSON.parse(saved)));
+      } catch {
+        // ignore malformed cache
+      }
+    }
+  }, [userId]);
+
+  const markPartnerNoteRead = (id: string) => {
+    setReadPartnerNoteIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      if (userId && typeof window !== "undefined") {
+        localStorage.setItem(
+          `partner_read_notes_${userId}`,
+          JSON.stringify([...next]),
+        );
+      }
+      return next;
+    });
+  };
+
+  // Composed shape the render below already expects, built live from the
+  // real state above instead of one JSON blob.
+  const partnerData = {
+    hero: {
+      title: profileData?.hero_title || "Welcome, Partner Organization!",
+      subtitle: profileData?.hero_subtitle || "",
+      stats: {
+        activePartners: profileData?.stat_active_partners ?? 0,
+        sharedResources: profileData?.stat_shared_resources ?? 0,
+        activeReferrals: profileData?.stat_active_referrals ?? 0,
+      },
+    },
+    metrics: {
+      activeCollaborations: profileData?.metric_active_collaborations ?? 0,
+      internshipsPosted: profileData?.metric_internships_posted ?? 0,
+      studentPlacements: profileData?.metric_student_placements ?? 0,
+    },
+    collaborations,
+    sharedResources: resources,
+  };
 
   const [isEditing, setIsEditing] = useState(false);
   const [showAddModal, setShowAddModal] = useState<
@@ -2004,95 +2113,120 @@ function PartnerDashboard({
   >(null);
   const [tempFormData, setTempFormData] = useState<any>({});
 
+  // Debounce writes so typing in an edit field doesn't fire a Supabase
+  // request on every keystroke - local state (above) updates instantly for
+  // a responsive feel, the network write follows ~600ms after typing stops.
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  );
+  const debouncedWrite = (key: string, fn: () => Promise<void>) => {
+    if (saveTimers.current[key]) clearTimeout(saveTimers.current[key]);
+    saveTimers.current[key] = setTimeout(() => {
+      fn().catch((err) => {
+        console.error(`Failed to save (${key}):`, err);
+        showToast("Failed to save that change.", "error");
+      });
+    }, 600);
+  };
+
+  // Hero/metrics edits funnel through here - collaborations/resources have
+  // their own dedicated CRUD functions below that write straight to
+  // Supabase instead.
   const savePartnerData = (newData: any) => {
-    const updatedData = { ...newData, lastUpdated: new Date().toISOString() };
-    setPartnerData(updatedData);
-    localStorage.setItem("partner_dashboard_data", JSON.stringify(updatedData));
-    showToast("Dashboard updated successfully!", "success");
+    if (!userId) return;
+    const fields = {
+      hero_title: newData.hero.title,
+      hero_subtitle: newData.hero.subtitle,
+      stat_active_partners: newData.hero.stats.activePartners,
+      stat_shared_resources: newData.hero.stats.sharedResources,
+      stat_active_referrals: newData.hero.stats.activeReferrals,
+      metric_active_collaborations: newData.metrics.activeCollaborations,
+      metric_internships_posted: newData.metrics.internshipsPosted,
+      metric_student_placements: newData.metrics.studentPlacements,
+    };
+    setProfileData((prev) => ({ ...(prev as PartnerProfileData), ...fields }));
+    debouncedWrite("profile", () => savePartnerProfileData(userId, fields));
   };
 
-  // Collaboration CRUD
-  const addCollaboration = () => {
-    const newCollab = {
-      id: `collab-${Date.now()}`,
-      title: tempFormData.title || "New Collaboration",
-      description: tempFormData.description || "",
-      referrals: 0,
-      status: "Active",
-      link: tempFormData.link || "",
-    };
-    const updated = {
-      ...partnerData,
-      collaborations: [...partnerData.collaborations, newCollab],
-    };
-    savePartnerData(updated);
-    setShowAddModal(null);
-    setTempFormData({});
-    showToast("Collaboration added successfully!", "success");
-  };
-
-  const updateCollaboration = (id: string, field: string, value: string) => {
-    const updated = {
-      ...partnerData,
-      collaborations: partnerData.collaborations.map((c: any) =>
-        c.id === id ? { ...c, [field]: value } : c,
-      ),
-    };
-    savePartnerData(updated);
-  };
-
-  const deleteCollaboration = (id: string) => {
-    if (confirm("Are you sure you want to delete this collaboration?")) {
-      const updated = {
-        ...partnerData,
-        collaborations: partnerData.collaborations.filter(
-          (c: any) => c.id !== id,
-        ),
-      };
-      savePartnerData(updated);
-      showToast("Collaboration deleted successfully!", "info");
+  // Collaboration CRUD - real Supabase writes.
+  const addCollaboration = async () => {
+    if (!userId) return;
+    try {
+      await addPartnerCollaboration(userId, {
+        title: tempFormData.title || "New Collaboration",
+        description: tempFormData.description || "",
+        link: tempFormData.link || "",
+      });
+      setCollaborations(await getPartnerCollaborations(userId));
+      setShowAddModal(null);
+      setTempFormData({});
+      showToast("Collaboration added successfully!", "success");
+    } catch (err) {
+      console.error("Failed to add collaboration:", err);
+      showToast("Failed to add collaboration. Please try again.", "error");
     }
   };
 
-  // Resource CRUD
-  const addResource = () => {
-    const newResource = {
-      id: `res-${Date.now()}`,
-      title: tempFormData.title || "New Resource",
-      description: tempFormData.description || "",
-      type: tempFormData.type || "Available",
-      link: tempFormData.link || "",
-    };
-    const updated = {
-      ...partnerData,
-      sharedResources: [...partnerData.sharedResources, newResource],
-    };
-    savePartnerData(updated);
-    setShowAddModal(null);
-    setTempFormData({});
-    showToast("Resource added successfully!", "success");
+  const updateCollaboration = (id: string, field: string, value: string) => {
+    setCollaborations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c)),
+    );
+    debouncedWrite(`collab-${id}-${field}`, () =>
+      updatePartnerCollaboration(id, { [field]: value } as any),
+    );
+  };
+
+  const deleteCollaboration = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this collaboration?"))
+      return;
+    try {
+      await deletePartnerCollaboration(id);
+      setCollaborations((prev) => prev.filter((c) => c.id !== id));
+      showToast("Collaboration deleted successfully!", "info");
+    } catch (err) {
+      console.error("Failed to delete collaboration:", err);
+      showToast("Failed to delete. Please try again.", "error");
+    }
+  };
+
+  // Resource CRUD - same pattern.
+  const addResource = async () => {
+    if (!userId) return;
+    try {
+      await addPartnerResource(userId, {
+        title: tempFormData.title || "New Resource",
+        description: tempFormData.description || "",
+        type: tempFormData.type || "Available",
+        link: tempFormData.link || "",
+      });
+      setResources(await getPartnerResources(userId));
+      setShowAddModal(null);
+      setTempFormData({});
+      showToast("Resource added successfully!", "success");
+    } catch (err) {
+      console.error("Failed to add resource:", err);
+      showToast("Failed to add resource. Please try again.", "error");
+    }
   };
 
   const updateResource = (id: string, field: string, value: string) => {
-    const updated = {
-      ...partnerData,
-      sharedResources: partnerData.sharedResources.map((r: any) =>
-        r.id === id ? { ...r, [field]: value } : r,
-      ),
-    };
-    savePartnerData(updated);
+    setResources((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
+    );
+    debouncedWrite(`resource-${id}-${field}`, () =>
+      updatePartnerResource(id, { [field]: value } as any),
+    );
   };
 
-  const deleteResource = (id: string) => {
-    if (confirm("Are you sure you want to delete this resource?")) {
-      const updated = {
-        ...partnerData,
-        sharedResources: partnerData.sharedResources.filter(
-          (r: any) => r.id !== id,
-        ),
-      };
-      savePartnerData(updated);
+  const deleteResource = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this resource?")) return;
+    try {
+      await deletePartnerResource(id);
+      setResources((prev) => prev.filter((r) => r.id !== id));
       showToast("Resource deleted successfully!", "info");
+    } catch (err) {
+      console.error("Failed to delete resource:", err);
+      showToast("Failed to delete. Please try again.", "error");
     }
   };
 
@@ -2126,6 +2260,14 @@ function PartnerDashboard({
       showToast(`📄 ${resource.title}: ${resource.description}`, "info");
     }
   };
+
+  if (loadingPartnerData) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -2366,7 +2508,7 @@ function PartnerDashboard({
                           className="font-medium text-gray-800 border rounded px-2 py-1 text-sm w-full mb-1"
                         />
                         <textarea
-                          value={collab.description}
+                          value={collab.description || ""}
                           onChange={(e) =>
                             updateCollaboration(
                               collab.id,
@@ -2379,7 +2521,7 @@ function PartnerDashboard({
                         />
                         <input
                           type="text"
-                          value={collab.link}
+                          value={collab.link || ""}
                           onChange={(e) =>
                             updateCollaboration(
                               collab.id,
@@ -2477,7 +2619,7 @@ function PartnerDashboard({
                             />
                             <input
                               type="text"
-                              value={resource.description}
+                              value={resource.description || ""}
                               onChange={(e) =>
                                 updateResource(
                                   resource.id,
@@ -2489,7 +2631,7 @@ function PartnerDashboard({
                             />
                             <input
                               type="text"
-                              value={resource.link}
+                              value={resource.link || ""}
                               onChange={(e) =>
                                 updateResource(
                                   resource.id,
@@ -2547,7 +2689,11 @@ function PartnerDashboard({
         </div>
       </div>
 
-      {/* Notes from Admin Section - Partner */}
+      {/* Notes from Admin Section - Partner. Real admin_notes table (same
+          one the admin dashboard's Notes tab writes to), filtered to
+          broadcasts addressed to "all" or "partner". Replaces the old
+          version which depended on a dead localStorage("currentUser")
+          effect and so was always empty for real logged-in users. */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
           <div className="flex items-center justify-between">
@@ -2557,20 +2703,20 @@ function PartnerDashboard({
                 📬 Notes from Admin
               </h3>
             </div>
-            {receivedNotes.length > 0 && (
+            {partnerAdminNotes.length > 0 && (
               <button
-                onClick={() => setShowAllNotes(!showAllNotes)}
+                onClick={() => setShowAllPartnerNotes(!showAllPartnerNotes)}
                 className="text-xs text-blue-600 hover:text-blue-700"
               >
-                {showAllNotes
+                {showAllPartnerNotes
                   ? "Show Less"
-                  : `View All (${receivedNotes.length})`}
+                  : `View All (${partnerAdminNotes.length})`}
               </button>
             )}
           </div>
         </div>
         <div className="p-5 space-y-3">
-          {receivedNotes.length === 0 ? (
+          {partnerAdminNotes.length === 0 ? (
             <div className="text-center py-6">
               <MessageCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
               <p className="text-gray-400 text-sm">No notes from admin yet.</p>
@@ -2579,39 +2725,43 @@ function PartnerDashboard({
               </p>
             </div>
           ) : (
-            (showAllNotes ? receivedNotes : receivedNotes.slice(0, 3)).map(
-              (note: any) => (
+            (showAllPartnerNotes
+              ? partnerAdminNotes
+              : partnerAdminNotes.slice(0, 3)
+            ).map((note) => {
+              const isRead = readPartnerNoteIds.has(note.id);
+              return (
                 <div
                   key={note.id}
                   className={`p-3 rounded-lg transition-colors cursor-pointer ${
-                    note.read
-                      ? "bg-gray-50"
-                      : "bg-blue-50 border border-blue-200"
+                    isRead ? "bg-gray-50" : "bg-blue-50 border border-blue-200"
                   }`}
-                  onClick={() => !note.read && markNoteAsRead(note.id)}
+                  onClick={() => !isRead && markPartnerNoteRead(note.id)}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium text-blue-700">
                         {note.subject}
                       </span>
-                      {!note.read && (
+                      {!isRead && (
                         <span className="text-xs px-1.5 py-0.5 bg-blue-500 text-white rounded-full">
                           New
                         </span>
                       )}
                     </div>
                     <span className="text-xs text-gray-400 whitespace-nowrap">
-                      {new Date(note.sentAt).toLocaleDateString()}
+                      {new Date(note.created_at).toLocaleDateString()}
                     </span>
                   </div>
                   <p className="text-sm text-gray-700">{note.message}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    From: {note.sentBy}
-                  </p>
+                  {note.sent_by && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      From: {note.sent_by}
+                    </p>
+                  )}
                 </div>
-              ),
-            )
+              );
+            })
           )}
         </div>
       </div>

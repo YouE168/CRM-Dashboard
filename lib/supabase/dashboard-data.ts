@@ -540,6 +540,177 @@ export function subscribeToAdminNotes(onChange: () => void) {
   };
 }
 
+// ============================================
+// PARTNER DASHBOARD - real Supabase-backed replacement for what used to be
+// entirely localStorage("partner_dashboard_data"). Each partner user gets
+// one profile-data row (hero/metrics) plus their own collaborations and
+// shared-resources lists.
+// ============================================
+
+export interface PartnerProfileData {
+  user_id: string;
+  hero_title: string | null;
+  hero_subtitle: string | null;
+  stat_active_partners: number;
+  stat_shared_resources: number;
+  stat_active_referrals: number;
+  metric_active_collaborations: number;
+  metric_internships_posted: number;
+  metric_student_placements: number;
+  updated_at: string;
+}
+
+export async function getPartnerProfileData(
+  userId: string,
+): Promise<PartnerProfileData | null> {
+  const { data, error } = await supabase
+    .from("partner_profile_data")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function savePartnerProfileData(
+  userId: string,
+  fields: Partial<Omit<PartnerProfileData, "user_id" | "updated_at">>,
+): Promise<void> {
+  const { error } = await supabase.from("partner_profile_data").upsert(
+    { user_id: userId, ...fields, updated_at: new Date().toISOString() },
+    { onConflict: "user_id" },
+  );
+  if (error) throw error;
+}
+
+export interface PartnerCollaborationRow {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  referrals: number | null;
+  internships: number | null;
+  link: string | null;
+  created_at: string;
+}
+
+export async function getPartnerCollaborations(
+  userId: string,
+): Promise<PartnerCollaborationRow[]> {
+  const { data, error } = await supabase
+    .from("partner_collaborations")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function addPartnerCollaboration(
+  userId: string,
+  fields: { title: string; description?: string; link?: string },
+): Promise<void> {
+  const { error } = await supabase.from("partner_collaborations").insert({
+    user_id: userId,
+    title: fields.title,
+    description: fields.description || null,
+    link: fields.link || null,
+    status: "Active",
+    referrals: 0,
+  });
+  if (error) throw error;
+}
+
+export async function updatePartnerCollaboration(
+  id: string,
+  fields: Partial<
+    Pick<
+      PartnerCollaborationRow,
+      "title" | "description" | "status" | "referrals" | "internships" | "link"
+    >
+  >,
+): Promise<void> {
+  const { error } = await supabase
+    .from("partner_collaborations")
+    .update(fields)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deletePartnerCollaboration(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("partner_collaborations")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export interface PartnerResourceRow {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  link: string | null;
+  created_at: string;
+}
+
+export async function getPartnerResources(
+  userId: string,
+): Promise<PartnerResourceRow[]> {
+  const { data, error } = await supabase
+    .from("partner_resources")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function addPartnerResource(
+  userId: string,
+  fields: { title: string; description?: string; type?: string; link?: string },
+): Promise<void> {
+  const { error } = await supabase.from("partner_resources").insert({
+    user_id: userId,
+    title: fields.title,
+    description: fields.description || null,
+    type: fields.type || "Available",
+    link: fields.link || null,
+  });
+  if (error) throw error;
+}
+
+export async function updatePartnerResource(
+  id: string,
+  fields: Partial<Pick<PartnerResourceRow, "title" | "description" | "type" | "link">>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("partner_resources")
+    .update(fields)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deletePartnerResource(id: string): Promise<void> {
+  const { error } = await supabase.from("partner_resources").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export function subscribeToPartnerData(onChange: () => void) {
+  const channelName = `partner-data-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on("postgres_changes", { event: "*", schema: "public", table: "partner_profile_data" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "partner_collaborations" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "partner_resources" }, onChange)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export interface AnalyticsDataRow {
   program: string;
   county: string;
