@@ -306,3 +306,71 @@ Rural Community Partners
     replyTo: "jody@hbcat.org",
   });
 }
+
+// Helper: Send a branded "reset your password" email using a real Supabase
+// recovery link (generated with admin.generateLink({ type: "recovery" }),
+// NOT auth.resetPasswordForEmail() - that call sends Supabase's own
+// default "Reset your password" email from noreply@mail.app.supabase.io,
+// which is what this replaces). Mirrors sendAccessInviteEmail.
+export async function sendPasswordResetEmail(emailData: {
+  to: string;
+  name: string;
+  actionLink: string;
+}) {
+  const subject = `Reset Your Password - Rural Community Partners`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background-color: #059669; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; padding: 30px 20px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff;">🏠 Rural Community Partners</h1>
+            <p style="margin: 5px 0 0; color: #ffffff;">Password reset request</p>
+          </div>
+          <div style="padding: 30px; background: #f9fafb; border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb;">
+            <h2>Hello${emailData.name ? ` ${emailData.name}` : ""}!</h2>
+            <p>We received a request to reset your password. Click the button below to choose a new one:</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${emailData.actionLink}" style="display: inline-block; background-color: #059669; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 8px; font-weight: bold;">
+                🔑 Reset Your Password
+              </a>
+            </div>
+            <p style="font-size: 13px; color: #6b7280;">Or copy this link into your browser:</p>
+            <div style="background: #f3f4f6; padding: 12px; border-radius: 6px; word-break: break-all; font-size: 13px; font-family: monospace; border: 1px solid #e5e7eb;">${emailData.actionLink}</div>
+            <p style="font-size: 13px; color: #6b7280; margin-top: 20px;">If you didn't request this, you can safely ignore this email.</p>
+          </div>
+          <div style="text-align: center; padding: 20px; font-size: 12px; color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <p style="margin: 0; font-weight: 600;">Rural Community Partners</p>
+            <p style="margin: 5px 0 0; color: #9ca3af;">Questions? Just reply to this email.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const text = `
+Hello${emailData.name ? ` ${emailData.name}` : ""},
+
+We received a request to reset your Rural Community Partners password.
+
+Reset it here:
+${emailData.actionLink}
+
+If you didn't request this, you can safely ignore this email.
+
+---
+Rural Community Partners
+  `;
+
+  return await sendEmail({
+    to: emailData.to,
+    subject,
+    body: text,
+    html,
+    from:
+      process.env.EMAIL_FROM ||
+      "Jody at Rural Community Partners <jody@ruralcommunitypartners.org>",
+    replyTo: "jody@hbcat.org",
+  });
+}

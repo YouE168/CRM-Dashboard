@@ -243,10 +243,22 @@ export default function LoginPage() {
   }
 
   const handleSendResetLink = async (resetEmail: string): Promise<boolean> => {
-    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: `${window.location.origin}/login`,
-    });
-    return !error;
+    // Goes through our own API route (which uses generateLink + Resend)
+    // instead of supabase.auth.resetPasswordForEmail() directly, so the
+    // email is branded as Rural Community Partners / Jody instead of
+    // Supabase's own default "Reset your password" email.
+    try {
+      const res = await fetch("/api/auth/request-password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: resetEmail }),
+      });
+      const result = await res.json();
+      return res.ok && result.success;
+    } catch (err) {
+      console.error("Failed to request password reset:", err);
+      return false;
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
