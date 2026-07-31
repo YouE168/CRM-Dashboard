@@ -164,29 +164,37 @@ export function PartnersTab() {
                     <p className="text-xs text-gray-400">Not enrolled in any program yet.</p>
                   ) : (
                     <div className="flex flex-wrap gap-1">
-                      {selected.programs.map((p) => (
-                        <button
-                          key={p.user_program_id}
-                          onClick={() => toggleProgramAccess(p.name, p.approved)}
-                          disabled={togglingProgram === p.name}
-                          className={`text-[11px] px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 inline-flex items-center gap-1 ${
-                            p.approved
-                              ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700"
-                              : "bg-yellow-100 text-yellow-700 hover:bg-green-100 hover:text-green-700"
-                          }`}
-                          title={p.approved ? "Click to revoke access" : "Click to approve access"}
-                        >
-                          {togglingProgram === p.name ? (
-                            "…"
-                          ) : (
-                            <>
-                              {p.approved && <Check className="h-3 w-3" />}
-                              {p.name}
-                              {!p.approved && " (pending)"}
-                            </>
-                          )}
-                        </button>
-                      ))}
+                      {selected.programs.map((p) => {
+                        // Business Professional Services is auto-approved
+                        // for every account at signup - always show it as
+                        // approved even if an older/invited account's
+                        // user_programs row is missing that flag.
+                        const isApproved =
+                          p.approved || p.name === "Business Professional Services";
+                        return (
+                          <button
+                            key={p.user_program_id}
+                            onClick={() => toggleProgramAccess(p.name, p.approved)}
+                            disabled={togglingProgram === p.name}
+                            className={`text-[11px] px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 inline-flex items-center gap-1 ${
+                              isApproved
+                                ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700"
+                                : "bg-yellow-100 text-yellow-700 hover:bg-green-100 hover:text-green-700"
+                            }`}
+                            title={isApproved ? "Click to revoke access" : "Click to approve access"}
+                          >
+                            {togglingProgram === p.name ? (
+                              "…"
+                            ) : (
+                              <>
+                                {isApproved && <Check className="h-3 w-3" />}
+                                {p.name}
+                                {!isApproved && " (pending)"}
+                              </>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

@@ -2481,21 +2481,27 @@ function PartnerDashboard({
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {myPrograms.map((p) => (
-              <span
-                key={p.user_program_id}
-                className={`text-xs px-3 py-1 rounded-full inline-flex items-center gap-1 ${
-                  p.approved
-                    ? "bg-green-100 text-green-700"
-                    : "bg-yellow-100 text-yellow-700"
-                }`}
-                title={p.approved ? "Approved" : "Pending approval"}
-              >
-                {p.approved && <Check className="h-3 w-3" />}
-                {p.name}
-                {!p.approved && " (pending)"}
-              </span>
-            ))}
+            {myPrograms.map((p) => {
+              // Business Professional Services is auto-approved for every
+              // account at signup - always show it as approved.
+              const isApproved =
+                p.approved || p.name === "Business Professional Services";
+              return (
+                <span
+                  key={p.user_program_id}
+                  className={`text-xs px-3 py-1 rounded-full inline-flex items-center gap-1 ${
+                    isApproved
+                      ? "bg-green-100 text-green-700"
+                      : "bg-yellow-100 text-yellow-700"
+                  }`}
+                  title={isApproved ? "Approved" : "Pending approval"}
+                >
+                  {isApproved && <Check className="h-3 w-3" />}
+                  {p.name}
+                  {!isApproved && " (pending)"}
+                </span>
+              );
+            })}
           </div>
         )}
       </div>
