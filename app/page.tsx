@@ -2121,6 +2121,9 @@ function PartnerDashboard({
     "collaboration" | "resource" | null
   >(null);
   const [tempFormData, setTempFormData] = useState<any>({});
+  const [showPartnerProgramModal, setShowPartnerProgramModal] = useState(false);
+  const [selectedPartnerProgram, setSelectedPartnerProgram] =
+    useState<UserProgramRow | null>(null);
 
   // Debounce writes so typing in an edit field doesn't fire a Supabase
   // request on every keystroke - local state (above) updates instantly for
@@ -2469,41 +2472,106 @@ function PartnerDashboard({
         ))}
       </div>
 
-      {/* Your Programs - the real programs this partner selected/was
-          approved for at signup (user_programs), so it's clear which
-          programs collaborations below can be tied to. */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-900 mb-3">📋 Your Programs</h3>
-        {myPrograms.length === 0 ? (
-          <p className="text-sm text-gray-400">
-            No programs selected yet. Contact Jody to get added to a
-            program.
+      {/* Your Active Programs - the real programs this partner selected/was
+          approved for at signup (user_programs), styled to match the
+          mentee/entrepreneur "Your Active Programs" list so it's clear
+          which programs collaborations below can be tied to. */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900">
+            📋 Your Active Programs
+          </h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Click on a program to view details
           </p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {myPrograms.map((p) => {
+        </div>
+        <div className="divide-y divide-gray-100">
+          {myPrograms.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">
+              <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No programs yet</p>
+              <p className="text-xs mt-1">
+                Contact Jody to get added to a program
+              </p>
+            </div>
+          ) : (
+            myPrograms.map((p) => {
               // Business Professional Services is auto-approved for every
               // account at signup - always show it as approved.
               const isApproved =
                 p.approved || p.name === "Business Professional Services";
               return (
-                <span
+                <div
                   key={p.user_program_id}
-                  className={`text-xs px-3 py-1 rounded-full inline-flex items-center gap-1 ${
-                    isApproved
-                      ? "bg-green-100 text-green-700"
-                      : "bg-yellow-100 text-yellow-700"
-                  }`}
-                  title={isApproved ? "Approved" : "Pending approval"}
+                  onClick={() => {
+                    setSelectedPartnerProgram(p);
+                    setShowPartnerProgramModal(true);
+                  }}
+                  className="p-5 hover:bg-gray-50 transition-colors group relative cursor-pointer"
                 >
-                  {isApproved && <Check className="h-3 w-3" />}
-                  {p.name}
-                  {!isApproved && " (pending)"}
-                </span>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-gray-800 group-hover:text-orange-600 transition-colors">
+                          {p.name}
+                        </p>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full ${
+                            p.status === "Active"
+                              ? "bg-green-100 text-green-700"
+                              : p.status === "Completed"
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {p.status}
+                        </span>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                            isApproved
+                              ? "bg-green-100 text-green-700"
+                              : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {isApproved && <Check className="h-3 w-3" />}
+                          {isApproved ? "Approved" : "Pending approval"}
+                        </span>
+                      </div>
+                      {p.start_date && (
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-gray-400" />
+                            <span className="text-xs text-gray-500">
+                              Started{" "}
+                              {new Date(p.start_date).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      <div className="mt-3">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-gray-500">
+                            Overall Progress
+                          </span>
+                          <span className="text-orange-600 font-medium">
+                            {p.progress}%
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-200 rounded-full">
+                          <div
+                            className="h-2 bg-orange-500 rounded-full transition-all"
+                            style={{ width: `${p.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-orange-500 group-hover:translate-x-1 transition-all flex-shrink-0 ml-4" />
+                  </div>
+                </div>
               );
-            })}
-          </div>
-        )}
+            })
+          )}
+        </div>
       </div>
 
       {/* Two Column Layout */}
@@ -3223,6 +3291,132 @@ function PartnerDashboard({
               >
                 Add
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Program Details Modal - same design as the mentee/entrepreneur
+          version, minus the Tracking/Sessions tabs since those are scoped
+          to a participant record partners don't have. */}
+      {showPartnerProgramModal && selectedPartnerProgram && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {selectedPartnerProgram.name}
+                </h2>
+                <div className="flex items-center gap-2 flex-wrap mt-1">
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full ${
+                      selectedPartnerProgram.status === "Active"
+                        ? "bg-green-100 text-green-700"
+                        : selectedPartnerProgram.status === "Completed"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-yellow-100 text-yellow-700"
+                    }`}
+                  >
+                    {selectedPartnerProgram.status}
+                  </span>
+                  {selectedPartnerProgram.approved ||
+                  selectedPartnerProgram.name === "Business Professional Services" ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                      Approved
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                      Pending approval
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPartnerProgramModal(false);
+                  setSelectedPartnerProgram(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-xl flex-shrink-0"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {selectedPartnerProgram.description && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-1">
+                    About This Program
+                  </h4>
+                  <p className="text-gray-600 text-sm leading-relaxed">
+                    {selectedPartnerProgram.description}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-gray-600">Overall Progress</span>
+                  <span className="font-medium text-orange-600">
+                    {selectedPartnerProgram.progress}%
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-2 bg-orange-500 rounded-full transition-all"
+                    style={{ width: `${selectedPartnerProgram.progress}%` }}
+                  />
+                </div>
+              </div>
+
+              {(selectedPartnerProgram.start_date ||
+                selectedPartnerProgram.end_date) && (
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <Clock className="h-4 w-4 text-gray-400" />
+                  {selectedPartnerProgram.start_date &&
+                    `Started ${new Date(selectedPartnerProgram.start_date).toLocaleDateString()}`}
+                  {selectedPartnerProgram.start_date &&
+                    selectedPartnerProgram.end_date &&
+                    " · "}
+                  {selectedPartnerProgram.end_date &&
+                    `Ends ${new Date(selectedPartnerProgram.end_date).toLocaleDateString()}`}
+                </div>
+              )}
+
+              {(selectedPartnerProgram.contact_email ||
+                selectedPartnerProgram.contact_phone) && (
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-2">
+                  <h4 className="text-sm font-medium text-gray-900">
+                    Program Contact
+                  </h4>
+                  {selectedPartnerProgram.contact_email && (
+                    <button
+                      onClick={() =>
+                        (window.location.href = `mailto:${selectedPartnerProgram.contact_email}`)
+                      }
+                      className="w-full flex items-center gap-3 p-2.5 bg-white rounded-lg hover:bg-orange-50 transition-colors border border-gray-100 text-left"
+                    >
+                      <Mail className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                      <span className="text-sm text-gray-700 truncate">
+                        {selectedPartnerProgram.contact_email}
+                      </span>
+                    </button>
+                  )}
+                  {selectedPartnerProgram.contact_phone && (
+                    <button
+                      onClick={() =>
+                        (window.location.href = `tel:${selectedPartnerProgram.contact_phone}`)
+                      }
+                      className="w-full flex items-center gap-3 p-2.5 bg-white rounded-lg hover:bg-orange-50 transition-colors border border-gray-100 text-left"
+                    >
+                      <Phone className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                      <span className="text-sm text-gray-700">
+                        {selectedPartnerProgram.contact_phone}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
