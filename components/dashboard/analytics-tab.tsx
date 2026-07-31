@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Filters } from "./filters";
 import { KPICard } from "./kpi-card";
 import { ClientsByProgramChart } from "./clients-by-program-chart";
-import { ClientsByCountyChart } from "./clients-by-county-chart";
 import { SessionsChart } from "./sessions-chart";
 import { ParticipantsTable } from "./participants-table";
 import {
@@ -12,24 +11,18 @@ import {
   Heart,
   CalendarDays,
   Clock,
-  FileSignature,
-  ClipboardList,
-  Receipt,
   TrendingUp,
   Award,
-  UserCheck,
-  BarChart3,
 } from "lucide-react";
 import {
-  getAnalyticsGrid,
-  subscribeToAnalyticsGrid,
-  getOutcomeKPIs,
   getParticipants,
-  type AnalyticsDataRow,
-  type OutcomeKPI,
+  getLiveOperationalMetrics,
+  getLiveOutcomeMetrics,
+  subscribeToLiveDashboardData,
   type DashboardParticipant,
+  type LiveOperationalMetrics,
+  type LiveOutcomeMetrics,
 } from "@/lib/supabase/dashboard-data";
-import { PROGRAMS, COUNTIES } from "@/lib/analytics-constants";
 
 interface AnalyticsTabProps {
   selectedProgram: string;
@@ -40,15 +33,6 @@ interface AnalyticsTabProps {
   setSelectedDateRange?: (range: string) => void;
 }
 
-type MetricKey =
-  | "active_clients"
-  | "active_mentor_matches"
-  | "sessions_this_month"
-  | "hours_delivered"
-  | "outstanding_signatures"
-  | "surveys_overdue"
-  | "invoices_pending";
-
 export default function AnalyticsTab({
   selectedProgram,
   setSelectedProgram,
@@ -58,50 +42,39 @@ export default function AnalyticsTab({
   setSelectedDateRange = () => {},
 }: AnalyticsTabProps) {
   const [activeMetricTab, setActiveMetricTab] = useState("Operational Metrics");
-  const [grid, setGrid] = useState<AnalyticsDataRow[]>([]);
-  const [outcomeKpis, setOutcomeKpis] = useState<OutcomeKPI[]>([]);
   const [participants, setParticipants] = useState<DashboardParticipant[]>([]);
+  const [operational, setOperational] = useState<LiveOperationalMetrics | null>(null);
+  const [outcomes, setOutcomes] = useState<LiveOutcomeMetrics | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const loadGrid = useCallback(async () => {
-    try {
-      const data = await getAnalyticsGrid(selectedDateRange);
-      setGrid(data);
-    } catch (err) {
-      console.error("Failed to load analytics grid:", err);
-    }
-  }, [selectedDateRange]);
 
   const loadAll = useCallback(async () => {
     try {
-      const [gridData, kpiData, participantsData] = await Promise.all([
-        getAnalyticsGrid(selectedDateRange),
-        getOutcomeKPIs(),
+      const [participantsData, operationalData, outcomeData] = await Promise.all([
         getParticipants(),
+        getLiveOperationalMetrics(selectedProgram, selectedDateRange),
+        getLiveOutcomeMetrics(selectedProgram),
       ]);
-      setGrid(gridData);
-      setOutcomeKpis(kpiData);
       setParticipants(participantsData);
+      setOperational(operationalData);
+      setOutcomes(outcomeData);
     } catch (err) {
       console.error("Failed to load analytics data:", err);
     } finally {
       setLoading(false);
     }
-  }, [selectedDateRange]);
+  }, [selectedProgram, selectedDateRange]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToAnalyticsGrid(loadGrid);
+    const unsubscribe = subscribeToLiveDashboardData(loadAll);
     return unsubscribe;
-  }, [loadGrid]);
+  }, [loadAll]);
 
-  const kpi = (key: string) => outcomeKpis.find((k) => k.key === key);
-
-  // Participants table can only filter by program — the real
-  // `participants` table has no county column yet.
+  // Participants table can only filter by program - the real
+  // `participants` table has no county column.
   const filteredParticipants = participants.filter((p) => {
     if (
       selectedProgram !== "All Programs" &&
@@ -112,35 +85,7 @@ export default function AnalyticsTab({
     return true;
   });
 
-  // Aggregate the grid the same way the original CMS version did —
-  // sum matching rows for whichever program/county filters are active.
-  const getMetricValue = (metric: MetricKey): number => {
-    const rows = grid.filter((row) => {
-      const programMatch =
-        selectedProgram === "All Programs" || row.program === selectedProgram;
-      const countyMatch =
-        selectedCounty === "All Counties" || row.county === selectedCounty;
-      return programMatch && countyMatch;
-    });
-    return rows.reduce((sum, row) => sum + (row[metric] ?? 0), 0);
-  };
-
-  const isAggregatedView =
-    selectedProgram === "All Programs" && selectedCounty === "All Counties";
-  const isProgramOnlyView =
-    selectedProgram !== "All Programs" && selectedCounty === "All Counties";
-  const isCountyOnlyView =
-    selectedProgram === "All Programs" && selectedCounty !== "All Counties";
-
-  const activeClients = getMetricValue("active_clients");
-  const activeMentorMatches = getMetricValue("active_mentor_matches");
-  const sessionsThisMonth = getMetricValue("sessions_this_month");
-  const hoursDelivered = getMetricValue("hours_delivered");
-  const outstandingSignatures = getMetricValue("outstanding_signatures");
-  const surveysOverdue = getMetricValue("surveys_overdue");
-  const invoicesPending = getMetricValue("invoices_pending");
-
-  if (loading) {
+  if (loading || !operational || !outcomes) {
     return <div className="p-6 text-sm text-gray-400">Loading analytics…</div>;
   }
 
@@ -165,37 +110,12 @@ export default function AnalyticsTab({
         />
       </div>
 
-      {isAggregatedView && (
-        <div className="mb-4 p-3 bg-green-50 rounded-lg text-sm text-green-700">
-          📊 Showing AGGREGATED data across all programs and counties for{" "}
-          {selectedDateRange}
-        </div>
-      )}
-
-      {isProgramOnlyView && (
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-          📊 Showing totals for "{selectedProgram}" across all counties for{" "}
-          {selectedDateRange}
-        </div>
-      )}
-
-      {isCountyOnlyView && (
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-          📊 Showing totals for {selectedCounty} county across all programs for{" "}
-          {selectedDateRange}
-        </div>
-      )}
-
-      {!isAggregatedView &&
-        !isProgramOnlyView &&
-        !isCountyOnlyView &&
-        selectedProgram !== "All Programs" &&
-        selectedCounty !== "All Counties" && (
-          <div className="mb-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-            Showing data for: {selectedProgram} in {selectedCounty} (
-            {selectedDateRange})
-          </div>
-        )}
+      <div className="mb-4 p-3 bg-green-50 rounded-lg text-sm text-green-700">
+        📊{" "}
+        {selectedProgram === "All Programs"
+          ? `Showing live totals across all programs for ${selectedDateRange}`
+          : `Showing live totals for "${selectedProgram}" for ${selectedDateRange}`}
+      </div>
 
       <div className="text-right mb-2">
         <button
@@ -225,61 +145,38 @@ export default function AnalyticsTab({
 
       {activeMetricTab === "Operational Metrics" && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <KPICard
               title="Active Clients"
-              value={activeClients}
+              value={operational.active_clients}
               icon={Users}
-              trend={{ value: 12, isPositive: true }}
-              subtitle="across all programs"
+              subtitle={
+                selectedProgram === "All Programs"
+                  ? "across all programs"
+                  : selectedProgram
+              }
             />
             <KPICard
               title="Active Mentor Matches"
-              value={activeMentorMatches}
+              value={operational.active_mentor_matches}
               icon={Heart}
-              trend={{ value: 8, isPositive: true }}
               subtitle="currently paired"
             />
             <KPICard
               title="Sessions This Month"
-              value={sessionsThisMonth}
+              value={operational.sessions_this_month}
               icon={CalendarDays}
-              trend={{ value: 15, isPositive: true }}
               subtitle="mentoring sessions"
             />
             <KPICard
               title="Hours Delivered"
-              value={hoursDelivered}
+              value={operational.hours_delivered}
               icon={Clock}
-              subtitle="this month"
+              subtitle={selectedDateRange}
             />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <KPICard
-              title="Outstanding Signatures"
-              value={outstandingSignatures}
-              icon={FileSignature}
-              subtitle="awaiting completion"
-              variant="warning"
-            />
-            <KPICard
-              title="Surveys Overdue"
-              value={surveysOverdue}
-              icon={ClipboardList}
-              subtitle="need follow-up"
-              variant="warning"
-            />
-            <KPICard
-              title="Invoices Pending"
-              value={invoicesPending}
-              icon={Receipt}
-              subtitle="awaiting approval"
-              variant="warning"
-            />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <ClientsByProgramChart />
-            <ClientsByCountyChart />
             <SessionsChart />
           </div>
           <ParticipantsTable
@@ -300,83 +197,59 @@ export default function AnalyticsTab({
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <KPICard
               title="Businesses Served"
-              value={kpi("businessesServed")?.value ?? 0}
-              icon={BarChart3}
-              trend={{
-                value: kpi("businessesServed")?.change ?? 0,
-                isPositive: true,
-              }}
-              subtitle="total this year"
+              value={outcomes.businesses_served}
+              icon={Users}
+              subtitle="have tracking data entered"
             />
             <KPICard
-              title="Referrals Completed"
-              value={kpi("referralsCompleted")?.value ?? 0}
-              icon={UserCheck}
-              trend={{
-                value: kpi("referralsCompleted")?.change ?? 0,
-                isPositive: true,
-              }}
-              subtitle="successful referrals"
-            />
-            <KPICard
-              title="Capital Access"
-              value={kpi("capitalAccessOutcomes")?.value ?? 0}
+              title="Capital Accessed"
+              value={`$${outcomes.capital_accessed.toLocaleString()}`}
               icon={TrendingUp}
-              trend={{
-                value: kpi("capitalAccessOutcomes")?.change ?? 0,
-                isPositive: true,
-              }}
               subtitle="funding outcomes"
             />
             <KPICard
               title="Business Launches"
-              value={kpi("businessLaunchMilestones")?.value ?? 0}
+              value={outcomes.businesses_launched}
               icon={Award}
-              trend={{
-                value: kpi("businessLaunchMilestones")?.change ?? 0,
-                isPositive: true,
-              }}
               subtitle="new businesses"
+            />
+            <KPICard
+              title="Alumni Conversion"
+              value={
+                outcomes.alumni_conversion_pct !== null
+                  ? `${outcomes.alumni_conversion_pct}%`
+                  : "—"
+              }
+              icon={Users}
+              subtitle={
+                outcomes.alumni_conversion_pct !== null ? "became alumni" : "no participants yet"
+              }
+              variant="success"
             />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <KPICard
               title="Participant Satisfaction"
-              value={`${kpi("participantSatisfaction")?.value ?? 0}%`}
+              value={
+                outcomes.participant_satisfaction_pct !== null
+                  ? `${outcomes.participant_satisfaction_pct}%`
+                  : "—"
+              }
               icon={Award}
-              trend={{
-                value: kpi("participantSatisfaction")?.change ?? 0,
-                isPositive: true,
-              }}
-              subtitle="avg. rating"
-              variant="success"
-            />
-            <KPICard
-              title="Mentor Retention"
-              value={`${kpi("mentorRetention")?.value ?? 0}%`}
-              icon={Heart}
-              trend={{
-                value: kpi("mentorRetention")?.change ?? 0,
-                isPositive: true,
-              }}
-              subtitle="retained mentors"
-              variant="success"
-            />
-            <KPICard
-              title="Catalyst Completion"
-              value={`${kpi("catalystCompletion")?.value ?? 0}%`}
-              icon={TrendingUp}
-              subtitle="program completion"
-              variant="success"
-            />
-            <KPICard
-              title="Alumni Conversion"
-              value={`${kpi("alumniConversion")?.value ?? 0}%`}
-              icon={Users}
-              subtitle="became alumni"
+              subtitle={
+                outcomes.participant_satisfaction_pct !== null
+                  ? "avg. rating, all programs"
+                  : "no ratings yet"
+              }
               variant="success"
             />
           </div>
+          <p className="text-xs text-gray-400 mb-4">
+            Businesses Served, Capital Accessed, and Business Launches come from
+            Program Management → Tracking. Enter numbers there to see them
+            reflected here. Referrals Completed, Mentor Retention, and Catalyst
+            Completion were removed - there's no real data source for those yet.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <SessionsChart />
             <ClientsByProgramChart />

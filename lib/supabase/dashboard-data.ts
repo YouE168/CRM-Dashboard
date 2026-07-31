@@ -137,6 +137,286 @@ export function subscribeToDashboardChanges(onChange: () => void) {
   };
 }
 
+// ---------------------------------------------------------------------
+// LIVE computed replacements for the snapshot tables above.
+// overview_stats / outcome_kpis / analytics_data / clients_by_program /
+// clients_by_county / sessions_per_month / resource_stats /
+// resources_by_program are all static numbers someone enters by hand in
+// the CMS editor (app/admin/cms-editor) - they don't reflect what's
+// actually in participants/mentors/mentee_sessions/program_tracking, which
+// is why Overview could say "124 participants" while the real Participants
+// tab said "1". Everything below counts the real rows directly instead, so
+// Overview/Analytics/Resources always match what Participants/Mentors show.
+// The CMS editor page still exists but no longer affects these tabs.
+// ---------------------------------------------------------------------
+
+export async function getAllMenteeSessions(): Promise<MenteeSessionRow[]> {
+  const { data, error } = await supabase
+    .from("mentee_sessions")
+    .select("*")
+    .order("date", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function getAllProgramTracking(): Promise<ProgramTrackingRow[]> {
+  const { data, error } = await supabase.from("program_tracking").select("*");
+  if (error) throw error;
+  return data;
+}
+
+export interface LiveOverviewStats {
+  total_participants: number;
+  total_participants_growth_pct: number | null;
+  active_mentors: number;
+  sessions_this_month: number;
+  avg_satisfaction_pct: number | null;
+}
+
+export async function getLiveOverviewStats(): Promise<LiveOverviewStats> {
+  const [participants, mentors, sessions, ratingsRes] = await Promise.all([
+    getParticipants(),
+    getMentors(),
+    getAllMenteeSessions(),
+    supabase.from("mentor_ratings").select("rating"),
+  ]);
+  if (ratingsRes.error) throw ratingsRes.error;
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+
+  const sessionsThisMonth = sessions.filter((s) => new Date(s.date) >= monthStart).length;
+
+  const newThisQuarter = participants.filter(
+    (p) => p.joined_at && new Date(p.joined_at) >= quarterStart,
+  ).length;
+  const beforeThisQuarter = participants.length - newThisQuarter;
+  const growthPct =
+    beforeThisQuarter > 0 ? Math.round((newThisQuarter / beforeThisQuarter) * 100) : null;
+
+  const ratingRows = ratingsRes.data || [];
+  const avgSatisfaction =
+    ratingRows.length > 0
+      ? Math.round(
+          (ratingRows.reduce((sum, r) => sum + r.rating, 0) / ratingRows.length / 5) * 100,
+        )
+      : null;
+
+  return {
+    total_participants: participants.length,
+    total_participants_growth_pct: growthPct,
+    active_mentors: mentors.filter((m) => m.status === "active").length,
+    sessions_this_month: sessionsThisMonth,
+    avg_satisfaction_pct: avgSatisfaction,
+  };
+}
+
+export async function getLiveClientsByProgram(
+  participants?: DashboardParticipant[],
+): Promise<ChartRow[]> {
+  const rows = participants || (await getParticipants());
+  const counts: Record<string, number> = {};
+  for (const p of rows) {
+    const label = p.program_name || "Unassigned";
+    counts[label] = (counts[label] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+export async function getLiveSessionsPerMonth(
+  sessions?: MenteeSessionRow[],
+): Promise<SessionMonthRow[]> {
+  const rows = sessions || (await getAllMenteeSessions());
+  const now = new Date();
+  const months: { key: string; label: string }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      key: `${d.getFullYear()}-${d.getMonth()}`,
+      label: d.toLocaleString("en-US", { month: "short" }),
+    });
+  }
+  const counts: Record<string, number> = {};
+  for (const s of rows) {
+    const d = new Date(s.date);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return months.map((m) => ({ month: m.label, sessions: counts[m.key] || 0 }));
+}
+
+function dateRangeStart(label: string): Date | null {
+  const now = new Date();
+  switch (label) {
+    case "Last 30 days":
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    case "Last 3 months":
+      return new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+    case "Last 6 months":
+      return new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+    case "Last 12 months":
+      return new Date(now.getFullYear(), now.getMonth() - 12, now.getDate());
+    default:
+      return null; // "All time"
+  }
+}
+
+export interface LiveOperationalMetrics {
+  active_clients: number;
+  active_mentor_matches: number;
+  sessions_this_month: number;
+  hours_delivered: number;
+}
+
+export async function getLiveOperationalMetrics(
+  programName: string,
+  dateRangeLabel: string,
+): Promise<LiveOperationalMetrics> {
+  const [participants, sessions] = await Promise.all([
+    getParticipants(),
+    getAllMenteeSessions(),
+  ]);
+  const filteredParticipants = participants.filter(
+    (p) => programName === "All Programs" || p.program_name === programName,
+  );
+  const participantIds = new Set(filteredParticipants.map((p) => p.id));
+  const rangeStart = dateRangeStart(dateRangeLabel);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const inRangeSessions = sessions.filter((s) => {
+    const d = new Date(s.date);
+    if (rangeStart && d < rangeStart) return false;
+    if (programName !== "All Programs" && s.participant_id && !participantIds.has(s.participant_id)) {
+      return false;
+    }
+    return true;
+  });
+
+  const sessionsThisMonth = inRangeSessions.filter((s) => new Date(s.date) >= monthStart).length;
+  const hoursDelivered = Math.round(
+    inRangeSessions.reduce((sum, s) => sum + (s.duration || 0), 0) / 60,
+  );
+
+  return {
+    active_clients: filteredParticipants.length,
+    active_mentor_matches: filteredParticipants.filter((p) => !!p.mentor).length,
+    sessions_this_month: sessionsThisMonth,
+    hours_delivered: hoursDelivered,
+  };
+}
+
+export interface LiveOutcomeMetrics {
+  businesses_served: number;
+  capital_accessed: number;
+  businesses_launched: number;
+  participant_satisfaction_pct: number | null;
+  alumni_conversion_pct: number | null;
+}
+
+export async function getLiveOutcomeMetrics(programName: string): Promise<LiveOutcomeMetrics> {
+  const [programs, tracking, participants, ratingsRes] = await Promise.all([
+    getAllPrograms(),
+    getAllProgramTracking(),
+    getParticipants(),
+    supabase.from("mentor_ratings").select("rating"),
+  ]);
+  if (ratingsRes.error) throw ratingsRes.error;
+
+  const programId =
+    programName === "All Programs" ? null : programs.find((p) => p.name === programName)?.id;
+  const filteredTracking =
+    programName === "All Programs" ? tracking : tracking.filter((t) => t.program_id === programId);
+  const filteredParticipants = participants.filter(
+    (p) => programName === "All Programs" || p.program_name === programName,
+  );
+
+  const ratingRows = ratingsRes.data || [];
+  const satisfactionPct =
+    ratingRows.length > 0
+      ? Math.round(
+          (ratingRows.reduce((sum, r) => sum + r.rating, 0) / ratingRows.length / 5) * 100,
+        )
+      : null;
+
+  const alumni = filteredParticipants.filter((p) => p.status === "alumni").length;
+  const alumniPct =
+    filteredParticipants.length > 0
+      ? Math.round((alumni / filteredParticipants.length) * 100)
+      : null;
+
+  return {
+    businesses_served: new Set(filteredTracking.map((t) => t.participant_id)).size,
+    capital_accessed: filteredTracking.reduce((sum, t) => sum + (t.capital_accessed || 0), 0),
+    businesses_launched: filteredTracking.reduce((sum, t) => sum + (t.businesses_launched || 0), 0),
+    participant_satisfaction_pct: satisfactionPct,
+    alumni_conversion_pct: alumniPct,
+  };
+}
+
+export interface LiveResourceByProgramRow {
+  id: string;
+  name: string;
+  budget: number;
+  hours: number;
+  participants: number;
+  status: string;
+}
+
+export async function getLiveResourcesByProgram(): Promise<LiveResourceByProgramRow[]> {
+  const [programs, tracking, participants] = await Promise.all([
+    getAllPrograms(),
+    getAllProgramTracking(),
+    getParticipants(),
+  ]);
+  return programs.map((program) => {
+    const rows = tracking.filter((t) => t.program_id === program.id);
+    const participantCount = participants.filter((p) => p.program_name === program.name).length;
+    return {
+      id: program.id,
+      name: program.name,
+      budget: rows.reduce((sum, r) => sum + (r.budget || 0), 0),
+      hours: rows.reduce((sum, r) => sum + (r.staff_hours || 0), 0),
+      participants: participantCount,
+      status: program.status,
+    };
+  });
+}
+
+export interface LiveResourceTotals {
+  total_budget: number;
+  grants_received: number;
+  total_hours: number;
+}
+
+export async function getLiveResourceTotals(): Promise<LiveResourceTotals> {
+  const tracking = await getAllProgramTracking();
+  return {
+    total_budget: tracking.reduce((sum, t) => sum + (t.budget || 0), 0),
+    grants_received: tracking.reduce((sum, t) => sum + (t.grants_received || 0), 0),
+    total_hours: tracking.reduce((sum, t) => sum + (t.staff_hours || 0), 0),
+  };
+}
+
+export function subscribeToLiveDashboardData(onChange: () => void) {
+  const channelName = `live-dashboard-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on("postgres_changes", { event: "*", schema: "public", table: "participants" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "mentors" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "mentee_sessions" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "mentor_ratings" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "program_tracking" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "programs" }, onChange)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export interface EmailLogRow {
   id: string;
   to_email: string;

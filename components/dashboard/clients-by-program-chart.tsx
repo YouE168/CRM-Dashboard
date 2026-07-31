@@ -11,8 +11,8 @@ import {
 } from "recharts";
 import { useState, useEffect, useCallback } from "react";
 import {
-  getClientsByProgramChart,
-  subscribeToDashboardChanges,
+  getLiveClientsByProgram,
+  subscribeToLiveDashboardData,
   type ChartRow,
 } from "@/lib/supabase/dashboard-data";
 
@@ -24,7 +24,7 @@ export function ClientsByProgramChart() {
 
   const loadData = useCallback(async () => {
     try {
-      const rows = await getClientsByProgramChart();
+      const rows = await getLiveClientsByProgram();
       setData(rows);
     } catch (err) {
       console.error("Failed to load clients-by-program chart:", err);
@@ -35,7 +35,7 @@ export function ClientsByProgramChart() {
 
   useEffect(() => {
     loadData();
-    const unsubscribe = subscribeToDashboardChanges(loadData);
+    const unsubscribe = subscribeToLiveDashboardData(loadData);
     return unsubscribe;
   }, [loadData]);
 
@@ -47,6 +47,10 @@ export function ClientsByProgramChart() {
       {loading ? (
         <div className="h-[180px] flex items-center justify-center text-xs text-gray-400">
           Loading…
+        </div>
+      ) : data.length === 0 ? (
+        <div className="h-[180px] flex items-center justify-center text-xs text-gray-400">
+          No participants yet
         </div>
       ) : (
         <>

@@ -10,8 +10,8 @@ import {
 } from "recharts";
 import { useState, useEffect, useCallback } from "react";
 import {
-  getSessionsPerMonth,
-  subscribeToDashboardChanges,
+  getLiveSessionsPerMonth,
+  subscribeToLiveDashboardData,
   type SessionMonthRow,
 } from "@/lib/supabase/dashboard-data";
 
@@ -21,7 +21,7 @@ export function SessionsChart() {
 
   const loadData = useCallback(async () => {
     try {
-      const rows = await getSessionsPerMonth();
+      const rows = await getLiveSessionsPerMonth();
       setData(rows);
     } catch (err) {
       console.error("Failed to load sessions chart:", err);
@@ -32,7 +32,7 @@ export function SessionsChart() {
 
   useEffect(() => {
     loadData();
-    const unsubscribe = subscribeToDashboardChanges(loadData);
+    const unsubscribe = subscribeToLiveDashboardData(loadData);
     return unsubscribe;
   }, [loadData]);
 
