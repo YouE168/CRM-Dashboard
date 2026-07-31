@@ -13,7 +13,7 @@ import {
   setProgramAccessByName,
   type PartnerOverviewRow,
 } from "@/lib/supabase/dashboard-data";
-import { Handshake, Briefcase, GraduationCap, Trash2, Plus, ExternalLink } from "lucide-react";
+import { Handshake, Briefcase, GraduationCap, Trash2, Plus, ExternalLink, Check } from "lucide-react";
 
 export function PartnersTab() {
   const [partners, setPartners] = useState<PartnerOverviewRow[]>([]);
@@ -169,16 +169,22 @@ export function PartnersTab() {
                           key={p.user_program_id}
                           onClick={() => toggleProgramAccess(p.name, p.approved)}
                           disabled={togglingProgram === p.name}
-                          className={`text-[11px] px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 ${
+                          className={`text-[11px] px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 inline-flex items-center gap-1 ${
                             p.approved
-                              ? "bg-orange-100 text-orange-700 hover:bg-red-100 hover:text-red-700"
-                              : "bg-yellow-100 text-yellow-700 hover:bg-orange-100 hover:text-orange-700"
+                              ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700"
+                              : "bg-yellow-100 text-yellow-700 hover:bg-green-100 hover:text-green-700"
                           }`}
                           title={p.approved ? "Click to revoke access" : "Click to approve access"}
                         >
-                          {togglingProgram === p.name
-                            ? "…"
-                            : `${p.name}${!p.approved ? " (pending)" : ""}`}
+                          {togglingProgram === p.name ? (
+                            "…"
+                          ) : (
+                            <>
+                              {p.approved && <Check className="h-3 w-3" />}
+                              {p.name}
+                              {!p.approved && " (pending)"}
+                            </>
+                          )}
                         </button>
                       ))}
                     </div>

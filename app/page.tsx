@@ -2484,13 +2484,14 @@ function PartnerDashboard({
             {myPrograms.map((p) => (
               <span
                 key={p.user_program_id}
-                className={`text-xs px-3 py-1 rounded-full ${
+                className={`text-xs px-3 py-1 rounded-full inline-flex items-center gap-1 ${
                   p.approved
-                    ? "bg-orange-100 text-orange-700"
+                    ? "bg-green-100 text-green-700"
                     : "bg-yellow-100 text-yellow-700"
                 }`}
                 title={p.approved ? "Approved" : "Pending approval"}
               >
+                {p.approved && <Check className="h-3 w-3" />}
                 {p.name}
                 {!p.approved && " (pending)"}
               </span>
