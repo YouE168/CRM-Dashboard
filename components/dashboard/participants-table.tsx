@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Search } from "lucide-react";
-import { loadCMSData } from "@/lib/cms-data";
 
 interface Participant {
   id: string;
   name: string;
   program: string;
-  county: string;
   stage: string;
   mentor: string;
   enrolledDate?: string;
@@ -42,27 +40,9 @@ function initials(name: string) {
 export function ParticipantsTable({
   participants: propParticipants,
 }: ParticipantsTableProps) {
-  const [cmsData, setCmsData] = useState(loadCMSData());
   const [q, setQ] = useState("");
 
-  useEffect(() => {
-    setCmsData(loadCMSData());
-    const handleStorageChange = () => {
-      setCmsData(loadCMSData());
-    };
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("cmsDataUpdated", handleStorageChange);
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("cmsDataUpdated", handleStorageChange);
-    };
-  }, []);
-
-  // Use participants from CMS if available, otherwise use propParticipants
-  const participants =
-    cmsData.participantsList?.length > 0
-      ? cmsData.participantsList
-      : propParticipants || [];
+  const participants = propParticipants || [];
 
   const filtered = participants.filter((p) =>
     p.name.toLowerCase().includes(q.toLowerCase()),
@@ -88,7 +68,7 @@ export function ParticipantsTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              {["Name", "Program", "County", "Stage", "Assigned Mentor"].map(
+              {["Name", "Program", "Stage", "Assigned Mentor"].map(
                 (h) => (
                   <th
                     key={h}
@@ -104,7 +84,7 @@ export function ParticipantsTable({
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={4}
                   className="px-5 py-10 text-center text-sm text-gray-400"
                 >
                   No participants found.
@@ -128,7 +108,6 @@ export function ParticipantsTable({
                   <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
                     {p.program}
                   </td>
-                  <td className="px-5 py-3 text-gray-500">{p.county}</td>
                   <td className="px-5 py-3">
                     <span
                       className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${stageBadge[p.stage] ?? "bg-gray-100 text-gray-600"}`}

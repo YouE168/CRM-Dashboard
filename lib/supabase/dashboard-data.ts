@@ -489,8 +489,7 @@ export interface MentorsStats {
   total: number;
   active: number;
   active_matches: number;
-  matches_trend: number;
-  avg_rating: number;
+  avg_rating: number | null;
 }
 
 export interface MenteeRow {
@@ -512,14 +511,41 @@ export async function getMentors(): Promise<MentorRow[]> {
   return data;
 }
 
-export async function getMentorsStats(): Promise<MentorsStats | null> {
-  const { data, error } = await supabase
-    .from("mentors_stats")
-    .select("*")
-    .eq("id", 1)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+// LIVE - computed from the real mentors + participants tables instead
+// of the old static mentors_stats snapshot row (which held made-up
+// numbers like "89 active matches" that had no connection to anything
+// real). active_matches counts participants with a mentor assigned;
+// avg_rating only averages mentors who have actually been rated (a
+// freshly self-registered mentor starts at rating 0, which would drag
+// a naive average down for no real reason).
+export async function getMentorsStats(): Promise<MentorsStats> {
+  const [mentorsRes, participantsRes] = await Promise.all([
+    supabase.from("mentors").select("status, rating"),
+    supabase.from("participants").select("mentor"),
+  ]);
+  if (mentorsRes.error) throw mentorsRes.error;
+  if (participantsRes.error) throw participantsRes.error;
+
+  const mentors = mentorsRes.data ?? [];
+  const participants = participantsRes.data ?? [];
+
+  const total = mentors.length;
+  const active = mentors.filter(
+    (m) => (m.status ?? "").toLowerCase() === "active",
+  ).length;
+  const active_matches = participants.filter(
+    (p) => p.mentor && p.mentor.trim() !== "",
+  ).length;
+
+  const rated = mentors.filter((m) => (m.rating ?? 0) > 0);
+  const avg_rating =
+    rated.length > 0
+      ? Math.round(
+          (rated.reduce((sum, m) => sum + (m.rating ?? 0), 0) / rated.length) * 10,
+        ) / 10
+      : null;
+
+  return { total, active, active_matches, avg_rating };
 }
 
 // "My Mentees" = participants assigned to this mentor by name
@@ -571,34 +597,23 @@ export function subscribeToMentorsChanges(onChange: () => void) {
   };
 }
 
-export interface LeadershipStats {
-  total_members: number;
-  members_trend: number;
-  new_signups: number;
-  signups_trend: number;
-  avg_attendance: number;
-  attendance_trend: number;
-  member_satisfaction: number;
-  satisfaction_trend: number;
-  grant_funding: number;
-  mentor_hours: number;
-  staff_members: number;
-  in_kind_support: number;
-  budget_utilization: number;
-  personnel_cost: number;
-  programming_cost: number;
-  operations_cost: number;
-  marketing_cost: number;
-  next_meeting: {
-    date?: string;
-    day?: number;
-    month?: string;
-    time?: string;
-    title?: string;
-    description?: string;
-    attendees?: number;
-    zoomPlaceholder?: string;
-  };
+// Everything this table used to hold (Total Members, Avg Attendance,
+// Member Satisfaction, Resources Invested/budget breakdown, etc.) was a
+// static, hand-entered snapshot with no real data source behind it - no
+// roundtable-membership or attendance table exists anywhere in the
+// schema to compute those from. Only next_meeting is kept: a single,
+// admin-editable "what's the next meeting" announcement, which is
+// legitimate manually-set content rather than a fabricated metric.
+// Update it directly in Supabase (leadership_stats, id = 1) until an
+// in-app editor exists for it.
+export interface NextMeetingInfo {
+  date?: string;
+  day?: number;
+  month?: string;
+  time?: string;
+  title?: string;
+  description?: string;
+  zoomPlaceholder?: string;
 }
 
 export interface ActionItemRow {
@@ -609,14 +624,14 @@ export interface ActionItemRow {
   status: string;
 }
 
-export async function getLeadershipStats(): Promise<LeadershipStats | null> {
+export async function getNextMeeting(): Promise<NextMeetingInfo | null> {
   const { data, error } = await supabase
     .from("leadership_stats")
-    .select("*")
+    .select("next_meeting")
     .eq("id", 1)
     .maybeSingle();
   if (error) throw error;
-  return data as unknown as LeadershipStats | null;
+  return (data?.next_meeting as NextMeetingInfo | undefined) ?? null;
 }
 
 export async function getActionItems(): Promise<ActionItemRow[]> {
@@ -661,10 +676,69 @@ export function subscribeToLeadershipChanges(onChange: () => void) {
     .channel(channelName)
     .on("postgres_changes", { event: "*", schema: "public", table: "leadership_stats" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "leadership_action_items" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "leadership_roundtable_applications" }, onChange)
     .subscribe();
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+// Real backing for the "Apply to Join" form on the Leadership Roundtable
+// tab. Previously that form only set local React state to true on submit
+// and never saved anything anywhere - this is the actual persistence
+// layer for it. Total Members / Pending Applications on the Leadership
+// tab are now derived from this table (status = 'approved' / 'pending')
+// instead of a disconnected static snapshot.
+export interface RoundtableApplicationRow {
+  id: string;
+  name: string;
+  email: string;
+  organization: string | null;
+  county: string | null;
+  role: string | null;
+  reason: string | null;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+}
+
+export async function submitRoundtableApplication(input: {
+  name: string;
+  email: string;
+  organization: string;
+  county: string;
+  role: string;
+  reason: string;
+}): Promise<void> {
+  const { error } = await supabase.from("leadership_roundtable_applications").insert({
+    name: input.name,
+    email: input.email,
+    organization: input.organization || null,
+    county: input.county || null,
+    role: input.role || null,
+    reason: input.reason || null,
+    status: "pending",
+  });
+  if (error) throw error;
+}
+
+export async function getRoundtableApplications(): Promise<RoundtableApplicationRow[]> {
+  const { data, error } = await supabase
+    .from("leadership_roundtable_applications")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data as RoundtableApplicationRow[];
+}
+
+export async function updateRoundtableApplicationStatus(
+  id: string,
+  status: "approved" | "rejected" | "pending",
+): Promise<void> {
+  const { error } = await supabase
+    .from("leadership_roundtable_applications")
+    .update({ status })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 export interface ResourceStats {

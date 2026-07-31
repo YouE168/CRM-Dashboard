@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { COUNTY_LIST } from "@/lib/constants";
+import { submitRoundtableApplication } from "@/lib/supabase/dashboard-data";
 
 export function RoundtableSignupForm({
   profileName,
@@ -22,6 +23,8 @@ export function RoundtableSignupForm({
     reason: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   if (submitted) {
     return (
@@ -119,17 +122,35 @@ export function RoundtableSignupForm({
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
         />
       </div>
+      {error && <p className="text-xs text-red-500 text-center">{error}</p>}
       <button
         type="button"
-        onClick={() => {
-          if (form.name && form.email && form.county) {
+        disabled={submitting}
+        onClick={async () => {
+          if (!(form.name && form.email && form.county)) return;
+          setSubmitting(true);
+          setError("");
+          try {
+            await submitRoundtableApplication({
+              name: form.name,
+              email: form.email,
+              organization: form.org,
+              county: form.county,
+              role: form.role,
+              reason: form.reason,
+            });
             setSubmitted(true);
             onSuccess?.();
+          } catch (err) {
+            console.error("Failed to submit roundtable application:", err);
+            setError("Something went wrong submitting your application. Please try again.");
+          } finally {
+            setSubmitting(false);
           }
         }}
-        className="w-full py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+        className="w-full py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
       >
-        Submit Application
+        {submitting ? "Submitting..." : "Submit Application"}
       </button>
       {(!form.name || !form.email || !form.county) && (
         <p className="text-xs text-gray-400 text-center">

@@ -906,6 +906,42 @@ export type Database = {
         };
         Relationships: [];
       };
+      leadership_roundtable_applications: {
+        Row: {
+          id: string;
+          name: string;
+          email: string;
+          organization: string | null;
+          county: string | null;
+          role: string | null;
+          reason: string | null;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          email: string;
+          organization?: string | null;
+          county?: string | null;
+          role?: string | null;
+          reason?: string | null;
+          status?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          email?: string;
+          organization?: string | null;
+          county?: string | null;
+          role?: string | null;
+          reason?: string | null;
+          status?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       resource_stats: {
         Row: {
           id: number;

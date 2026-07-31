@@ -4,23 +4,23 @@ import { useState, useEffect, useCallback } from "react";
 import { KPICard } from "./kpi-card";
 import { AddActionModal } from "@/components/ui/add-action-modal";
 import {
-  getLeadershipStats,
+  getNextMeeting,
   getActionItems,
   addActionItemRow,
   updateActionItemStatus,
   deleteActionItemRow,
+  getRoundtableApplications,
+  updateRoundtableApplicationStatus,
   subscribeToLeadershipChanges,
-  type LeadershipStats,
+  type NextMeetingInfo,
   type ActionItemRow,
+  type RoundtableApplicationRow,
 } from "@/lib/supabase/dashboard-data";
 import {
   Users,
   CalendarDays,
   ClipboardList,
-  Award,
-  Trophy,
   Trash2,
-  TrendingUp,
   X,
   BookOpen,
   Target,
@@ -29,6 +29,10 @@ import {
   ArrowRight,
   Video,
   Copy,
+  Check,
+  XCircle,
+  Mail,
+  UserCheck,
 } from "lucide-react";
 
 interface LeadershipTabProps {
@@ -45,12 +49,19 @@ interface LeadershipTabProps {
 }
 
 // ============================================================
-// NOTE: Past Meetings, Core Members, Member Spotlight, and the
-// static Resources list below are still hardcoded - deliberate
-// next-phase items, not yet migrated to Supabase. KPI stats,
-// Resources Invested figures, Next Meeting, and Action Items
-// (which are actively edited) are fully real/Supabase-backed
-// as of this pass.
+// NOTE: This tab used to show a bunch of hardcoded/fake content -
+// Total Members, Avg Attendance, Member Satisfaction, and a whole
+// "Resources Invested" section pulled from a static snapshot table
+// with no real data behind it, plus a hardcoded Past Meetings list,
+// Member Spotlight, and Core Members block that were just literal
+// values in the JSX. All of that has been removed. What's left:
+// - Action Items: real, Supabase-backed (leadership_action_items)
+// - Next Meeting: a single real, admin-editable announcement row
+//   (leadership_stats.next_meeting) - not a fabricated metric
+// - Roundtable Applications / Members: real, backed by the new
+//   leadership_roundtable_applications table. "Apply to Join" now
+//   actually saves something (it didn't before - it only flipped a
+//   local boolean). Total Members below = applications approved here.
 // ============================================================
 
 // Learn More Modal Component
@@ -132,7 +143,7 @@ function LearnMoreModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <Award className="h-5 w-5 text-emerald-600" />
+              <BookOpen className="h-5 w-5 text-emerald-600" />
               What to Expect
             </h3>
             <div className="space-y-2">
@@ -208,20 +219,24 @@ export function LeadershipTab({
   onCloseSignup,
   showToast,
 }: LeadershipTabProps) {
-  const [stats, setStats] = useState<LeadershipStats | null>(null);
+  const [nextMeeting, setNextMeeting] = useState<NextMeetingInfo | null>(null);
   const [actionItems, setActionItems] = useState<ActionItemRow[]>([]);
+  const [applications, setApplications] = useState<RoundtableApplicationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [showLearnMore, setShowLearnMore] = useState(false);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
-      const [statsData, itemsData] = await Promise.all([
-        getLeadershipStats(),
+      const [meetingData, itemsData, applicationsData] = await Promise.all([
+        getNextMeeting(),
         getActionItems(),
+        getRoundtableApplications(),
       ]);
-      setStats(statsData);
+      setNextMeeting(meetingData);
       setActionItems(itemsData);
+      setApplications(applicationsData);
     } catch (err) {
       console.error("Failed to load leadership data:", err);
     } finally {
@@ -272,60 +287,29 @@ export function LeadershipTab({
     }
   };
 
-  // ---- Still hardcoded (next-phase) ----
-  const pastMeetings = [
-    {
-      date: "Apr 17, 2026",
-      title: "Q1 Impact Review & Planning",
-      attendees: 18,
-      notes: true,
-    },
-    {
-      date: "Mar 20, 2026",
-      title: "Mentor Program Expansion",
-      attendees: 15,
-      notes: true,
-    },
-    {
-      date: "Feb 19, 2026",
-      title: "Funding & Sustainability",
-      attendees: 22,
-      notes: false,
-    },
-  ];
+  const reviewApplication = async (
+    application: RoundtableApplicationRow,
+    status: "approved" | "rejected",
+  ) => {
+    setReviewingId(application.id);
+    try {
+      await updateRoundtableApplicationStatus(application.id, status);
+      await loadData();
+      showToast(
+        status === "approved"
+          ? `${application.name} added to the roundtable`
+          : `Application from ${application.name} declined`,
+        "success",
+      );
+    } catch (err) {
+      console.error("Failed to update application:", err);
+      showToast("Couldn't update that application. Please try again.", "error");
+    } finally {
+      setReviewingId(null);
+    }
+  };
 
-  const coreMembers = [
-    { name: "Michael Chen", role: "Lead Mentor", active: true },
-    { name: "Lisa Thompson", role: "Youth Director", active: true },
-    { name: "David Park", role: "Entrepreneurship Lead", active: true },
-    { name: "Jennifer Lee", role: "Veterans Affairs", active: false },
-  ];
-
-  const resources = [
-    {
-      name: "Roundtable Charter",
-      icon: "📋",
-      description: "Leadership Roundtable governing document",
-    },
-    {
-      name: "Meeting Minutes Archive",
-      icon: "📝",
-      description: "Past meeting notes and summaries",
-    },
-    {
-      name: "Annual Impact Report",
-      icon: "📊",
-      description: "Yearly performance and outcomes report",
-    },
-    {
-      name: "Strategic Plan 2026",
-      icon: "🎯",
-      description: "Annual goals and strategic initiatives",
-    },
-  ];
-  // ---------------------------------------
-
-  if (loading || !stats) {
+  if (loading) {
     return (
       <div className="p-6 text-sm text-gray-400">
         Loading leadership roundtable…
@@ -333,15 +317,17 @@ export function LeadershipTab({
     );
   }
 
+  const pendingApplications = applications.filter((a) => a.status === "pending");
+  const approvedMembers = applications.filter((a) => a.status === "approved");
+
   const meeting = {
-    date: stats.next_meeting?.date ?? "TBD",
-    day: stats.next_meeting?.day ?? 0,
-    month: stats.next_meeting?.month ?? "",
-    time: stats.next_meeting?.time ?? "",
-    title: stats.next_meeting?.title ?? "Next Meeting",
-    description: stats.next_meeting?.description ?? "",
-    attendees: stats.next_meeting?.attendees ?? 0,
-    zoomPlaceholder: stats.next_meeting?.zoomPlaceholder ?? "",
+    date: nextMeeting?.date ?? "TBD",
+    day: nextMeeting?.day ?? 0,
+    month: nextMeeting?.month ?? "",
+    time: nextMeeting?.time ?? "",
+    title: nextMeeting?.title ?? "No meeting scheduled yet",
+    description: nextMeeting?.description ?? "",
+    zoomPlaceholder: nextMeeting?.zoomPlaceholder ?? "",
   };
 
   return (
@@ -397,28 +383,20 @@ export function LeadershipTab({
         </div>
       </div>
 
-      {/* STATS ROW */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      {/* STATS ROW - real, derived from actual applications/action items */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
         <KPICard
           title="Total Members"
-          value={stats.total_members}
+          value={approvedMembers.length}
           icon={Users}
-          trend={{ value: stats.members_trend, isPositive: true }}
-          subtitle="active members"
+          subtitle="approved applications"
         />
         <KPICard
-          title="New Signups"
-          value={stats.new_signups}
-          icon={Users}
-          trend={{ value: stats.signups_trend, isPositive: true }}
-          subtitle="this month"
-        />
-        <KPICard
-          title="Avg. Attendance"
-          value={`${stats.avg_attendance}%`}
-          icon={CalendarDays}
-          trend={{ value: stats.attendance_trend, isPositive: true }}
-          subtitle="per session"
+          title="Pending Applications"
+          value={pendingApplications.length}
+          icon={ClipboardList}
+          subtitle="awaiting review"
+          variant={pendingApplications.length > 0 ? "warning" : undefined}
         />
         <KPICard
           title="Action Items"
@@ -427,95 +405,7 @@ export function LeadershipTab({
           }
           icon={ClipboardList}
           subtitle="in progress"
-          variant="warning"
         />
-        <KPICard
-          title="Member Satisfaction"
-          value={`${stats.member_satisfaction}%`}
-          icon={Award}
-          trend={{ value: stats.satisfaction_trend, isPositive: true }}
-          subtitle="positive rating"
-        />
-      </div>
-
-      {/* RESOURCES INVESTED */}
-      <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-amber-600" />
-            <h2 className="text-sm font-semibold text-gray-900">
-              Resources Invested
-            </h2>
-          </div>
-        </div>
-        <div className="p-5">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-emerald-600">
-                ${stats.grant_funding.toLocaleString()}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">Grant Funding</div>
-            </div>
-            <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-emerald-600">
-                {stats.mentor_hours}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">Mentor Hours</div>
-            </div>
-            <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-emerald-600">
-                {stats.staff_members}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">Staff Members</div>
-            </div>
-            <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-emerald-600">
-                ${stats.in_kind_support.toLocaleString()}
-              </div>
-              <div className="text-xs text-gray-500 mt-1">In-Kind Support</div>
-            </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <div className="flex items-center justify-between text-sm mb-2">
-              <span className="text-gray-600">Budget Utilization</span>
-              <span className="text-gray-900 font-medium">
-                {stats.budget_utilization}%
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-emerald-600 h-2 rounded-full"
-                style={{ width: `${stats.budget_utilization}%` }}
-              ></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Personnel:</span>
-                <span className="font-medium">
-                  ${stats.personnel_cost.toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Programming:</span>
-                <span className="font-medium">
-                  ${stats.programming_cost.toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Operations:</span>
-                <span className="font-medium">
-                  ${stats.operations_cost.toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Marketing:</span>
-                <span className="font-medium">
-                  ${stats.marketing_cost.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* TWO COLUMN LAYOUT */}
@@ -541,7 +431,7 @@ export function LeadershipTab({
                 <div className="flex items-start gap-4 flex-wrap md:flex-nowrap">
                   <div className="bg-gradient-to-br from-emerald-100 to-teal-100 rounded-xl p-3 text-center min-w-[100px] shadow-sm">
                     <div className="text-2xl font-bold text-emerald-700">
-                      {meeting.day}
+                      {meeting.day || "—"}
                     </div>
                     <div className="text-xs font-medium text-gray-600">
                       {meeting.month}
@@ -552,27 +442,11 @@ export function LeadershipTab({
                     <h3 className="font-semibold text-gray-900 text-lg">
                       {meeting.title}
                     </h3>
-                    <p className="text-sm text-gray-500 mt-1 leading-relaxed">
-                      {meeting.description}
-                    </p>
-                    <div className="flex items-center gap-3 mt-3">
-                      <div className="flex -space-x-2">
-                        {["MC", "LT", "DP", "JL"].map((init, i) => (
-                          <div
-                            key={i}
-                            className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex items-center justify-center ring-2 ring-white shadow-sm"
-                          >
-                            {init}
-                          </div>
-                        ))}
-                        <div className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
-                          +{meeting.attendees}
-                        </div>
-                      </div>
-                      <span className="text-xs text-gray-400">
-                        confirmed attendees
-                      </span>
-                    </div>
+                    {meeting.description && (
+                      <p className="text-sm text-gray-500 mt-1 leading-relaxed">
+                        {meeting.description}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="border-t border-gray-100 pt-4">
@@ -604,7 +478,11 @@ export function LeadershipTab({
                       <input
                         type="text"
                         id="leadershipZoomId"
-                        placeholder={`Zoom Meeting ID (e.g., ${meeting.zoomPlaceholder})`}
+                        placeholder={
+                          meeting.zoomPlaceholder
+                            ? `Zoom Meeting ID (e.g., ${meeting.zoomPlaceholder})`
+                            : "Zoom Meeting ID"
+                        }
                         className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                       <input
@@ -643,21 +521,9 @@ export function LeadershipTab({
                       <Video className="h-4 w-4" />
                       Join Zoom Meeting
                     </button>
-                    <div className="flex items-center justify-between mt-3">
-                      <p className="text-xs text-gray-500">
-                        💡 The meeting ID will be sent via email
-                      </p>
-                      <button
-                        onClick={() => {
-                          const calendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(meeting.title)}&dates=20260515T140000/20260515T153000&details=${encodeURIComponent(meeting.description)}`;
-                          window.open(calendarUrl, "_blank");
-                        }}
-                        className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
-                      >
-                        <CalendarDays className="h-3 w-3" />
-                        Add to Calendar
-                      </button>
-                    </div>
+                    <p className="text-xs text-gray-500 mt-3">
+                      💡 The meeting ID will be sent via email
+                    </p>
                   </div>
                 </div>
               </div>
@@ -672,37 +538,43 @@ export function LeadershipTab({
               </h2>
             </div>
             <div className="divide-y divide-gray-100">
-              {actionItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="px-5 py-3 flex items-center justify-between group hover:bg-gray-50"
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={item.status === "completed"}
-                      onChange={() => toggleActionItemStatus(item)}
-                      className="w-4 h-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
-                    />
-                    <div>
-                      <p
-                        className={`text-sm ${item.status === "completed" ? "text-gray-400 line-through" : "text-gray-700"}`}
-                      >
-                        {item.task}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {item.assignee} · Due {item.due_date}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => deleteActionItem(item.id)}
-                    className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+              {actionItems.length === 0 ? (
+                <div className="px-5 py-8 text-center text-gray-400 text-sm">
+                  No action items yet.
                 </div>
-              ))}
+              ) : (
+                actionItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="px-5 py-3 flex items-center justify-between group hover:bg-gray-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={item.status === "completed"}
+                        onChange={() => toggleActionItemStatus(item)}
+                        className="w-4 h-4 rounded border-gray-300 text-emerald-600 cursor-pointer"
+                      />
+                      <div>
+                        <p
+                          className={`text-sm ${item.status === "completed" ? "text-gray-400 line-through" : "text-gray-700"}`}
+                        >
+                          {item.task}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {item.assignee} · Due {item.due_date}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => deleteActionItem(item.id)}
+                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
             <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
               <button
@@ -713,151 +585,117 @@ export function LeadershipTab({
               </button>
             </div>
           </div>
-
-          {/* PAST MEETINGS (still static - next phase) */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">
-                Past Meetings
-              </h2>
-            </div>
-            <div className="divide-y divide-gray-100">
-              {pastMeetings.map((meeting, idx) => (
-                <div
-                  key={idx}
-                  className="px-5 py-3 flex items-center justify-between hover:bg-gray-50"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 text-center">
-                      <div className="text-sm font-semibold text-gray-900">
-                        {meeting.date.split(",")[0]}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {meeting.date.split(",")[1]?.trim()}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {meeting.title}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {meeting.attendees} attendees
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() =>
-                      showToast(
-                        `📄 ${meeting.title}\n\nMeeting minutes available. Contact coordinator for access.`,
-                        "info",
-                      )
-                    }
-                    className="text-sm text-emerald-600 hover:text-emerald-700"
-                  >
-                    {meeting.notes ? "View Notes" : "Minutes"}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* RIGHT COLUMN (still static - next phase) */}
+        {/* RIGHT COLUMN */}
         <div className="space-y-6">
-          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border border-emerald-100 p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Trophy className="h-4 w-4 text-amber-500" />
-              <span className="text-xs font-semibold text-amber-600">
-                Member Spotlight
-              </span>
+          {/* PENDING APPLICATIONS */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-900">
+                Pending Applications
+              </h2>
+              {pendingApplications.length > 0 && (
+                <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                  {pendingApplications.length}
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-lg font-bold">
-                MC
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">Michael Chen</p>
-                <p className="text-xs text-gray-500">
-                  Business Catalyst Lead Mentor
-                </p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-600 mt-3">
-              "Michael has been instrumental in launching 8 new businesses this
-              quarter through one-on-one mentorship."
-            </p>
-            <div className="mt-3 text-xs text-emerald-600">
-              🏆 Mentor of the Month
+            <div className="divide-y divide-gray-100">
+              {pendingApplications.length === 0 ? (
+                <div className="px-5 py-6 text-center text-gray-400 text-sm">
+                  No pending applications.
+                </div>
+              ) : (
+                pendingApplications.map((app) => (
+                  <div key={app.id} className="px-5 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {app.name}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {[app.organization, app.role, app.county]
+                            .filter(Boolean)
+                            .join(" · ") || app.email}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          disabled={reviewingId === app.id}
+                          onClick={() => reviewApplication(app, "approved")}
+                          className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 disabled:opacity-50"
+                          title="Approve"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          disabled={reviewingId === app.id}
+                          onClick={() => reviewApplication(app, "rejected")}
+                          className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 disabled:opacity-50"
+                          title="Decline"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {app.reason && (
+                      <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">
+                        "{app.reason}"
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
+          {/* ROUNDTABLE MEMBERS */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-            <div className="px-5 py-4 border-b border-gray-100">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+              <UserCheck className="h-4 w-4 text-emerald-600" />
               <h2 className="text-sm font-semibold text-gray-900">
-                Core Members
+                Roundtable Members
               </h2>
             </div>
             <div className="divide-y divide-gray-100">
-              {coreMembers.map((member, idx) => (
-                <div
-                  key={idx}
-                  className="px-5 py-3 flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-bold">
-                      {member.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {member.name}
-                      </p>
-                      <p className="text-xs text-gray-400">{member.role}</p>
-                    </div>
-                  </div>
-                  {member.active && (
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  )}
+              {approvedMembers.length === 0 ? (
+                <div className="px-5 py-6 text-center text-gray-400 text-sm">
+                  No members yet. Approve an application to add one.
                 </div>
-              ))}
-            </div>
-            <div className="px-5 py-3 border-t border-gray-100">
-              <button
-                onClick={() =>
-                  showToast("Full member directory coming soon!", "info")
-                }
-                className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
-              >
-                View All Members →
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">
-              Resources
-            </h2>
-            <div className="space-y-2">
-              {resources.map((res, idx) => (
-                <button
-                  key={idx}
-                  onClick={() =>
-                    showToast(
-                      `📁 ${res.name}\n\n${res.description}\n\nThis resource will be available for download soon.`,
-                      "info",
-                    )
-                  }
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2 transition-colors"
-                >
-                  <span className="text-lg">{res.icon}</span>
-                  <div className="flex-1">
-                    <span className="text-sm text-gray-700">{res.name}</span>
-                    <p className="text-xs text-gray-400">{res.description}</p>
+              ) : (
+                approvedMembers.map((member) => (
+                  <div
+                    key={member.id}
+                    className="px-5 py-3 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-bold shrink-0">
+                        {member.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .slice(0, 2)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {member.name}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {member.organization || member.role || "—"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => (window.location.href = `mailto:${member.email}`)}
+                      className="text-gray-400 hover:text-emerald-600 shrink-0"
+                      title={member.email}
+                    >
+                      <Mail className="h-4 w-4" />
+                    </button>
                   </div>
-                </button>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

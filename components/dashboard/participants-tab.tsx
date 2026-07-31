@@ -86,7 +86,6 @@ export function ParticipantsTab() {
           id: p.id,
           name: p.name ?? "",
           program: p.program_name ?? "",
-          county: "",
           stage: p.status,
           mentor: p.mentor ?? "",
         }))}

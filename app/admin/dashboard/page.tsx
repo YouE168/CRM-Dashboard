@@ -1784,6 +1784,10 @@ function AdminDashboardContent() {
         <RoundtableSignupForm
           profileName={profile.name}
           profileEmail={profile.email}
+          onSuccess={() => {
+            showToast("Application submitted - review it under Pending Applications", "success");
+            setTimeout(() => setPanel(null), 1200);
+          }}
         />
       </SlidePanel>
 

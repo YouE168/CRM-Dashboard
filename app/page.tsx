@@ -2548,22 +2548,6 @@ function PartnerDashboard({
                           </div>
                         </div>
                       )}
-                      <div className="mt-3">
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-gray-500">
-                            Overall Progress
-                          </span>
-                          <span className="text-orange-600 font-medium">
-                            {p.progress}%
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-gray-200 rounded-full">
-                          <div
-                            className="h-2 bg-orange-500 rounded-full transition-all"
-                            style={{ width: `${p.progress}%` }}
-                          />
-                        </div>
-                      </div>
                     </div>
                     <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-orange-500 group-hover:translate-x-1 transition-all flex-shrink-0 ml-4" />
                   </div>
@@ -3353,21 +3337,6 @@ function PartnerDashboard({
                   </p>
                 </div>
               )}
-
-              <div>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="text-gray-600">Overall Progress</span>
-                  <span className="font-medium text-orange-600">
-                    {selectedPartnerProgram.progress}%
-                  </span>
-                </div>
-                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-2 bg-orange-500 rounded-full transition-all"
-                    style={{ width: `${selectedPartnerProgram.progress}%` }}
-                  />
-                </div>
-              </div>
 
               {(selectedPartnerProgram.start_date ||
                 selectedPartnerProgram.end_date) && (

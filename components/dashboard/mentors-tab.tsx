@@ -563,13 +563,13 @@ export function MentorsTab() {
           title="Active Matches"
           value={stats?.active_matches ?? 0}
           icon={Heart}
-          trend={{ value: stats?.matches_trend ?? 0, isPositive: true }}
-          subtitle="paired"
+          subtitle="participants with a mentor"
         />
         <KPICard
           title="Avg. Rating"
-          value={`${stats?.avg_rating ?? 0}★`}
+          value={stats?.avg_rating != null ? `${stats.avg_rating}★` : "—"}
           icon={Award}
+          subtitle={stats?.avg_rating != null ? "from rated mentors" : "no ratings yet"}
           variant="success"
         />
       </div>
@@ -600,11 +600,19 @@ export function MentorsTab() {
                       <span className="font-medium text-gray-900 whitespace-nowrap">{m.name}</span>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-gray-500">{m.specialty}</td>
+                  <td className="px-5 py-3 text-gray-500">{m.specialty || "—"}</td>
                   <td className="px-5 py-3 text-gray-700 font-medium">{m.active_clients}</td>
-                  <td className="px-5 py-3 text-amber-600 font-medium">{m.rating}★</td>
+                  <td className="px-5 py-3 text-amber-600 font-medium">
+                    {m.rating > 0 ? `${m.rating}★` : "—"}
+                  </td>
                   <td className="px-5 py-3">
-                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${m.status === "Active" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                    <span
+                      className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
+                        m.status?.toLowerCase() === "active"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-gray-100 text-gray-500"
+                      }`}
+                    >
                       {m.status}
                     </span>
                   </td>
