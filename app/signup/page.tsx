@@ -338,9 +338,30 @@ export default function SignupPage() {
         }
 
         if (programsData && programsData.length > 0) {
-          // ✅ Create user_programs for each program
+          // Only give this account rows for the programs relevant to
+          // whichever role(s) they picked in the "Program Interests" step
+          // (formData.selectedRoles[].programs) - not literally every
+          // program in the catalog. Matching is a loose substring check
+          // since the short labels shown at signup ("Workforce
+          // Development", "Parker Dewey Internships") don't always exactly
+          // match the full real program names ("Workforce Development &
+          // Navigation", "Parker Dewey Micro-Internship"). Business
+          // Professional Services is universal and always included.
+          const selectedProgramKeywords = formData.selectedRoles.flatMap(
+            (r) => r.programs,
+          );
+          const relevantPrograms = programsData.filter((program: any) => {
+            if (program.name === "Business Professional Services") return true;
+            return selectedProgramKeywords.some(
+              (keyword: string) =>
+                program.name.toLowerCase().includes(keyword.toLowerCase()) ||
+                keyword.toLowerCase().includes(program.name.toLowerCase()),
+            );
+          });
+
+          // ✅ Create user_programs only for the relevant programs
           // Only "Business Professional Services" is approved by default
-          const userPrograms = programsData.map((program: any) => ({
+          const userPrograms = relevantPrograms.map((program: any) => ({
             user_id: userData.id,
             program_id: program.id,
             approved: program.name === "Business Professional Services",
