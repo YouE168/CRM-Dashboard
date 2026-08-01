@@ -390,10 +390,31 @@ export default function SignupPage() {
           // Professional Services" since that's the program that's
           // auto-approved and where Jody's onboarding meeting happens -
           // mentor stays unassigned until she matches them there.
+          //
+          // Partner/coalition accounts don't go through mentor matching
+          // at all (they have their own Partner dashboard/data model), so
+          // tagging them with "Business Professional Services" here is
+          // misleading on the admin Participants list - label them by
+          // account type instead, with no program_id since it isn't a
+          // real catalog program.
+          //
+          // Mentors are staff/contractors, not clients - they should never
+          // show up in the Participants list or "Clients by Program"
+          // chart, so no participants row is created for them at all
+          // (they get a row in the separate `mentors` table instead, via
+          // createMentorProfile() on their settings page).
+          const isMentor = formData.primaryRole === "mentor";
+          const isOrgAccount =
+            formData.primaryRole === "partner" ||
+            formData.primaryRole === "coalition";
           const defaultProgram = programsData.find(
             (p: any) => p.name === "Business Professional Services",
           );
-          if (defaultProgram) {
+          const orgProgramName =
+            formData.primaryRole === "coalition"
+              ? "Coalition Organization"
+              : "Partner Organization";
+          if (!isMentor && (isOrgAccount || defaultProgram)) {
             const { error: participantError } = await supabase
               .from("participants")
               .insert({
@@ -401,8 +422,10 @@ export default function SignupPage() {
                 email: formData.email,
                 name: `${formData.firstName} ${formData.lastName}`,
                 phone: formData.phone || null,
-                program_id: defaultProgram.id,
-                program_name: defaultProgram.name,
+                program_id: isOrgAccount ? null : defaultProgram!.id,
+                program_name: isOrgAccount
+                  ? orgProgramName
+                  : defaultProgram!.name,
                 mentor: null,
                 status: "active",
               });
