@@ -2752,10 +2752,7 @@ function PartnerDashboard({
                             ) : null}
                           </div>
                         )}
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-xs text-gray-400">
-                            {collab.referrals || collab.internships || 0} active
-                          </span>
+                        <div className="flex items-center justify-end mt-2">
                           <span className="text-xs text-orange-600 cursor-pointer hover:text-orange-700">
                             View Details →
                           </span>
