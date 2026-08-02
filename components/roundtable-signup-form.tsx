@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check } from "lucide-react";
 import { COUNTY_LIST } from "@/lib/constants";
 import { submitRoundtableApplication } from "@/lib/supabase/dashboard-data";
+import { notifyJodyRoundtableApplication } from "@/lib/email-service";
 
 export function RoundtableSignupForm({
   profileName,
@@ -139,6 +140,23 @@ export function RoundtableSignupForm({
               role: form.role,
               reason: form.reason,
             });
+
+            // Best-effort heads-up email to Jody - the application is
+            // already real and visible on her admin dashboard either way.
+            notifyJodyRoundtableApplication({
+              name: form.name,
+              email: form.email,
+              organization: form.org,
+              county: form.county,
+              role: form.role,
+              reason: form.reason,
+            }).catch((err) =>
+              console.error(
+                "Failed to send roundtable application notification:",
+                err,
+              ),
+            );
+
             setSubmitted(true);
             onSuccess?.();
           } catch (err) {

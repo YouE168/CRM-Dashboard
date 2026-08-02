@@ -187,6 +187,37 @@ Rural Community Partners System
   });
 }
 
+// Helper: Notify Jody when someone applies to the Leadership Roundtable,
+// so she sees it even if she isn't actively looking at the admin
+// dashboard's Pending Applications panel.
+export async function notifyJodyRoundtableApplication(applicationData: {
+  name: string;
+  email: string;
+  organization?: string;
+  county?: string;
+  role?: string;
+  reason?: string;
+}) {
+  const subject = `🤝 New Leadership Roundtable Application: ${applicationData.name}`;
+  const body = `
+${applicationData.name} just applied to join the Leadership Roundtable.
+
+Name: ${applicationData.name}
+Email: ${applicationData.email}
+${applicationData.organization ? `Organization: ${applicationData.organization}\n` : ""}${applicationData.county ? `County: ${applicationData.county}\n` : ""}${applicationData.role ? `Role/Title: ${applicationData.role}\n` : ""}${applicationData.reason ? `Why they want to join: ${applicationData.reason}\n` : ""}
+Review and approve or decline this application from Admin Dashboard > Leadership Roundtable > Pending Applications.
+
+---
+Rural Community Partners System
+  `;
+
+  return await sendEmail({
+    to: "jody@hbcat.org",
+    subject: subject,
+    body: body,
+  });
+}
+
 // Helper: Send access approval email
 export async function sendAccessApprovalEmail(emailData: {
   to: string;
