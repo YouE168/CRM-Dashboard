@@ -66,8 +66,10 @@ interface LeadershipTabProps {
 //   local boolean). Total Members below = applications approved here.
 // ============================================================
 
-// Learn More Modal Component
-function LearnMoreModal({ onClose }: { onClose: () => void }) {
+// Learn More Modal Component - also reused by the "Join the Leadership
+// Roundtable" card shown on mentee/entrepreneur/mentor/partner/coalition
+// dashboards (see roundtable-join-card.tsx).
+export function LearnMoreModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto">

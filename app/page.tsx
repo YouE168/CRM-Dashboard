@@ -44,6 +44,7 @@ import {
   subscribeToAdminNotes,
   type AdminNoteRow,
 } from "@/lib/supabase/dashboard-data";
+import { RoundtableJoinCard } from "@/components/dashboard/roundtable-join-card";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -1007,6 +1008,12 @@ function CoalitionDashboard({
           </div>
         ))}
       </div>
+
+      <RoundtableJoinCard
+        profileName={profile?.name ?? ""}
+        profileEmail={profile?.email ?? ""}
+        showToast={showToast}
+      />
 
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2557,6 +2564,12 @@ function PartnerDashboard({
           )}
         </div>
       </div>
+
+      <RoundtableJoinCard
+        profileName={profile?.name ?? ""}
+        profileEmail={profile?.email ?? ""}
+        showToast={showToast}
+      />
 
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -4767,6 +4780,12 @@ function RoleBasedDashboardContent({
               )}
             </div>
           </div>
+
+          <RoundtableJoinCard
+            profileName={profile?.name ?? ""}
+            profileEmail={profile?.email ?? ""}
+            showToast={showToast}
+          />
 
           {/* JOIN YOUR MENTORING SESSION - ZOOM MEETING */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 transition-all">
