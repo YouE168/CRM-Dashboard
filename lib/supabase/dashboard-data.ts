@@ -73,6 +73,7 @@ export async function getParticipants(): Promise<DashboardParticipant[]> {
       mentor,
       status,
       joined_at,
+      program_name,
       users:user_id ( name, email ),
       programs:program_id ( name )
     `,
@@ -81,11 +82,16 @@ export async function getParticipants(): Promise<DashboardParticipant[]> {
 
   if (error) throw error;
 
+  // Prefer the joined catalog program name (real programs table), but
+  // fall back to the participants row's own program_name text column -
+  // partner/coalition accounts intentionally have no program_id (they're
+  // not enrolled in a catalog program), so they're only ever labeled via
+  // that text column ("Partner Organization" / "Coalition Organization").
   return (data ?? []).map((row: any) => ({
     id: row.id,
     name: row.users?.name ?? null,
     email: row.users?.email ?? null,
-    program_name: row.programs?.name ?? null,
+    program_name: row.programs?.name ?? row.program_name ?? null,
     mentor: row.mentor,
     status: row.status,
     joined_at: row.joined_at,
