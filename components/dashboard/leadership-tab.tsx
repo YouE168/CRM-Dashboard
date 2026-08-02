@@ -5,6 +5,7 @@ import { KPICard } from "./kpi-card";
 import { AddActionModal } from "@/components/ui/add-action-modal";
 import {
   getNextMeeting,
+  updateNextMeeting,
   getActionItems,
   addActionItemRow,
   updateActionItemStatus,
@@ -33,6 +34,7 @@ import {
   XCircle,
   Mail,
   UserCheck,
+  Pencil,
 } from "lucide-react";
 
 interface LeadershipTabProps {
@@ -211,6 +213,115 @@ function LearnMoreModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// Edit Next Meeting Modal - the only way to change this used to be
+// running SQL directly against Supabase.
+function EditMeetingModal({
+  initial,
+  onClose,
+  onSave,
+}: {
+  initial: NextMeetingInfo;
+  onClose: () => void;
+  onSave: (meeting: NextMeetingInfo) => Promise<void>;
+}) {
+  const [form, setForm] = useState<NextMeetingInfo>(initial);
+  const [saving, setSaving] = useState(false);
+
+  const field = (
+    label: string,
+    key: keyof NextMeetingInfo,
+    type: "text" | "number" = "text",
+    placeholder?: string,
+  ) => (
+    <div>
+      <label className="block text-xs font-medium text-gray-500 mb-1">
+        {label}
+      </label>
+      <input
+        type={type}
+        value={(form[key] as string | number | undefined) ?? ""}
+        onChange={(e) =>
+          setForm((p) => ({
+            ...p,
+            [key]: type === "number" ? Number(e.target.value) : e.target.value,
+          }))
+        }
+        placeholder={placeholder}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+      />
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+        <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Edit Next Meeting
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          {field("Title", "title", "text", "e.g. Q3 Strategy & Impact Review")}
+          <div className="grid grid-cols-2 gap-3">
+            {field("Date label", "date", "text", "e.g. Aug 6, 2026")}
+            {field("Time", "time", "text", "e.g. 2:00 PM")}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {field("Day of month", "day", "number", "e.g. 6")}
+            {field("Month label", "month", "text", "e.g. Aug")}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Description
+            </label>
+            <textarea
+              value={form.description ?? ""}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, description: e.target.value }))
+              }
+              rows={3}
+              placeholder="What's this meeting about?"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
+            />
+          </div>
+          {field(
+            "Zoom Meeting ID",
+            "zoomPlaceholder",
+            "text",
+            "e.g. 123 456 7890",
+          )}
+        </div>
+        <div className="p-5 border-t border-gray-100 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await onSave(form);
+                onClose();
+              } finally {
+                setSaving(false);
+              }
+            }}
+            className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function LeadershipTab({
   profileName,
   profileEmail,
@@ -225,6 +336,7 @@ export function LeadershipTab({
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [showLearnMore, setShowLearnMore] = useState(false);
+  const [showEditMeeting, setShowEditMeeting] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -284,6 +396,18 @@ export function LeadershipTab({
       showToast(`✅ Action item added: "${task}"`, "success");
     } catch (err) {
       console.error("Failed to add action item:", err);
+    }
+  };
+
+  const saveMeeting = async (meeting: NextMeetingInfo) => {
+    try {
+      await updateNextMeeting(meeting);
+      await loadData();
+      showToast("Next meeting updated", "success");
+    } catch (err) {
+      console.error("Failed to update next meeting:", err);
+      showToast("Couldn't save the meeting details. Please try again.", "error");
+      throw err;
     }
   };
 
@@ -421,9 +545,18 @@ export function LeadershipTab({
                     Next Roundtable Meeting
                   </h2>
                 </div>
-                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
-                  {meeting.date}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
+                    {meeting.date}
+                  </span>
+                  <button
+                    onClick={() => setShowEditMeeting(true)}
+                    className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                    title="Edit meeting details"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
             <div className="p-5">
@@ -708,6 +841,13 @@ export function LeadershipTab({
       />
       {showLearnMore && (
         <LearnMoreModal onClose={() => setShowLearnMore(false)} />
+      )}
+      {showEditMeeting && (
+        <EditMeetingModal
+          initial={nextMeeting ?? {}}
+          onClose={() => setShowEditMeeting(false)}
+          onSave={saveMeeting}
+        />
       )}
     </>
   );

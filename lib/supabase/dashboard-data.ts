@@ -640,6 +640,15 @@ export async function getNextMeeting(): Promise<NextMeetingInfo | null> {
   return (data?.next_meeting as NextMeetingInfo | undefined) ?? null;
 }
 
+// Real in-app editor for the Next Meeting announcement - previously the
+// only way to change this was running SQL directly against Supabase.
+export async function updateNextMeeting(meeting: NextMeetingInfo): Promise<void> {
+  const { error } = await supabase
+    .from("leadership_stats")
+    .upsert({ id: 1, next_meeting: meeting as unknown as Record<string, unknown> }, { onConflict: "id" });
+  if (error) throw error;
+}
+
 export async function getActionItems(): Promise<ActionItemRow[]> {
   const { data, error } = await supabase
     .from("leadership_action_items")
