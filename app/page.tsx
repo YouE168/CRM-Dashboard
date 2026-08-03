@@ -1127,12 +1127,6 @@ function CoalitionDashboard({
         </div>
       </div>
 
-      <RoundtableJoinCard
-        profileName={profile?.name ?? ""}
-        profileEmail={profile?.email ?? ""}
-        showToast={showToast}
-      />
-
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Meetings */}
@@ -1706,6 +1700,12 @@ function CoalitionDashboard({
           )}
         </div>
       </div>
+
+      <RoundtableJoinCard
+        profileName={profile?.name ?? ""}
+        profileEmail={profile?.email ?? ""}
+        showToast={showToast}
+      />
 
       {/* Support Section */}
       <div
