@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { KPICard } from "./kpi-card";
+import { linkifyText } from "@/lib/linkify";
 import {
   Users,
   UserCheck,
@@ -457,7 +458,7 @@ function MenteeDetailsModal({
                           {new Date(note.created_at).toLocaleDateString()}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-700">{note.note}</p>
+                      <p className="text-sm text-gray-700">{linkifyText(note.note)}</p>
                     </div>
                   ))
                 )}

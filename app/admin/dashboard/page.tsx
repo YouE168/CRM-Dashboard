@@ -1,6 +1,7 @@
 "use client";
 
 import { ApprovalPopup } from "@/components/admin/approval-popup";
+import { linkifyText } from "@/lib/linkify";
 import {
   getAdminNotes,
   sendAdminNoteRow,
@@ -2058,7 +2059,7 @@ function AdminDashboardContent() {
                         </div>
                       </div>
                       <p className="text-gray-700 mt-2 whitespace-pre-wrap">
-                        {note.message}
+                        {linkifyText(note.message)}
                       </p>
                     </div>
                   ))
@@ -2105,7 +2106,7 @@ function AdminDashboardContent() {
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 whitespace-pre-wrap">
-                        {note.note}
+                        {linkifyText(note.note)}
                       </p>
                     </div>
                   ))}
@@ -2179,6 +2180,10 @@ function AdminDashboardContent() {
                         className="w-full border rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500"
                         required
                       />
+                      <p className="text-xs text-gray-400 mt-1">
+                        Tip: paste a link (https://...) and it'll show up
+                        clickable once sent.
+                      </p>
                     </div>
                   </div>
                   <div className="p-5 border-t border-gray-100 flex gap-3">

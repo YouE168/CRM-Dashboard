@@ -64,6 +64,7 @@ import {
   subscribeToCoalitionData,
 } from "@/lib/supabase/dashboard-data";
 import { RoundtableJoinCard } from "@/components/dashboard/roundtable-join-card";
+import { linkifyText } from "@/lib/linkify";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -491,7 +492,7 @@ function AllNotesModal({
                     📌
                   </button>
                 </div>
-                <p className="text-gray-700">{note.note}</p>
+                <p className="text-gray-700">{linkifyText(note.note)}</p>
               </div>
             ))
           )}
@@ -1711,7 +1712,7 @@ function CoalitionDashboard({
                       {new Date(note.sentAt).toLocaleDateString()}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-700">{note.message}</p>
+                  <p className="text-sm text-gray-700">{linkifyText(note.message)}</p>
                   <p className="text-xs text-gray-400 mt-1">
                     From: {note.sentBy}
                   </p>
@@ -3319,7 +3320,7 @@ function PartnerDashboard({
                       {new Date(note.created_at).toLocaleDateString()}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-700">{note.message}</p>
+                  <p className="text-sm text-gray-700">{linkifyText(note.message)}</p>
                   {note.sent_by && (
                     <p className="text-xs text-gray-400 mt-1">
                       From: {note.sent_by}
@@ -4780,7 +4781,7 @@ function RoleBasedDashboardContent({
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 whitespace-pre-wrap">
-                      {note.note}
+                      {linkifyText(note.note)}
                     </p>
                   </div>
                 ))}
@@ -4851,7 +4852,7 @@ function RoleBasedDashboardContent({
                       {new Date(note.sentAt).toLocaleDateString()}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-700">{note.message}</p>
+                  <p className="text-sm text-gray-700">{linkifyText(note.message)}</p>
                   <p className="text-xs text-gray-400 mt-1">
                     From: {note.sentBy}
                   </p>
@@ -5498,7 +5499,7 @@ function RoleBasedDashboardContent({
                             📌
                           </button>
                         </div>
-                        <p className="text-sm text-gray-700">{note.note}</p>
+                        <p className="text-sm text-gray-700">{linkifyText(note.note)}</p>
                         {note.pinned && (
                           <div className="mt-2 text-xs text-yellow-600 flex items-center gap-1">
                             📌 Pinned note

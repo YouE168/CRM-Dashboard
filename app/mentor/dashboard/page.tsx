@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { linkifyText } from "@/lib/linkify";
 import {
   ArrowLeft,
   Users,
@@ -318,6 +319,10 @@ function MenteeDetailModal({
                   rows={3}
                   className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Tip: paste a link (https://...) and it'll show up clickable
+                  once sent.
+                </p>
                 <button
                   onClick={handleAddNote}
                   disabled={!newNote.trim()}
@@ -350,7 +355,7 @@ function MenteeDetailModal({
                             {new Date(note.date).toLocaleDateString()}
                           </span>
                         </div>
-                        <p className="text-gray-700">{note.note}</p>
+                        <p className="text-gray-700">{linkifyText(note.note)}</p>
                       </div>
                     ))}
                   </div>
