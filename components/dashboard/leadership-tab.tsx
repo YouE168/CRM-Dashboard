@@ -290,6 +290,12 @@ function EditMeetingModal({
             />
           </div>
           {field(
+            "Zoom link (optional) - skips the manual ID/passcode entry",
+            "zoomLink",
+            "text",
+            "https://zoom.us/j/123456789",
+          )}
+          {field(
             "Zoom Meeting ID",
             "zoomPlaceholder",
             "text",
@@ -454,6 +460,7 @@ export function LeadershipTab({
     title: nextMeeting?.title ?? "No meeting scheduled yet",
     description: nextMeeting?.description ?? "",
     zoomPlaceholder: nextMeeting?.zoomPlaceholder ?? "",
+    zoomLink: nextMeeting?.zoomLink ?? "",
   };
 
   return (
@@ -586,79 +593,98 @@ export function LeadershipTab({
                 </div>
                 <div className="border-t border-gray-100 pt-4">
                   <div className="bg-blue-50 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Video className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm font-medium text-gray-700">
-                          Join via Zoom
-                        </span>
-                      </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Video className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium text-gray-700">
+                        Join via Zoom
+                      </span>
+                    </div>
+                    {meeting.zoomLink ? (
+                      // A full Zoom link was set directly on this meeting -
+                      // skip the manual ID/passcode entry entirely.
                       <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(
-                            meeting.zoomPlaceholder,
-                          );
-                          showToast(
-                            "Meeting ID copied to clipboard!",
-                            "success",
-                          );
-                        }}
-                        className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                        onClick={() =>
+                          window.open(meeting.zoomLink, "_blank")
+                        }
+                        className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
                       >
-                        <Copy className="h-3 w-3" />
-                        Copy ID
+                        <Video className="h-4 w-4" />
+                        Join Zoom Meeting
                       </button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                      <input
-                        type="text"
-                        id="leadershipZoomId"
-                        placeholder={
-                          meeting.zoomPlaceholder
-                            ? `Zoom Meeting ID (e.g., ${meeting.zoomPlaceholder})`
-                            : "Zoom Meeting ID"
-                        }
-                        className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <input
-                        type="text"
-                        id="leadershipZoomPassword"
-                        placeholder="Passcode (if required)"
-                        className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <button
-                      onClick={() => {
-                        const meetingId = (
-                          document.getElementById(
-                            "leadershipZoomId",
-                          ) as HTMLInputElement
-                        )?.value;
-                        const password = (
-                          document.getElementById(
-                            "leadershipZoomPassword",
-                          ) as HTMLInputElement
-                        )?.value;
-                        if (!meetingId || meetingId.trim() === "") {
-                          showToast("Please enter the Zoom Meeting ID", "info");
-                          return;
-                        }
-                        const cleanMeetingId = meetingId
-                          .trim()
-                          .replace(/\s/g, "");
-                        let zoomUrl = `https://zoom.us/j/${cleanMeetingId}`;
-                        if (password && password.trim() !== "")
-                          zoomUrl += `?pwd=${encodeURIComponent(password.trim())}`;
-                        window.open(zoomUrl, "_blank");
-                      }}
-                      className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
-                    >
-                      <Video className="h-4 w-4" />
-                      Join Zoom Meeting
-                    </button>
-                    <p className="text-xs text-gray-500 mt-3">
-                      💡 The meeting ID will be sent via email
-                    </p>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-end mb-3">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                meeting.zoomPlaceholder,
+                              );
+                              showToast(
+                                "Meeting ID copied to clipboard!",
+                                "success",
+                              );
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                          >
+                            <Copy className="h-3 w-3" />
+                            Copy ID
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                          <input
+                            type="text"
+                            id="leadershipZoomId"
+                            placeholder={
+                              meeting.zoomPlaceholder
+                                ? `Zoom Meeting ID (e.g., ${meeting.zoomPlaceholder})`
+                                : "Zoom Meeting ID"
+                            }
+                            className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <input
+                            type="text"
+                            id="leadershipZoomPassword"
+                            placeholder="Passcode (if required)"
+                            className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <button
+                          onClick={() => {
+                            const meetingId = (
+                              document.getElementById(
+                                "leadershipZoomId",
+                              ) as HTMLInputElement
+                            )?.value;
+                            const password = (
+                              document.getElementById(
+                                "leadershipZoomPassword",
+                              ) as HTMLInputElement
+                            )?.value;
+                            if (!meetingId || meetingId.trim() === "") {
+                              showToast(
+                                "Please enter the Zoom Meeting ID",
+                                "info",
+                              );
+                              return;
+                            }
+                            const cleanMeetingId = meetingId
+                              .trim()
+                              .replace(/\s/g, "");
+                            let zoomUrl = `https://zoom.us/j/${cleanMeetingId}`;
+                            if (password && password.trim() !== "")
+                              zoomUrl += `?pwd=${encodeURIComponent(password.trim())}`;
+                            window.open(zoomUrl, "_blank");
+                          }}
+                          className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
+                        >
+                          <Video className="h-4 w-4" />
+                          Join Zoom Meeting
+                        </button>
+                        <p className="text-xs text-gray-500 mt-3">
+                          💡 The meeting ID will be sent via email
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

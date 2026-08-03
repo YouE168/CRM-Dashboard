@@ -620,6 +620,7 @@ export interface NextMeetingInfo {
   title?: string;
   description?: string;
   zoomPlaceholder?: string;
+  zoomLink?: string;
 }
 
 export interface ActionItemRow {
@@ -754,6 +755,26 @@ export async function updateRoundtableApplicationStatus(
     .update({ status })
     .eq("id", id);
   if (error) throw error;
+}
+
+// Used by the "Join the Leadership Roundtable" card on every non-admin
+// dashboard to check whether the signed-in user already has an approved
+// application, so approved members see the real next-meeting details
+// instead of the generic "Apply to Join" pitch. Most recent application
+// for that email wins (in case someone applied more than once).
+export async function getRoundtableApplicationForEmail(
+  email: string,
+): Promise<RoundtableApplicationRow | null> {
+  if (!email) return null;
+  const { data, error } = await supabase
+    .from("leadership_roundtable_applications")
+    .select("*")
+    .eq("email", email)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as RoundtableApplicationRow | null) ?? null;
 }
 
 export interface ResourceStats {
