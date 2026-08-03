@@ -43,6 +43,25 @@ import {
   getAdminNotes,
   subscribeToAdminNotes,
   type AdminNoteRow,
+  getCoalitionProfileData,
+  saveCoalitionProfileData,
+  type CoalitionProfileData,
+  getCoalitionMeetings,
+  addCoalitionMeeting,
+  updateCoalitionMeeting,
+  deleteCoalitionMeeting,
+  type CoalitionMeetingRow,
+  getCoalitionInitiatives,
+  addCoalitionInitiative,
+  updateCoalitionInitiative,
+  deleteCoalitionInitiative,
+  type CoalitionInitiativeRow,
+  getCoalitionResources,
+  addCoalitionResource,
+  updateCoalitionResource,
+  deleteCoalitionResource,
+  type CoalitionResourceRow,
+  subscribeToCoalitionData,
 } from "@/lib/supabase/dashboard-data";
 import { RoundtableJoinCard } from "@/components/dashboard/roundtable-join-card";
 import { useRouter } from "next/navigation";
@@ -511,284 +530,289 @@ function CoalitionDashboard({
   setShowAllNotes: (val: boolean) => void;
   markNoteAsRead: (id: number) => void;
 }) {
-  const [coalitionData, setCoalitionData] = useState(() => {
-    const saved = localStorage.getItem("coalition_dashboard_data");
-    if (saved) {
-      return JSON.parse(saved);
-    }
-    return {
-      id: "coalition-default",
-      lastUpdated: new Date().toISOString(),
-      hero: {
-        title: "Welcome, Coalition Leader!",
-        subtitle: "Leading change across Southeast Kansas",
-        stats: {
-          activeCoalitions: 2,
-          countiesServed: 11,
-          activeProjects: 5,
-        },
-      },
-      metrics: {
-        coalitionMembers: 24,
-        meetingsHeld: 48,
-        projectsInitiated: 23,
-        residentsImpacted: 5200,
-      },
-      upcomingMeetings: [
-        {
-          id: "meeting-1",
-          title: "LHEAT Coalition Meeting",
-          date: "2026-06-14",
-          time: "10:00 AM",
-          type: "virtual",
-          link: "https://zoom.us/j/123456789",
-          meetingId: "123456789",
-          passcode: "",
-          location: "",
-          description:
-            "Monthly coalition meeting to discuss food access initiatives",
-        },
-        {
-          id: "meeting-2",
-          title: "Leadership Roundtable",
-          date: "2026-06-22",
-          time: "1:00 PM",
-          type: "in-person",
-          link: "",
-          meetingId: "",
-          passcode: "",
-          location: "Main Street Community Center, 123 Main St",
-          description: "Quarterly leadership meeting with all coalition heads",
-        },
-      ],
-      activeInitiatives: [
-        {
-          id: "init-1",
-          title: "Food Access Program",
-          status: "In Progress",
-          progress: 65,
-          description:
-            "Increasing food access in rural communities through mobile markets",
-          startDate: "2026-01-15",
-          targetDate: "2026-12-31",
-        },
-        {
-          id: "init-2",
-          title: "Childcare Coalition",
-          status: "Planning",
-          progress: 30,
-          description:
-            "Developing sustainable childcare solutions for working families",
-          startDate: "2026-03-01",
-          targetDate: "2026-09-30",
-        },
-        {
-          id: "init-3",
-          title: "Housing Initiative",
-          status: "Proposed",
-          progress: 10,
-          description: "Affordable housing project for low-income residents",
-          startDate: "2026-06-01",
-          targetDate: "2027-06-30",
-        },
-      ],
-      resources: [
-        {
-          id: "res-1",
-          title: "Resource Sharing Guide",
-          description: "Cross-county collaboration tools and best practices",
-          link: "/resources/sharing-guide.pdf",
-          type: "pdf",
-          icon: "📚",
-        },
-        {
-          id: "res-2",
-          title: "Strategic Plan 2026",
-          description: "Annual goals and initiatives for coalition work",
-          link: "/resources/strategic-plan-2026.pdf",
-          type: "pdf",
-          icon: "🎯",
-        },
-        {
-          id: "res-3",
-          title: "Meeting Minutes Archive",
-          description: "Past meeting notes and action items",
-          link: "/resources/meeting-minutes",
-          type: "internal",
-          icon: "📝",
-        },
-      ],
+  // Real Supabase-backed state - replaces the old
+  // localStorage("coalition_dashboard_data") blob. Mirrors the Partner
+  // dashboard rebuild: one profile-data row per coalition user (hero/
+  // metrics) plus their own meetings/initiatives/resources lists.
+  const [userId, setUserId] = useState<string | null>(null);
+  const [profileData, setProfileData] = useState<CoalitionProfileData | null>(
+    null,
+  );
+  const [meetings, setMeetings] = useState<CoalitionMeetingRow[]>([]);
+  const [initiatives, setInitiatives] = useState<CoalitionInitiativeRow[]>([]);
+  const [resourcesList, setResourcesList] = useState<CoalitionResourceRow[]>(
+    [],
+  );
+  const [loadingCoalitionData, setLoadingCoalitionData] = useState(true);
+  // The real programs this coalition leader selected/was approved for at
+  // signup (user_programs joined with the programs catalog) - locked until
+  // Jody approves, except Business Professional Services which is
+  // auto-approved for every account.
+  const [myPrograms, setMyPrograms] = useState<UserProgramRow[]>([]);
+
+  const loadCoalitionData = useCallback(
+    async (uid: string) => {
+      try {
+        const [profileRow, meetingRows, initiativeRows, resourceRows, programRows] =
+          await Promise.all([
+            getCoalitionProfileData(uid),
+            getCoalitionMeetings(uid),
+            getCoalitionInitiatives(uid),
+            getCoalitionResources(uid),
+            getProgramsForUser(uid).catch(() => []),
+          ]);
+        setMyPrograms(programRows);
+        setProfileData(
+          profileRow || {
+            user_id: uid,
+            hero_title:
+              profile?.organization ||
+              profile?.name ||
+              "Welcome, Coalition Leader!",
+            hero_subtitle: "Leading change across Southeast Kansas",
+            stat_active_coalitions: 0,
+            stat_counties_served: 0,
+            stat_active_projects: 0,
+            metric_coalition_members: 0,
+            metric_meetings_held: 0,
+            metric_projects_initiated: 0,
+            metric_residents_impacted: 0,
+            updated_at: new Date().toISOString(),
+          },
+        );
+        setMeetings(meetingRows);
+        setInitiatives(initiativeRows);
+        setResourcesList(resourceRows);
+      } catch (err) {
+        console.error("Failed to load coalition dashboard data:", err);
+      } finally {
+        setLoadingCoalitionData(false);
+      }
+    },
+    [profile?.organization, profile?.name],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (data.user) {
+        setUserId(data.user.id);
+        await loadCoalitionData(data.user.id);
+      } else {
+        setLoadingCoalitionData(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
-  });
+  }, [loadCoalitionData]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const unsubscribe = subscribeToCoalitionData(() =>
+      loadCoalitionData(userId),
+    );
+    return unsubscribe;
+  }, [userId, loadCoalitionData]);
+
+  // Composed shape the render below already expects, built live from the
+  // real state above instead of one JSON blob.
+  const coalitionData = {
+    hero: {
+      title: profileData?.hero_title || "Welcome, Coalition Leader!",
+      subtitle: profileData?.hero_subtitle || "",
+      stats: {
+        activeCoalitions: profileData?.stat_active_coalitions ?? 0,
+        countiesServed: profileData?.stat_counties_served ?? 0,
+        activeProjects: profileData?.stat_active_projects ?? 0,
+      },
+    },
+    metrics: {
+      coalitionMembers: profileData?.metric_coalition_members ?? 0,
+      meetingsHeld: profileData?.metric_meetings_held ?? 0,
+      projectsInitiated: profileData?.metric_projects_initiated ?? 0,
+      residentsImpacted: profileData?.metric_residents_impacted ?? 0,
+    },
+    upcomingMeetings: meetings,
+    activeInitiatives: initiatives,
+    resources: resourcesList,
+  };
 
   const [isEditing, setIsEditing] = useState(false);
   const [showAddModal, setShowAddModal] = useState<
     "meeting" | "initiative" | "resource" | null
   >(null);
   const [tempFormData, setTempFormData] = useState<any>({});
+  const [showCoalitionProgramModal, setShowCoalitionProgramModal] =
+    useState(false);
+  const [selectedCoalitionProgram, setSelectedCoalitionProgram] =
+    useState<UserProgramRow | null>(null);
 
-  const saveCoalitionData = (newData: any) => {
-    const updatedData = {
-      ...newData,
-      lastUpdated: new Date().toISOString(),
-    };
-    setCoalitionData(updatedData);
-    localStorage.setItem(
-      "coalition_dashboard_data",
-      JSON.stringify(updatedData),
-    );
-    showToast("Dashboard updated successfully!", "success");
+  // Debounce writes so typing in an edit field doesn't fire a Supabase
+  // request on every keystroke.
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  );
+  const debouncedWrite = (key: string, fn: () => Promise<void>) => {
+    if (saveTimers.current[key]) clearTimeout(saveTimers.current[key]);
+    saveTimers.current[key] = setTimeout(() => {
+      fn().catch((err) => {
+        console.error(`Failed to save (${key}):`, err);
+        showToast("Failed to save that change.", "error");
+      });
+    }, 600);
   };
 
-  // Meeting CRUD
-  const addMeeting = () => {
-    const newMeeting = {
-      id: `meeting-${Date.now()}`,
-      title: tempFormData.title || "New Meeting",
-      date: tempFormData.date || new Date().toISOString().split("T")[0],
-      time: tempFormData.time || "12:00 PM",
-      type: tempFormData.type || "virtual",
-      link: tempFormData.link || "",
-      meetingId: tempFormData.meetingId || "",
-      passcode: tempFormData.passcode || "",
-      location: tempFormData.location || "",
-      description: tempFormData.description || "",
+  // Hero/metrics edits funnel through here - meetings/initiatives/resources
+  // have their own dedicated CRUD functions below that write straight to
+  // Supabase instead.
+  const saveCoalitionData = (newData: any) => {
+    if (!userId) return;
+    const fields = {
+      hero_title: newData.hero.title,
+      hero_subtitle: newData.hero.subtitle,
+      stat_active_coalitions: newData.hero.stats.activeCoalitions,
+      stat_counties_served: newData.hero.stats.countiesServed,
+      stat_active_projects: newData.hero.stats.activeProjects,
+      metric_coalition_members: newData.metrics.coalitionMembers,
+      metric_meetings_held: newData.metrics.meetingsHeld,
+      metric_projects_initiated: newData.metrics.projectsInitiated,
+      metric_residents_impacted: newData.metrics.residentsImpacted,
     };
-    const updated = {
-      ...coalitionData,
-      upcomingMeetings: [...coalitionData.upcomingMeetings, newMeeting],
-    };
-    saveCoalitionData(updated);
-    setShowAddModal(null);
-    setTempFormData({});
-    showToast("Meeting added successfully!", "success");
+    setProfileData((prev) => ({ ...(prev as CoalitionProfileData), ...fields }));
+    debouncedWrite("profile", () => saveCoalitionProfileData(userId, fields));
+  };
+
+  // Meeting CRUD - real Supabase writes.
+  const addMeeting = async () => {
+    if (!userId) return;
+    try {
+      await addCoalitionMeeting(userId, {
+        title: tempFormData.title || "New Meeting",
+        date: tempFormData.date || new Date().toISOString().split("T")[0],
+        time: tempFormData.time || "12:00 PM",
+        type: tempFormData.type || "virtual",
+        link: tempFormData.link || "",
+        meeting_id: tempFormData.meetingId || "",
+        passcode: tempFormData.passcode || "",
+        location: tempFormData.location || "",
+        description: tempFormData.description || "",
+      });
+      setMeetings(await getCoalitionMeetings(userId));
+      setShowAddModal(null);
+      setTempFormData({});
+      showToast("Meeting added successfully!", "success");
+    } catch (err) {
+      console.error("Failed to add meeting:", err);
+      showToast("Failed to add meeting. Please try again.", "error");
+    }
   };
 
   const updateMeeting = (id: string, field: string, value: string) => {
-    const updated = {
-      ...coalitionData,
-      upcomingMeetings: coalitionData.upcomingMeetings.map((m: any) =>
-        m.id === id ? { ...m, [field]: value } : m,
-      ),
-    };
-    saveCoalitionData(updated);
+    setMeetings((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, [field]: value } : m)),
+    );
+    debouncedWrite(`meeting-${id}-${field}`, () =>
+      updateCoalitionMeeting(id, { [field]: value } as any),
+    );
   };
 
-  const deleteMeeting = (id: string) => {
-    if (confirm("Are you sure you want to delete this meeting?")) {
-      const updated = {
-        ...coalitionData,
-        upcomingMeetings: coalitionData.upcomingMeetings.filter(
-          (m: any) => m.id !== id,
-        ),
-      };
-      saveCoalitionData(updated);
+  const deleteMeeting = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this meeting?")) return;
+    try {
+      await deleteCoalitionMeeting(id);
+      setMeetings((prev) => prev.filter((m) => m.id !== id));
       showToast("Meeting deleted successfully!", "info");
+    } catch (err) {
+      console.error("Failed to delete meeting:", err);
+      showToast("Failed to delete. Please try again.", "error");
     }
   };
 
-  const joinZoomMeeting = (meeting: any) => {
-    if (meeting.type === "virtual") {
-      let zoomUrl = `https://zoom.us/j/${
-        meeting.meetingId || meeting.link?.split("/j/")[1] || ""
-      }`;
-      if (meeting.passcode) {
-        zoomUrl += `?pwd=${encodeURIComponent(meeting.passcode)}`;
-      }
-      window.open(zoomUrl, "_blank");
-    } else if (meeting.type === "in-person" && meeting.location) {
-      window.open(
-        `https://maps.google.com/?q=${encodeURIComponent(meeting.location)}`,
-        "_blank",
-      );
-    } else {
-      showToast("Meeting link or location not available yet", "info");
+  // Initiative CRUD - real Supabase writes.
+  const addInitiative = async () => {
+    if (!userId) return;
+    try {
+      await addCoalitionInitiative(userId, {
+        title: tempFormData.title || "New Initiative",
+        status: tempFormData.status || "Proposed",
+        progress: tempFormData.progress || 0,
+        description: tempFormData.description || "",
+        start_date:
+          tempFormData.startDate || new Date().toISOString().split("T")[0],
+        target_date: tempFormData.targetDate || "",
+      });
+      setInitiatives(await getCoalitionInitiatives(userId));
+      setShowAddModal(null);
+      setTempFormData({});
+      showToast("Initiative added successfully!", "success");
+    } catch (err) {
+      console.error("Failed to add initiative:", err);
+      showToast("Failed to add initiative. Please try again.", "error");
     }
-  };
-
-  // Initiative CRUD
-  const addInitiative = () => {
-    const newInitiative = {
-      id: `init-${Date.now()}`,
-      title: tempFormData.title || "New Initiative",
-      status: tempFormData.status || "Proposed",
-      progress: tempFormData.progress || 0,
-      description: tempFormData.description || "",
-      startDate:
-        tempFormData.startDate || new Date().toISOString().split("T")[0],
-      targetDate: tempFormData.targetDate || "",
-    };
-    const updated = {
-      ...coalitionData,
-      activeInitiatives: [...coalitionData.activeInitiatives, newInitiative],
-    };
-    saveCoalitionData(updated);
-    setShowAddModal(null);
-    setTempFormData({});
-    showToast("Initiative added successfully!", "success");
   };
 
   const updateInitiative = (id: string, field: string, value: any) => {
-    const updated = {
-      ...coalitionData,
-      activeInitiatives: coalitionData.activeInitiatives.map((i: any) =>
-        i.id === id ? { ...i, [field]: value } : i,
-      ),
-    };
-    saveCoalitionData(updated);
+    setInitiatives((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, [field]: value } : i)),
+    );
+    debouncedWrite(`initiative-${id}-${field}`, () =>
+      updateCoalitionInitiative(id, { [field]: value } as any),
+    );
   };
 
-  const deleteInitiative = (id: string) => {
-    if (confirm("Are you sure you want to delete this initiative?")) {
-      const updated = {
-        ...coalitionData,
-        activeInitiatives: coalitionData.activeInitiatives.filter(
-          (i: any) => i.id !== id,
-        ),
-      };
-      saveCoalitionData(updated);
+  const deleteInitiative = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this initiative?")) return;
+    try {
+      await deleteCoalitionInitiative(id);
+      setInitiatives((prev) => prev.filter((i) => i.id !== id));
       showToast("Initiative deleted successfully!", "info");
+    } catch (err) {
+      console.error("Failed to delete initiative:", err);
+      showToast("Failed to delete. Please try again.", "error");
     }
   };
 
-  // Resource CRUD
-  const addResource = () => {
-    const newResource = {
-      id: `res-${Date.now()}`,
-      title: tempFormData.title || "New Resource",
-      description: tempFormData.description || "",
-      link: tempFormData.link || "",
-      type: tempFormData.type || "internal",
-      icon: tempFormData.icon || "📄",
-    };
-    const updated = {
-      ...coalitionData,
-      resources: [...coalitionData.resources, newResource],
-    };
-    saveCoalitionData(updated);
-    setShowAddModal(null);
-    setTempFormData({});
-    showToast("Resource added successfully!", "success");
+  // Resource CRUD - real Supabase writes.
+  const addResource = async () => {
+    if (!userId) return;
+    try {
+      await addCoalitionResource(userId, {
+        title: tempFormData.title || "New Resource",
+        description: tempFormData.description || "",
+        link: tempFormData.link || "",
+        type: tempFormData.type || "Available",
+      });
+      setResourcesList(await getCoalitionResources(userId));
+      setShowAddModal(null);
+      setTempFormData({});
+      showToast("Resource added successfully!", "success");
+    } catch (err) {
+      console.error("Failed to add resource:", err);
+      showToast("Failed to add resource. Please try again.", "error");
+    }
   };
 
   const updateResource = (id: string, field: string, value: string) => {
-    const updated = {
-      ...coalitionData,
-      resources: coalitionData.resources.map((r: any) =>
-        r.id === id ? { ...r, [field]: value } : r,
-      ),
-    };
-    saveCoalitionData(updated);
+    setResourcesList((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
+    );
+    debouncedWrite(`resource-${id}-${field}`, () =>
+      updateCoalitionResource(id, { [field]: value } as any),
+    );
   };
 
-  const deleteResource = (id: string) => {
-    if (confirm("Are you sure you want to delete this resource?")) {
-      const updated = {
-        ...coalitionData,
-        resources: coalitionData.resources.filter((r: any) => r.id !== id),
-      };
-      saveCoalitionData(updated);
+  const deleteResource = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this resource?")) return;
+    try {
+      await deleteCoalitionResource(id);
+      setResourcesList((prev) => prev.filter((r) => r.id !== id));
       showToast("Resource deleted successfully!", "info");
+    } catch (err) {
+      console.error("Failed to delete resource:", err);
+      showToast("Failed to delete. Please try again.", "error");
     }
   };
 
@@ -827,6 +851,14 @@ function CoalitionDashboard({
       year: "numeric",
     });
   };
+
+  if (loadingCoalitionData) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1009,6 +1041,92 @@ function CoalitionDashboard({
         ))}
       </div>
 
+      {/* Your Active Programs - the real programs this coalition leader
+          selected/was approved for at signup (user_programs), locked until
+          Jody approves. Business Professional Services is auto-approved for
+          every account at signup so it's always accessible. */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900">
+            📋 Your Active Programs
+          </h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Click on a program to view details
+          </p>
+        </div>
+        <div className="divide-y divide-gray-100">
+          {myPrograms.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">
+              <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>No programs yet</p>
+              <p className="text-xs mt-1">
+                Contact Jody to get added to a program
+              </p>
+            </div>
+          ) : (
+            myPrograms.map((p) => {
+              // Business Professional Services is auto-approved for every
+              // account at signup - always show it as approved.
+              const isApproved =
+                p.approved || p.name === "Business Professional Services";
+              return (
+                <div
+                  key={p.user_program_id}
+                  onClick={() => {
+                    setSelectedCoalitionProgram(p);
+                    setShowCoalitionProgramModal(true);
+                  }}
+                  className="p-5 hover:bg-gray-50 transition-colors group relative cursor-pointer"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-gray-800 group-hover:text-purple-600 transition-colors">
+                          {p.name}
+                        </p>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full ${
+                            p.status === "Active"
+                              ? "bg-green-100 text-green-700"
+                              : p.status === "Completed"
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {p.status}
+                        </span>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                            isApproved
+                              ? "bg-green-100 text-green-700"
+                              : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {isApproved && <Check className="h-3 w-3" />}
+                          {isApproved ? "Approved" : "Pending approval"}
+                        </span>
+                      </div>
+                      {p.start_date && (
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-gray-400" />
+                            <span className="text-xs text-gray-500">
+                              Started{" "}
+                              {new Date(p.start_date).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-purple-500 group-hover:translate-x-1 transition-all flex-shrink-0 ml-4" />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
       <RoundtableJoinCard
         profileName={profile?.name ?? ""}
         profileEmail={profile?.email ?? ""}
@@ -1144,11 +1262,11 @@ function CoalitionDashboard({
                               </label>
                               <input
                                 type="text"
-                                value={meeting.meetingId || ""}
+                                value={meeting.meeting_id || ""}
                                 onChange={(e) =>
                                   updateMeeting(
                                     meeting.id,
-                                    "meetingId",
+                                    "meeting_id",
                                     e.target.value,
                                   )
                                 }
@@ -1183,11 +1301,11 @@ function CoalitionDashboard({
                                 Zoom Meeting
                               </span>
                             </div>
-                            {meeting.meetingId && (
+                            {meeting.meeting_id && (
                               <p className="text-sm text-gray-600">
                                 Meeting ID:{" "}
                                 <span className="font-mono">
-                                  {meeting.meetingId}
+                                  {meeting.meeting_id}
                                 </span>
                               </p>
                             )}
@@ -1223,7 +1341,7 @@ function CoalitionDashboard({
                                 ) as HTMLInputElement;
 
                                 const meetingId =
-                                  meetingIdInput?.value || meeting.meetingId;
+                                  meetingIdInput?.value || meeting.meeting_id;
                                 const passcode =
                                   passcodeInput?.value || meeting.passcode;
 
@@ -1412,9 +1530,9 @@ function CoalitionDashboard({
                         {initiative.status}
                       </span>
                     )}
-                    {!isEditing && (
+                    {!isEditing && initiative.start_date && (
                       <span className="text-xs text-gray-400">
-                        {formatDate(initiative.startDate)}
+                        {formatDate(initiative.start_date)}
                       </span>
                     )}
                   </div>
@@ -1937,6 +2055,145 @@ function CoalitionDashboard({
               >
                 Add Resource
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Program Details Modal - locked until Jody approves, same pattern
+          as the mentee/entrepreneur program modal. Business Professional
+          Services is force-shown as approved regardless of the underlying
+          approved flag. */}
+      {showCoalitionProgramModal && selectedCoalitionProgram && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {selectedCoalitionProgram.name}
+                </h2>
+                <div className="flex items-center gap-2 flex-wrap mt-1">
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full ${
+                      selectedCoalitionProgram.status === "Active"
+                        ? "bg-green-100 text-green-700"
+                        : selectedCoalitionProgram.status === "Completed"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-yellow-100 text-yellow-700"
+                    }`}
+                  >
+                    {selectedCoalitionProgram.status}
+                  </span>
+                  {selectedCoalitionProgram.approved ||
+                  selectedCoalitionProgram.name ===
+                    "Business Professional Services" ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                      Approved
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                      Pending approval
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCoalitionProgramModal(false);
+                  setSelectedCoalitionProgram(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-xl flex-shrink-0"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {!(
+                selectedCoalitionProgram.approved ||
+                selectedCoalitionProgram.name ===
+                  "Business Professional Services"
+              ) ? (
+                <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 text-center">
+                  <p className="text-sm text-amber-800 font-medium">
+                    🔒 You don't have access to this program yet
+                  </p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Jody reviews and approves access to each program. You'll
+                    be notified once you're approved.
+                  </p>
+                  <button
+                    onClick={() =>
+                      (window.location.href = `mailto:jody@hbcat.org?subject=Requesting access to ${encodeURIComponent(selectedCoalitionProgram.name)}`)
+                    }
+                    className="mt-3 w-full py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm"
+                  >
+                    Ask Jody for access
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {selectedCoalitionProgram.description && (
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700 mb-1">
+                        About This Program
+                      </h4>
+                      <p className="text-gray-600 text-sm leading-relaxed">
+                        {selectedCoalitionProgram.description}
+                      </p>
+                    </div>
+                  )}
+
+                  {(selectedCoalitionProgram.start_date ||
+                    selectedCoalitionProgram.end_date) && (
+                    <div className="flex items-center gap-1 text-sm text-gray-500">
+                      <Clock className="h-4 w-4 text-gray-400" />
+                      {selectedCoalitionProgram.start_date &&
+                        `Started ${new Date(selectedCoalitionProgram.start_date).toLocaleDateString()}`}
+                      {selectedCoalitionProgram.start_date &&
+                        selectedCoalitionProgram.end_date &&
+                        " · "}
+                      {selectedCoalitionProgram.end_date &&
+                        `Ends ${new Date(selectedCoalitionProgram.end_date).toLocaleDateString()}`}
+                    </div>
+                  )}
+
+                  {(selectedCoalitionProgram.contact_email ||
+                    selectedCoalitionProgram.contact_phone) && (
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-2">
+                      <h4 className="text-sm font-medium text-gray-900">
+                        Program Contact
+                      </h4>
+                      {selectedCoalitionProgram.contact_email && (
+                        <button
+                          onClick={() =>
+                            (window.location.href = `mailto:${selectedCoalitionProgram.contact_email}`)
+                          }
+                          className="w-full flex items-center gap-3 p-2.5 bg-white rounded-lg hover:bg-purple-50 transition-colors border border-gray-100 text-left"
+                        >
+                          <Mail className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                          <span className="text-sm text-gray-700 truncate">
+                            {selectedCoalitionProgram.contact_email}
+                          </span>
+                        </button>
+                      )}
+                      {selectedCoalitionProgram.contact_phone && (
+                        <button
+                          onClick={() =>
+                            (window.location.href = `tel:${selectedCoalitionProgram.contact_phone}`)
+                          }
+                          className="w-full flex items-center gap-3 p-2.5 bg-white rounded-lg hover:bg-purple-50 transition-colors border border-gray-100 text-left"
+                        >
+                          <Phone className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                          <span className="text-sm text-gray-700">
+                            {selectedCoalitionProgram.contact_phone}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

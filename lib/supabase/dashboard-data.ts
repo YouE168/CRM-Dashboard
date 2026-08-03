@@ -1232,6 +1232,385 @@ export function subscribeToAllPartnersData(onChange: () => void) {
   };
 }
 
+// ---------------------------------------------------------------------
+// Coalition dashboard - real Supabase backing, mirrors the partner
+// section above exactly. Previously the entire Coalition Leader
+// dashboard ran on localStorage("coalition_dashboard_data") - hero
+// numbers, meetings, initiatives, and resources were all fake and never
+// touched the database.
+// ---------------------------------------------------------------------
+export interface CoalitionProfileData {
+  user_id: string;
+  hero_title: string | null;
+  hero_subtitle: string | null;
+  stat_active_coalitions: number;
+  stat_counties_served: number;
+  stat_active_projects: number;
+  metric_coalition_members: number;
+  metric_meetings_held: number;
+  metric_projects_initiated: number;
+  metric_residents_impacted: number;
+  updated_at: string;
+}
+
+export async function getCoalitionProfileData(
+  userId: string,
+): Promise<CoalitionProfileData | null> {
+  const { data, error } = await supabase
+    .from("coalition_profile_data")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function saveCoalitionProfileData(
+  userId: string,
+  fields: Partial<Omit<CoalitionProfileData, "user_id" | "updated_at">>,
+): Promise<void> {
+  const { error } = await supabase.from("coalition_profile_data").upsert(
+    { user_id: userId, ...fields, updated_at: new Date().toISOString() },
+    { onConflict: "user_id" },
+  );
+  if (error) throw error;
+}
+
+export interface CoalitionMeetingRow {
+  id: string;
+  user_id: string;
+  title: string;
+  date: string | null;
+  time: string | null;
+  type: string;
+  link: string | null;
+  meeting_id: string | null;
+  passcode: string | null;
+  location: string | null;
+  description: string | null;
+  created_at: string;
+}
+
+export async function getCoalitionMeetings(
+  userId: string,
+): Promise<CoalitionMeetingRow[]> {
+  const { data, error } = await supabase
+    .from("coalition_meetings")
+    .select("*")
+    .eq("user_id", userId)
+    .order("date", { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+export async function addCoalitionMeeting(
+  userId: string,
+  fields: {
+    title: string;
+    date?: string;
+    time?: string;
+    type?: string;
+    link?: string;
+    meeting_id?: string;
+    passcode?: string;
+    location?: string;
+    description?: string;
+  },
+): Promise<void> {
+  const { error } = await supabase.from("coalition_meetings").insert({
+    user_id: userId,
+    title: fields.title,
+    date: fields.date || null,
+    time: fields.time || null,
+    type: fields.type || "virtual",
+    link: fields.link || null,
+    meeting_id: fields.meeting_id || null,
+    passcode: fields.passcode || null,
+    location: fields.location || null,
+    description: fields.description || null,
+  });
+  if (error) throw error;
+}
+
+export async function updateCoalitionMeeting(
+  id: string,
+  fields: Partial<
+    Pick<
+      CoalitionMeetingRow,
+      | "title"
+      | "date"
+      | "time"
+      | "type"
+      | "link"
+      | "meeting_id"
+      | "passcode"
+      | "location"
+      | "description"
+    >
+  >,
+): Promise<void> {
+  const { error } = await supabase
+    .from("coalition_meetings")
+    .update(fields)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteCoalitionMeeting(id: string): Promise<void> {
+  const { error } = await supabase.from("coalition_meetings").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export interface CoalitionInitiativeRow {
+  id: string;
+  user_id: string;
+  title: string;
+  status: string;
+  progress: number;
+  description: string | null;
+  start_date: string | null;
+  target_date: string | null;
+  created_at: string;
+}
+
+export async function getCoalitionInitiatives(
+  userId: string,
+): Promise<CoalitionInitiativeRow[]> {
+  const { data, error } = await supabase
+    .from("coalition_initiatives")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function addCoalitionInitiative(
+  userId: string,
+  fields: {
+    title: string;
+    status?: string;
+    progress?: number;
+    description?: string;
+    start_date?: string;
+    target_date?: string;
+  },
+): Promise<void> {
+  const { error } = await supabase.from("coalition_initiatives").insert({
+    user_id: userId,
+    title: fields.title,
+    status: fields.status || "Proposed",
+    progress: fields.progress ?? 0,
+    description: fields.description || null,
+    start_date: fields.start_date || null,
+    target_date: fields.target_date || null,
+  });
+  if (error) throw error;
+}
+
+export async function updateCoalitionInitiative(
+  id: string,
+  fields: Partial<
+    Pick<
+      CoalitionInitiativeRow,
+      "title" | "status" | "progress" | "description" | "start_date" | "target_date"
+    >
+  >,
+): Promise<void> {
+  const { error } = await supabase
+    .from("coalition_initiatives")
+    .update(fields)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteCoalitionInitiative(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("coalition_initiatives")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export interface CoalitionResourceRow {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  link: string | null;
+  created_at: string;
+}
+
+export async function getCoalitionResources(
+  userId: string,
+): Promise<CoalitionResourceRow[]> {
+  const { data, error } = await supabase
+    .from("coalition_resources")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function addCoalitionResource(
+  userId: string,
+  fields: { title: string; description?: string; type?: string; link?: string },
+): Promise<void> {
+  const { error } = await supabase.from("coalition_resources").insert({
+    user_id: userId,
+    title: fields.title,
+    description: fields.description || null,
+    type: fields.type || "Available",
+    link: fields.link || null,
+  });
+  if (error) throw error;
+}
+
+export async function updateCoalitionResource(
+  id: string,
+  fields: Partial<Pick<CoalitionResourceRow, "title" | "description" | "type" | "link">>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("coalition_resources")
+    .update(fields)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteCoalitionResource(id: string): Promise<void> {
+  const { error } = await supabase.from("coalition_resources").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export function subscribeToCoalitionData(onChange: () => void) {
+  const channelName = `coalition-data-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on("postgres_changes", { event: "*", schema: "public", table: "coalition_profile_data" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "coalition_meetings" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "coalition_initiatives" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "coalition_resources" }, onChange)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// Admin "Coalitions" view - mirrors getAllPartnersOverview exactly.
+export interface CoalitionOverviewRow {
+  userId: string;
+  name: string;
+  email: string;
+  organization: string | null;
+  profile: CoalitionProfileData | null;
+  meetings: CoalitionMeetingRow[];
+  initiatives: CoalitionInitiativeRow[];
+  resources: CoalitionResourceRow[];
+  programs: UserProgramRow[];
+}
+
+export async function getAllCoalitionsOverview(): Promise<CoalitionOverviewRow[]> {
+  const { data: coalitionUsers, error: usersError } = await supabase
+    .from("users")
+    .select("id, name, email")
+    .eq("primary_role", "coalition");
+  if (usersError) throw usersError;
+  if (!coalitionUsers || coalitionUsers.length === 0) return [];
+
+  const userIds = coalitionUsers.map((u) => u.id);
+  const [
+    { data: orgProfiles, error: orgError },
+    { data: profiles, error: profilesError },
+    { data: meetings, error: meetingsError },
+    { data: initiatives, error: initiativesError },
+    { data: resources, error: resourcesError },
+    { data: enrollments, error: enrollError },
+    { data: allPrograms, error: programsError },
+  ] = await Promise.all([
+    supabase.from("profiles").select("id, organization").in("id", userIds),
+    supabase.from("coalition_profile_data").select("*").in("user_id", userIds),
+    supabase
+      .from("coalition_meetings")
+      .select("*")
+      .in("user_id", userIds)
+      .order("date", { ascending: true }),
+    supabase
+      .from("coalition_initiatives")
+      .select("*")
+      .in("user_id", userIds)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("coalition_resources")
+      .select("*")
+      .in("user_id", userIds)
+      .order("created_at", { ascending: false }),
+    supabase.from("user_programs").select("*").in("user_id", userIds),
+    supabase.from("programs").select("*"),
+  ]);
+  if (orgError) throw orgError;
+  if (profilesError) throw profilesError;
+  if (meetingsError) throw meetingsError;
+  if (initiativesError) throw initiativesError;
+  if (resourcesError) throw resourcesError;
+  if (enrollError) throw enrollError;
+  if (programsError) throw programsError;
+
+  const programById = Object.fromEntries((allPrograms || []).map((p) => [p.id, p]));
+  const programsByUser = (enrollments || []).reduce<Record<string, UserProgramRow[]>>(
+    (acc, e) => {
+      const program = programById[e.program_id];
+      if (!program) return acc;
+      const row: UserProgramRow = {
+        user_program_id: e.id,
+        program_id: program.id,
+        name: program.name,
+        description: program.description,
+        status: program.status,
+        start_date: program.start_date,
+        end_date: program.end_date,
+        icon: program.icon,
+        color: program.color,
+        contact_email: program.contact_email,
+        contact_phone: program.contact_phone,
+        progress: e.progress,
+        approved: e.approved,
+      };
+      (acc[e.user_id] ||= []).push(row);
+      return acc;
+    },
+    {},
+  );
+
+  return coalitionUsers.map((u) => ({
+    userId: u.id,
+    name: u.name || u.email,
+    email: u.email,
+    organization:
+      (orgProfiles || []).find((p) => p.id === u.id)?.organization || null,
+    profile: (profiles || []).find((p) => p.user_id === u.id) || null,
+    meetings: (meetings || []).filter((m) => m.user_id === u.id),
+    initiatives: (initiatives || []).filter((i) => i.user_id === u.id),
+    resources: (resources || []).filter((r) => r.user_id === u.id),
+    programs: programsByUser[u.id] || [],
+  }));
+}
+
+export function subscribeToAllCoalitionsData(onChange: () => void) {
+  const channelName = `admin-coalitions-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on("postgres_changes", { event: "*", schema: "public", table: "coalition_profile_data" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "coalition_meetings" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "coalition_initiatives" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "coalition_resources" }, onChange)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export interface AnalyticsDataRow {
   program: string;
   county: string;

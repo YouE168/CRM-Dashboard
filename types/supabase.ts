@@ -1224,6 +1224,159 @@ export type Database = {
         };
         Relationships: [];
       };
+      coalition_profile_data: {
+        Row: {
+          user_id: string;
+          hero_title: string | null;
+          hero_subtitle: string | null;
+          stat_active_coalitions: number;
+          stat_counties_served: number;
+          stat_active_projects: number;
+          metric_coalition_members: number;
+          metric_meetings_held: number;
+          metric_projects_initiated: number;
+          metric_residents_impacted: number;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          hero_title?: string | null;
+          hero_subtitle?: string | null;
+          stat_active_coalitions?: number;
+          stat_counties_served?: number;
+          stat_active_projects?: number;
+          metric_coalition_members?: number;
+          metric_meetings_held?: number;
+          metric_projects_initiated?: number;
+          metric_residents_impacted?: number;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          hero_title?: string | null;
+          hero_subtitle?: string | null;
+          stat_active_coalitions?: number;
+          stat_counties_served?: number;
+          stat_active_projects?: number;
+          metric_coalition_members?: number;
+          metric_meetings_held?: number;
+          metric_projects_initiated?: number;
+          metric_residents_impacted?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      coalition_meetings: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          date: string | null;
+          time: string | null;
+          type: string;
+          link: string | null;
+          meeting_id: string | null;
+          passcode: string | null;
+          location: string | null;
+          description: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          date?: string | null;
+          time?: string | null;
+          type?: string;
+          link?: string | null;
+          meeting_id?: string | null;
+          passcode?: string | null;
+          location?: string | null;
+          description?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          date?: string | null;
+          time?: string | null;
+          type?: string;
+          link?: string | null;
+          meeting_id?: string | null;
+          passcode?: string | null;
+          location?: string | null;
+          description?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      coalition_initiatives: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          status: string;
+          progress: number;
+          description: string | null;
+          start_date: string | null;
+          target_date: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          status?: string;
+          progress?: number;
+          description?: string | null;
+          start_date?: string | null;
+          target_date?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          status?: string;
+          progress?: number;
+          description?: string | null;
+          start_date?: string | null;
+          target_date?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      coalition_resources: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          description: string | null;
+          type: string;
+          link: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          description?: string | null;
+          type?: string;
+          link?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          description?: string | null;
+          type?: string;
+          link?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
