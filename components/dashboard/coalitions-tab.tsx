@@ -33,6 +33,7 @@ export function CoalitionsTab() {
   const [addingMeeting, setAddingMeeting] = useState(false);
   const [newMeetingTitle, setNewMeetingTitle] = useState("");
   const [newMeetingDate, setNewMeetingDate] = useState("");
+  const [newMeetingLink, setNewMeetingLink] = useState("");
   const [addingInitiative, setAddingInitiative] = useState(false);
   const [newInitiativeTitle, setNewInitiativeTitle] = useState("");
   const [addingResource, setAddingResource] = useState(false);
@@ -289,6 +290,13 @@ export function CoalitionsTab() {
                         onChange={(e) => setNewMeetingTitle(e.target.value)}
                         className="w-full border rounded-lg px-2 py-1 text-sm"
                       />
+                      <input
+                        type="text"
+                        placeholder="Zoom link (optional) - e.g. https://zoom.us/j/123456789"
+                        value={newMeetingLink}
+                        onChange={(e) => setNewMeetingLink(e.target.value)}
+                        className="w-full border rounded-lg px-2 py-1 text-sm"
+                      />
                       <div className="flex gap-2">
                         <input
                           type="date"
@@ -302,9 +310,12 @@ export function CoalitionsTab() {
                             await addCoalitionMeeting(selected.userId, {
                               title: newMeetingTitle.trim(),
                               date: newMeetingDate || undefined,
+                              link: newMeetingLink.trim() || undefined,
+                              type: newMeetingLink.trim() ? "virtual" : undefined,
                             });
                             setNewMeetingTitle("");
                             setNewMeetingDate("");
+                            setNewMeetingLink("");
                             setAddingMeeting(false);
                           }}
                           className="px-3 py-1 bg-purple-600 text-white rounded-lg text-sm"
@@ -337,6 +348,17 @@ export function CoalitionsTab() {
                               {" · "}
                               {m.type === "virtual" ? "Virtual" : "In Person"}
                             </p>
+                            {m.link && (
+                              <a
+                                href={m.link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1 mt-1"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                Join Zoom meeting
+                              </a>
+                            )}
                           </div>
                           <button
                             onClick={async () => {

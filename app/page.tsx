@@ -1295,75 +1295,96 @@ function CoalitionDashboard({
                                 Zoom Meeting
                               </span>
                             </div>
-                            {meeting.meeting_id && (
-                              <p className="text-sm text-gray-600">
-                                Meeting ID:{" "}
-                                <span className="font-mono">
-                                  {meeting.meeting_id}
-                                </span>
-                              </p>
-                            )}
-                            {meeting.passcode && (
-                              <p className="text-sm text-gray-600">
-                                Passcode:{" "}
-                                <span className="font-mono">
-                                  {meeting.passcode}
-                                </span>
-                              </p>
-                            )}
-                            <div className="flex gap-2 mt-2">
-                              <input
-                                type="text"
-                                id={`zoomMeetingId_${meeting.id}`}
-                                placeholder="Enter Zoom Meeting ID"
-                                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              />
-                              <input
-                                type="text"
-                                id={`zoomPasscode_${meeting.id}`}
-                                placeholder="Passcode"
-                                className="w-24 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              />
-                            </div>
-                            <button
-                              onClick={() => {
-                                const meetingIdInput = document.getElementById(
-                                  `zoomMeetingId_${meeting.id}`,
-                                ) as HTMLInputElement;
-                                const passcodeInput = document.getElementById(
-                                  `zoomPasscode_${meeting.id}`,
-                                ) as HTMLInputElement;
-
-                                const meetingId =
-                                  meetingIdInput?.value || meeting.meeting_id;
-                                const passcode =
-                                  passcodeInput?.value || meeting.passcode;
-
-                                if (!meetingId) {
-                                  showToast(
-                                    "Please enter a Zoom Meeting ID",
-                                    "error",
-                                  );
-                                  return;
+                            {meeting.link ? (
+                              // Jody (or the coalition leader) already
+                              // provided a full Zoom link for this meeting -
+                              // skip the manual Meeting ID/passcode entry
+                              // and go straight to it.
+                              <button
+                                onClick={() =>
+                                  window.open(meeting.link!, "_blank")
                                 }
+                                className="w-full px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-1"
+                              >
+                                <Video className="h-3 w-3" />
+                                Join Zoom Meeting
+                              </button>
+                            ) : (
+                              <>
+                                {meeting.meeting_id && (
+                                  <p className="text-sm text-gray-600">
+                                    Meeting ID:{" "}
+                                    <span className="font-mono">
+                                      {meeting.meeting_id}
+                                    </span>
+                                  </p>
+                                )}
+                                {meeting.passcode && (
+                                  <p className="text-sm text-gray-600">
+                                    Passcode:{" "}
+                                    <span className="font-mono">
+                                      {meeting.passcode}
+                                    </span>
+                                  </p>
+                                )}
+                                <div className="flex gap-2 mt-2">
+                                  <input
+                                    type="text"
+                                    id={`zoomMeetingId_${meeting.id}`}
+                                    placeholder="Enter Zoom Meeting ID"
+                                    className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                  <input
+                                    type="text"
+                                    id={`zoomPasscode_${meeting.id}`}
+                                    placeholder="Passcode"
+                                    className="w-24 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    const meetingIdInput =
+                                      document.getElementById(
+                                        `zoomMeetingId_${meeting.id}`,
+                                      ) as HTMLInputElement;
+                                    const passcodeInput =
+                                      document.getElementById(
+                                        `zoomPasscode_${meeting.id}`,
+                                      ) as HTMLInputElement;
 
-                                let zoomUrl = `https://zoom.us/j/${meetingId}`;
-                                if (passcode) {
-                                  zoomUrl += `?pwd=${encodeURIComponent(
-                                    passcode,
-                                  )}`;
-                                }
-                                window.open(zoomUrl, "_blank");
-                              }}
-                              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1"
-                            >
-                              <Video className="h-3 w-3" />
-                              Join Zoom Meeting
-                            </button>
-                            <p className="text-xs text-gray-400 mt-1">
-                              💡 Enter the Meeting ID and passcode provided by
-                              your meeting host
-                            </p>
+                                    const meetingId =
+                                      meetingIdInput?.value ||
+                                      meeting.meeting_id;
+                                    const passcode =
+                                      passcodeInput?.value || meeting.passcode;
+
+                                    if (!meetingId) {
+                                      showToast(
+                                        "Please enter a Zoom Meeting ID",
+                                        "error",
+                                      );
+                                      return;
+                                    }
+
+                                    let zoomUrl = `https://zoom.us/j/${meetingId}`;
+                                    if (passcode) {
+                                      zoomUrl += `?pwd=${encodeURIComponent(
+                                        passcode,
+                                      )}`;
+                                    }
+                                    window.open(zoomUrl, "_blank");
+                                  }}
+                                  className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1"
+                                >
+                                  <Video className="h-3 w-3" />
+                                  Join Zoom Meeting
+                                </button>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  💡 Enter the Meeting ID and passcode provided
+                                  by your meeting host
+                                </p>
+                              </>
+                            )}
                           </>
                         )}
                       </div>
