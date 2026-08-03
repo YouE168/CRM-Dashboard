@@ -90,7 +90,6 @@ interface Participant {
   status: string;
   joinedAt: string;
   role?: string;
-  businessProfessionalStatus?: string;
   approvedPrograms?: string[];
 }
 
@@ -494,11 +493,10 @@ export default function ProgramManagementPage() {
   // (user_programs.approved), replacing the old
   // localStorage("users")/localStorage(`profile_${email}`) reads, which
   // are always empty now that signup/login use real Supabase auth. Note:
-  // the "programs" (self-reported interest), "mentor", and
-  // "businessProfessionalStatus" fields below have no real backing table
-  // yet, so the Approvals and Mentor Matching tabs (which filter on
-  // "programs") will still show empty until those are wired up too - only
-  // the Program Access tab is fully real right now.
+  // the "programs" (self-reported interest) and "mentor" fields below have
+  // no real backing table yet, so the Mentor Matching tab (which filters on
+  // "programs") will still show empty until that's wired up too - only the
+  // Program Access tab is fully real right now.
   const loadParticipants = async () => {
     try {
       const real = await getProgramAccessParticipants();
@@ -512,7 +510,6 @@ export default function ProgramManagementPage() {
           status: "active",
           joinedAt: "",
           role: p.primary_role,
-          businessProfessionalStatus: "pending",
           approvedPrograms: p.approvedProgramNames,
         })),
       );
@@ -676,33 +673,6 @@ export default function ProgramManagementPage() {
     );
     savePrograms(updatedPrograms);
     setSelectedProgram(updatedProgram);
-  };
-
-  const updateParticipantStatus = (
-    email: string,
-    status: "approved" | "pending" | "rejected",
-  ) => {
-    const profile = JSON.parse(
-      localStorage.getItem(`profile_${email}`) || "{}",
-    );
-    profile.businessProfessionalStatus = status;
-    localStorage.setItem(`profile_${email}`, JSON.stringify(profile));
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    const updatedUsers = users.map((u: any) => {
-      if (u.email === email) {
-        return { ...u, businessProfessionalStatus: status };
-      }
-      return u;
-    });
-    localStorage.setItem("users", JSON.stringify(updatedUsers));
-    setParticipants((prev) =>
-      prev.map((p) =>
-        p.email === email ? { ...p, businessProfessionalStatus: status } : p,
-      ),
-    );
-    alert(
-      `✅ ${status === "approved" ? "Approved" : status === "rejected" ? "Rejected" : "Pending"} ${email}`,
-    );
   };
 
   // Real write to participants.mentor - this is what the mentee/
@@ -998,20 +968,6 @@ export default function ProgramManagementPage() {
                       >
                         <Calendar className="h-4 w-4" />
                         Sessions
-                      </button>
-                    )}
-                    {isJodyProgram && (
-                      <button
-                        key="tab-approvals"
-                        onClick={() => setActiveTab("participants")}
-                        className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
-                          activeTab === "participants"
-                            ? "border-emerald-500 text-emerald-600"
-                            : "border-transparent text-gray-500 hover:text-gray-700"
-                        }`}
-                      >
-                        <Users className="h-4 w-4" />
-                        Approvals
                       </button>
                     )}
                     {isJodyProgram && (
@@ -1357,112 +1313,6 @@ export default function ProgramManagementPage() {
                   )}
 
                   {/* APPROVALS TAB */}
-                  {activeTab === "participants" && isJodyProgram && (
-                    <div>
-                      <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 mb-4">
-                        <p className="text-sm text-amber-700 flex items-center gap-2">
-                          <Users className="h-4 w-4" />
-                          Approve or reject participants for this program.
-                        </p>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="border-b border-gray-200">
-                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
-                                Participant
-                              </th>
-                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
-                                Email
-                              </th>
-                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
-                                Status
-                              </th>
-                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">
-                                Action
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {participants
-                              .filter((p) =>
-                                p.programs.includes(selectedProgram.name),
-                              )
-                              .map((p, idx) => (
-                                <tr
-                                  key={`participant-${p.email}-${idx}`}
-                                  className="border-b border-gray-100 hover:bg-gray-50"
-                                >
-                                  <td className="py-2 px-3 text-sm text-gray-900">
-                                    {p.name}
-                                  </td>
-                                  <td className="py-2 px-3 text-sm text-gray-500">
-                                    {p.email}
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <span
-                                      className={`text-xs px-2 py-0.5 rounded-full ${
-                                        p.businessProfessionalStatus ===
-                                          "approved" ||
-                                        p.businessProfessionalStatus ===
-                                          "active"
-                                          ? "bg-green-100 text-green-700"
-                                          : p.businessProfessionalStatus ===
-                                              "rejected"
-                                            ? "bg-red-100 text-red-700"
-                                            : "bg-yellow-100 text-yellow-700"
-                                      }`}
-                                    >
-                                      {p.businessProfessionalStatus ||
-                                        "pending"}
-                                    </span>
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <div className="flex gap-2">
-                                      {p.businessProfessionalStatus !==
-                                        "approved" &&
-                                        p.businessProfessionalStatus !==
-                                          "active" && (
-                                          <button
-                                            key={`approve-${p.email}`}
-                                            onClick={() =>
-                                              updateParticipantStatus(
-                                                p.email,
-                                                "approved",
-                                              )
-                                            }
-                                            className="text-xs bg-green-600 text-white px-2 py-1 rounded-lg hover:bg-green-700 flex items-center gap-1"
-                                          >
-                                            <Check className="h-3 w-3" />
-                                            Approve
-                                          </button>
-                                        )}
-                                      {p.businessProfessionalStatus !==
-                                        "rejected" && (
-                                        <button
-                                          key={`reject-${p.email}`}
-                                          onClick={() =>
-                                            updateParticipantStatus(
-                                              p.email,
-                                              "rejected",
-                                            )
-                                          }
-                                          className="text-xs bg-red-600 text-white px-2 py-1 rounded-lg hover:bg-red-700 flex items-center gap-1"
-                                        >
-                                          <X className="h-3 w-3" />
-                                          Reject
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
                   {/* PROGRAM ACCESS TAB */}
                   {activeTab === "program-approvals" && isJodyProgram && (
                     <div>
