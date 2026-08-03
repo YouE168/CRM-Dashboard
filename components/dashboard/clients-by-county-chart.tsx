@@ -1,12 +1,7 @@
 "use client";
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { useState, useEffect, useCallback } from "react";
-import {
-  getClientsByCountyChart,
-  subscribeToDashboardChanges,
-  type ChartRow,
-} from "@/lib/supabase/dashboard-data";
+import type { ChartRow } from "@/lib/supabase/dashboard-data";
 
 const COLORS = [
   "#10b981",
@@ -22,35 +17,20 @@ const COLORS = [
   "#a855f7",
 ];
 
-export function ClientsByCountyChart() {
-  const [data, setData] = useState<ChartRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const loadData = useCallback(async () => {
-    try {
-      const rows = await getClientsByCountyChart();
-      setData(rows);
-    } catch (err) {
-      console.error("Failed to load clients-by-county chart:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-    const unsubscribe = subscribeToDashboardChanges(loadData);
-    return unsubscribe;
-  }, [loadData]);
-
+// Data now comes from the caller (the real, admin-editable County
+// Distribution report on the Reports page) instead of self-fetching from
+// the old clients_by_county snapshot table - that table had no writer
+// anywhere and was a second, disconnected "county" number living right
+// next to the real one.
+export function ClientsByCountyChart({ data }: { data: ChartRow[] }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
       <h3 className="text-sm font-semibold text-gray-900 mb-2">
         Clients by County
       </h3>
-      {loading ? (
-        <div className="h-[180px] flex items-center justify-center text-xs text-gray-400">
-          Loading…
+      {data.length === 0 ? (
+        <div className="h-[180px] flex items-center justify-center text-xs text-gray-400 text-center px-4">
+          No county data yet - add it from the County Distribution report.
         </div>
       ) : (
         <>

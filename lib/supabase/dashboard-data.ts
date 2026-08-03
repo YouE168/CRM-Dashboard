@@ -107,14 +107,6 @@ export async function getClientsByProgramChart(): Promise<ChartRow[]> {
   return data.map((r) => ({ label: r.program_name, value: r.count }));
 }
 
-export async function getClientsByCountyChart(): Promise<ChartRow[]> {
-  const { data, error } = await supabase
-    .from("clients_by_county")
-    .select("county, count");
-  if (error) throw error;
-  return data.map((r) => ({ label: r.county, value: r.count }));
-}
-
 export async function getSessionsPerMonth(): Promise<SessionMonthRow[]> {
   const { data, error } = await supabase
     .from("sessions_per_month")
@@ -134,7 +126,6 @@ export function subscribeToDashboardChanges(onChange: () => void) {
     .on("postgres_changes", { event: "*", schema: "public", table: "outcome_kpis" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "participants" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "clients_by_program" }, onChange)
-    .on("postgres_changes", { event: "*", schema: "public", table: "clients_by_county" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "sessions_per_month" }, onChange)
     .subscribe();
 
@@ -147,13 +138,12 @@ export function subscribeToDashboardChanges(onChange: () => void) {
 // LIVE computed replacements for the snapshot tables above.
 // overview_stats / outcome_kpis / analytics_data / clients_by_program /
 // clients_by_county / sessions_per_month / resource_stats /
-// resources_by_program are all static numbers someone enters by hand in
-// the CMS editor (app/admin/cms-editor) - they don't reflect what's
-// actually in participants/mentors/mentee_sessions/program_tracking, which
-// is why Overview could say "124 participants" while the real Participants
-// tab said "1". Everything below counts the real rows directly instead, so
+// resources_by_program were all static numbers someone entered by hand in
+// the old CMS editor (now removed) - they didn't reflect what's actually
+// in participants/mentors/mentee_sessions/program_tracking, which is why
+// Overview could say "124 participants" while the real Participants tab
+// said "1". Everything below counts the real rows directly instead, so
 // Overview/Analytics/Resources always match what Participants/Mentors show.
-// The CMS editor page still exists but no longer affects these tabs.
 // ---------------------------------------------------------------------
 
 export async function getAllMenteeSessions(): Promise<MenteeSessionRow[]> {
@@ -883,6 +873,96 @@ export function subscribeToReportData(onChange: () => void) {
     .subscribe();
   return () => {
     supabase.removeChannel(channel);
+  };
+}
+
+// The Reports page's Monthly/Participant/Mentor/Outcome sections used to
+// read from report_data too, but that JSON blob was only ever hand-edited
+// once as a demo (via the old CMS editor's "Reports Data" tab, which
+// actually only wrote to localStorage and was removed along with the rest
+// of that page) and never updated again, so it drifted from reality (e.g.
+// it still listed mentors that were deleted from the real mentors table).
+// Those four sections are now computed live from the same real tables the
+// rest of the dashboard uses. Only financialReport/countyReport stay as
+// manually-entered fields in report_data, since there's no real
+// bookkeeping or county-tracking table to compute them from - they're
+// edited via the real editor built into the Reports page itself
+// (updateReportData below), not the old CMS editor.
+
+export async function updateReportData(
+  patch: Partial<Pick<ReportData, "financialReport" | "countyReport">>,
+): Promise<void> {
+  const current = (await getReportData()) ?? ({} as ReportData);
+  const merged = { ...current, ...patch };
+  const { error } = await supabase
+    .from("report_data")
+    .upsert({ id: 1, data: merged as unknown as Record<string, unknown> });
+  if (error) throw error;
+}
+
+export interface LiveMentorActivityRow {
+  name: string;
+  mentees: number;
+  sessions: number;
+  hours: number;
+  rating: number | null;
+}
+
+// Per-mentor sessions/hours come from real mentee_sessions rows (matched
+// by mentor_name); rating comes from the real mentor_ratings table, not
+// the static mentors.rating column (nothing writes to that column - see
+// getMentorAverageRating).
+export async function getLiveMentorActivityReport(): Promise<LiveMentorActivityRow[]> {
+  const [mentors, participants, sessions, ratingsRes] = await Promise.all([
+    getMentors(),
+    getParticipants(),
+    getAllMenteeSessions(),
+    supabase.from("mentor_ratings").select("mentor_name, rating"),
+  ]);
+  if (ratingsRes.error) throw ratingsRes.error;
+
+  const ratingsByMentor: Record<string, number[]> = {};
+  for (const r of ratingsRes.data || []) {
+    (ratingsByMentor[r.mentor_name] ||= []).push(r.rating);
+  }
+
+  return mentors.map((m) => {
+    const mentees = participants.filter((p) => p.mentor === m.name).length;
+    const mentorSessions = sessions.filter((s) => s.mentor_name === m.name);
+    const hours =
+      Math.round((mentorSessions.reduce((sum, s) => sum + (s.duration || 0), 0) / 60) * 10) / 10;
+    const ratings = ratingsByMentor[m.name] || [];
+    const rating =
+      ratings.length > 0
+        ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10
+        : null;
+    return { name: m.name, mentees, sessions: mentorSessions.length, hours, rating };
+  });
+}
+
+export interface LiveOutcomeReport {
+  businessLaunches: number;
+  satisfactionPct: number | null;
+  mentorMatches: number;
+  referrals: number;
+}
+
+export async function getLiveOutcomeReport(): Promise<LiveOutcomeReport> {
+  const [outcome, participants, referralsRes] = await Promise.all([
+    getLiveOutcomeMetrics("All Programs"),
+    getParticipants(),
+    supabase.from("partner_collaborations").select("referrals"),
+  ]);
+  if (referralsRes.error) throw referralsRes.error;
+
+  const referrals = (referralsRes.data || []).reduce((sum, r) => sum + (r.referrals || 0), 0);
+  const mentorMatches = participants.filter((p) => p.mentor && p.mentor.trim() !== "").length;
+
+  return {
+    businessLaunches: outcome.businesses_launched,
+    satisfactionPct: outcome.participant_satisfaction_pct,
+    mentorMatches,
+    referrals,
   };
 }
 
@@ -1666,28 +1746,6 @@ export function subscribeToAnalyticsGrid(onChange: () => void) {
   return () => {
     supabase.removeChannel(channel);
   };
-}
-
-export async function getOverviewStatsForEdit(): Promise<(OverviewStats & { id: string }) | null> {
-  const { data, error } = await supabase
-    .from("overview_stats")
-    .select("*")
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return data as (OverviewStats & { id: string }) | null;
-}
-
-export async function updateOverviewStats(
-  id: string,
-  updates: Partial<OverviewStats>,
-): Promise<void> {
-  const { error } = await supabase
-    .from("overview_stats")
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) throw error;
 }
 
 export interface MentorProfileRow {

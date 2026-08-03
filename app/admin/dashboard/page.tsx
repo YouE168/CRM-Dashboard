@@ -1074,21 +1074,9 @@ function AdminDashboardContent() {
             </button>
           </div>
 
-          {/* Content Management - Admin/Staff Only */}
+          {/* Admin/Staff Only tools */}
           {(isAdmin || isStaff) && (
             <>
-              <div className="border-t pt-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">
-                  📝 Content Management
-                </h3>
-                <button
-                  onClick={() => router.push("/admin/cms-editor")}
-                  className="w-full text-left px-3 py-2 text-sm text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
-                >
-                  Manage All Dashboard Content →
-                </button>
-              </div>
-
               {/* Program Management */}
               <div className="border-t pt-4">
                 <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
