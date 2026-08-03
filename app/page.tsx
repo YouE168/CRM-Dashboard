@@ -397,17 +397,10 @@ function SlidePanel({
 function AllNotesModal({
   notes,
   onClose,
-  onTogglePin,
 }: {
-  notes: any[];
+  notes: { id: string; note: string; author: string; date: string }[];
   onClose: () => void;
-  onTogglePin: (noteId: number) => void;
 }) {
-  const [filter, setFilter] = useState<"all" | "pinned">("all");
-
-  const filteredNotes =
-    filter === "all" ? notes : notes.filter((n) => n.pinned);
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
@@ -428,45 +421,17 @@ function AllNotesModal({
           </button>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="px-5 pt-4 border-b border-gray-100">
-          <div className="flex gap-4">
-            <button
-              onClick={() => setFilter("all")}
-              className={`pb-2 px-1 text-sm font-medium transition-colors ${
-                filter === "all"
-                  ? "text-emerald-600 border-b-2 border-emerald-600"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              All Notes ({notes.length})
-            </button>
-            <button
-              onClick={() => setFilter("pinned")}
-              className={`pb-2 px-1 text-sm font-medium transition-colors ${
-                filter === "pinned"
-                  ? "text-emerald-600 border-b-2 border-emerald-600"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              📌 Pinned ({notes.filter((n) => n.pinned).length})
-            </button>
-          </div>
-        </div>
-
         <div className="p-5 space-y-3">
-          {filteredNotes.length === 0 ? (
+          {notes.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               <MessageCircle className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>No {filter === "pinned" ? "pinned" : ""} notes yet</p>
-              {filter === "all" && (
-                <p className="text-xs mt-1">
-                  Your mentor will leave feedback here
-                </p>
-              )}
+              <p>No notes yet</p>
+              <p className="text-xs mt-1">
+                Your mentor will leave feedback here
+              </p>
             </div>
           ) : (
-            filteredNotes.map((note) => (
+            notes.map((note) => (
               <div
                 key={note.id}
                 className="bg-gray-50 rounded-xl p-4 border border-gray-100 hover:shadow-sm transition-all"
@@ -480,17 +445,6 @@ function AllNotesModal({
                       {new Date(note.date).toLocaleDateString()}
                     </span>
                   </div>
-                  <button
-                    onClick={() => onTogglePin(note.id)}
-                    className={`p-1 rounded-lg transition-colors ${
-                      note.pinned
-                        ? "text-yellow-500 hover:text-yellow-600"
-                        : "text-gray-300 hover:text-gray-400"
-                    }`}
-                    title={note.pinned ? "Unpin note" : "Pin note"}
-                  >
-                    📌
-                  </button>
                 </div>
                 <p className="text-gray-700">{linkifyText(note.note)}</p>
               </div>
@@ -518,18 +472,10 @@ function CoalitionDashboard({
   showToast,
   router,
   profile,
-  receivedNotes,
-  showAllNotes,
-  setShowAllNotes,
-  markNoteAsRead,
 }: {
   showToast: (msg: string, type: any) => void;
   router: any;
   profile: any;
-  receivedNotes: any[];
-  showAllNotes: boolean;
-  setShowAllNotes: (val: boolean) => void;
-  markNoteAsRead: (id: number) => void;
 }) {
   // Real Supabase-backed state - replaces the old
   // localStorage("coalition_dashboard_data") blob. Mirrors the Partner
@@ -541,6 +487,64 @@ function CoalitionDashboard({
   );
   const [meetings, setMeetings] = useState<CoalitionMeetingRow[]>([]);
   const [initiatives, setInitiatives] = useState<CoalitionInitiativeRow[]>([]);
+
+  // Real "Notes from Admin" - same admin_notes table/realtime the admin
+  // dashboard's own Notes tab uses (mirrors the Partner dashboard's
+  // setup), filtered to broadcasts addressed to "all" or "coalition".
+  // Read/unread is tracked client-side only (this table has no
+  // per-recipient row to mark read against), scoped per signed-in user.
+  const [coalitionAdminNotes, setCoalitionAdminNotes] = useState<
+    AdminNoteRow[]
+  >([]);
+  const [showAllCoalitionNotes, setShowAllCoalitionNotes] = useState(false);
+  const [readCoalitionNoteIds, setReadCoalitionNoteIds] = useState<
+    Set<string>
+  >(new Set());
+
+  useEffect(() => {
+    const loadNotes = async () => {
+      try {
+        const all = await getAdminNotes();
+        setCoalitionAdminNotes(
+          all.filter(
+            (n) =>
+              n.recipient_type === "all" || n.recipient_type === "coalition",
+          ),
+        );
+      } catch (err) {
+        console.error("Failed to load admin notes:", err);
+      }
+    };
+    loadNotes();
+    const unsubscribe = subscribeToAdminNotes(loadNotes);
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (!userId || typeof window === "undefined") return;
+    const saved = localStorage.getItem(`coalition_read_notes_${userId}`);
+    if (saved) {
+      try {
+        setReadCoalitionNoteIds(new Set(JSON.parse(saved)));
+      } catch {
+        // ignore malformed cache
+      }
+    }
+  }, [userId]);
+
+  const markCoalitionNoteRead = (id: string) => {
+    setReadCoalitionNoteIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      if (userId && typeof window !== "undefined") {
+        localStorage.setItem(
+          `coalition_read_notes_${userId}`,
+          JSON.stringify([...next]),
+        );
+      }
+      return next;
+    });
+  };
   const [resourcesList, setResourcesList] = useState<CoalitionResourceRow[]>(
     [],
   );
@@ -1664,20 +1668,20 @@ function CoalitionDashboard({
                 📬 Notes from Admin
               </h3>
             </div>
-            {receivedNotes.length > 0 && (
+            {coalitionAdminNotes.length > 0 && (
               <button
-                onClick={() => setShowAllNotes(!showAllNotes)}
+                onClick={() => setShowAllCoalitionNotes(!showAllCoalitionNotes)}
                 className="text-xs text-blue-600 hover:text-blue-700"
               >
-                {showAllNotes
+                {showAllCoalitionNotes
                   ? "Show Less"
-                  : `View All (${receivedNotes.length})`}
+                  : `View All (${coalitionAdminNotes.length})`}
               </button>
             )}
           </div>
         </div>
         <div className="p-5 space-y-3">
-          {receivedNotes.length === 0 ? (
+          {coalitionAdminNotes.length === 0 ? (
             <div className="text-center py-6">
               <MessageCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
               <p className="text-gray-400 text-sm">No notes from admin yet.</p>
@@ -1686,39 +1690,43 @@ function CoalitionDashboard({
               </p>
             </div>
           ) : (
-            (showAllNotes ? receivedNotes : receivedNotes.slice(0, 3)).map(
-              (note: any) => (
+            (showAllCoalitionNotes
+              ? coalitionAdminNotes
+              : coalitionAdminNotes.slice(0, 3)
+            ).map((note) => {
+              const isRead = readCoalitionNoteIds.has(note.id);
+              return (
                 <div
                   key={note.id}
                   className={`p-3 rounded-lg transition-colors cursor-pointer ${
-                    note.read
-                      ? "bg-gray-50"
-                      : "bg-blue-50 border border-blue-200"
+                    isRead ? "bg-gray-50" : "bg-blue-50 border border-blue-200"
                   }`}
-                  onClick={() => !note.read && markNoteAsRead(note.id)}
+                  onClick={() => !isRead && markCoalitionNoteRead(note.id)}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-medium text-blue-700">
                         {note.subject}
                       </span>
-                      {!note.read && (
+                      {!isRead && (
                         <span className="text-xs px-1.5 py-0.5 bg-blue-500 text-white rounded-full">
                           New
                         </span>
                       )}
                     </div>
                     <span className="text-xs text-gray-400 whitespace-nowrap">
-                      {new Date(note.sentAt).toLocaleDateString()}
+                      {new Date(note.created_at).toLocaleDateString()}
                     </span>
                   </div>
                   <p className="text-sm text-gray-700">{linkifyText(note.message)}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    From: {note.sentBy}
-                  </p>
+                  {note.sent_by && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      From: {note.sent_by}
+                    </p>
+                  )}
                 </div>
-              ),
-            )
+              );
+            })
           )}
         </div>
       </div>
@@ -2304,18 +2312,10 @@ function PartnerDashboard({
   showToast,
   router,
   profile,
-  receivedNotes,
-  showAllNotes,
-  setShowAllNotes,
-  markNoteAsRead,
 }: {
   showToast: (msg: string, type: any) => void;
   router: any;
   profile: any;
-  receivedNotes: any[];
-  showAllNotes: boolean;
-  setShowAllNotes: (val: boolean) => void;
-  markNoteAsRead: (id: number) => void;
 }) {
   // Real Supabase-backed state - replaces the old
   // localStorage("partner_dashboard_data") blob. One profile-data row per
@@ -3790,7 +3790,6 @@ function RoleBasedDashboardContent({
   const [goalsCompleted, setGoalsCompleted] = useState(0);
   const [totalGoals, setTotalGoals] = useState(0);
   const [showAllNotesModal, setShowAllNotesModal] = useState(false);
-  const [allNotes, setAllNotes] = useState<any[]>([]);
 
   // Redirect state - handle redirects without useEffect
   const [shouldRedirect, setShouldRedirect] = useState<string | null>(null);
@@ -4199,121 +4198,68 @@ function RoleBasedDashboardContent({
     };
   }, [showProgramModal, selectedProgram, myParticipantRecords]);
 
-  // Notes state for all roles
-  const [coalitionReceivedNotes, setCoalitionReceivedNotes] = useState<any[]>(
-    [],
+  // Real "Notes from Admin" for Mentor - same admin_notes table/realtime
+  // the admin dashboard's own Notes tab uses (mirrors the Partner
+  // dashboard's setup), filtered to broadcasts addressed to "all" or
+  // "mentor". Read/unread is tracked client-side only (this table has no
+  // per-recipient row to mark read against), scoped per signed-in user's
+  // email. Replaces the old version, which depended on a dead
+  // localStorage("currentUser") effect and so was always empty for real
+  // logged-in users.
+  const [mentorAdminNotes, setMentorAdminNotes] = useState<AdminNoteRow[]>([]);
+  const [showAllMentorNotes, setShowAllMentorNotes] = useState(false);
+  const [readMentorNoteIds, setReadMentorNoteIds] = useState<Set<string>>(
+    new Set(),
   );
-  const [coalitionShowAllNotes, setCoalitionShowAllNotes] = useState(false);
-  const [partnerReceivedNotes, setPartnerReceivedNotes] = useState<any[]>([]);
-  const [partnerShowAllNotes, setPartnerShowAllNotes] = useState(false);
-  const [mentorReceivedNotes, setMentorReceivedNotes] = useState<any[]>([]);
-  const [mentorShowAllNotes, setMentorShowAllNotes] = useState(false);
-  const [menteeReceivedNotes, setMenteeReceivedNotes] = useState<any[]>([]);
-  const [menteeShowAllNotes, setMenteeShowAllNotes] = useState(false);
 
-  // Mark read functions
-  const markCoalitionNoteAsRead = (noteId: number) => {
-    const updatedNotes = coalitionReceivedNotes.map((n: any) =>
-      n.id === noteId ? { ...n, read: true } : n,
-    );
-    setCoalitionReceivedNotes(updatedNotes);
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      localStorage.setItem(
-        `notes_${currentUser}`,
-        JSON.stringify(updatedNotes),
-      );
-    }
-  };
-
-  const markPartnerNoteAsRead = (noteId: number) => {
-    const updatedNotes = partnerReceivedNotes.map((n: any) =>
-      n.id === noteId ? { ...n, read: true } : n,
-    );
-    setPartnerReceivedNotes(updatedNotes);
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      localStorage.setItem(
-        `notes_${currentUser}`,
-        JSON.stringify(updatedNotes),
-      );
-    }
-  };
-
-  const markMentorNoteAsRead = (noteId: number) => {
-    const updatedNotes = mentorReceivedNotes.map((n: any) =>
-      n.id === noteId ? { ...n, read: true } : n,
-    );
-    setMentorReceivedNotes(updatedNotes);
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      localStorage.setItem(
-        `notes_${currentUser}`,
-        JSON.stringify(updatedNotes),
-      );
-    }
-  };
-
-  const markMenteeNoteAsRead = (noteId: number) => {
-    const updatedNotes = menteeReceivedNotes.map((n: any) =>
-      n.id === noteId ? { ...n, read: true } : n,
-    );
-    setMenteeReceivedNotes(updatedNotes);
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      localStorage.setItem(
-        `notes_${currentUser}`,
-        JSON.stringify(updatedNotes),
-      );
-    }
-  };
-
-  // Main useEffect - ALL at top level
   useEffect(() => {
-    const currentUser = localStorage.getItem("currentUser");
-    if (currentUser) {
-      const savedProfile = localStorage.getItem(`profile_${currentUser}`);
-      if (savedProfile) {
-        setProfile(JSON.parse(savedProfile));
-
-        // Check for view parameter in URL
-        const params = new URLSearchParams(window.location.search);
-        const view = params.get("view");
-        if (view === "entrepreneur") {
-          setViewMode("entrepreneur");
-        }
-
-        // Load notes based on role
-        const role = JSON.parse(savedProfile)?.primaryRole || "entrepreneur";
-        const notes = JSON.parse(
-          localStorage.getItem(`notes_${currentUser}`) || "[]",
+    if (authProfile?.primaryRole !== "mentor") return;
+    const loadNotes = async () => {
+      try {
+        const all = await getAdminNotes();
+        setMentorAdminNotes(
+          all.filter(
+            (n) => n.recipient_type === "all" || n.recipient_type === "mentor",
+          ),
         );
-
-        if (role === "coalition") {
-          setCoalitionReceivedNotes(notes);
-        } else if (role === "partner") {
-          setPartnerReceivedNotes(notes);
-        } else if (role === "mentor") {
-          setMentorReceivedNotes(notes);
-        } else if (role === "mentee") {
-          setMenteeReceivedNotes(notes);
-        }
-      } else {
-        setProfile({
-          name: "User",
-          email: currentUser,
-          primaryRole: "entrepreneur",
-          selectedPrograms: [
-            "RCP Small Business Mentorship",
-            "SEED Micro-Grant",
-            "Business Professional Services",
-            "Microloan Program",
-          ],
-          createdAt: new Date().toISOString(),
-        });
+      } catch (err) {
+        console.error("Failed to load admin notes:", err);
       }
+    };
+    loadNotes();
+    const unsubscribe = subscribeToAdminNotes(loadNotes);
+    return unsubscribe;
+  }, [authProfile?.primaryRole]);
 
+  useEffect(() => {
+    if (!authProfile?.email || typeof window === "undefined") return;
+    const saved = localStorage.getItem(
+      `mentor_read_notes_${authProfile.email}`,
+    );
+    if (saved) {
+      try {
+        setReadMentorNoteIds(new Set(JSON.parse(saved)));
+      } catch {
+        // ignore malformed cache
+      }
     }
+  }, [authProfile?.email]);
+
+  const markMentorNoteRead = (id: string) => {
+    setReadMentorNoteIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      if (authProfile?.email && typeof window !== "undefined") {
+        localStorage.setItem(
+          `mentor_read_notes_${authProfile.email}`,
+          JSON.stringify([...next]),
+        );
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
     setLoading(false);
   }, []);
 
@@ -4379,10 +4325,6 @@ function RoleBasedDashboardContent({
         showToast={showToast}
         router={router}
         profile={profile}
-        receivedNotes={coalitionReceivedNotes}
-        showAllNotes={coalitionShowAllNotes}
-        setShowAllNotes={setCoalitionShowAllNotes}
-        markNoteAsRead={markCoalitionNoteAsRead}
       />
     );
   }
@@ -4394,10 +4336,6 @@ function RoleBasedDashboardContent({
         showToast={showToast}
         router={router}
         profile={profile}
-        receivedNotes={partnerReceivedNotes}
-        showAllNotes={partnerShowAllNotes}
-        setShowAllNotes={setPartnerShowAllNotes}
-        markNoteAsRead={markPartnerNoteAsRead}
       />
     );
   }
@@ -4800,20 +4738,20 @@ function RoleBasedDashboardContent({
                   📬 Notes from Admin
                 </h3>
               </div>
-              {mentorReceivedNotes.length > 0 && (
+              {mentorAdminNotes.length > 0 && (
                 <button
-                  onClick={() => setMentorShowAllNotes(!mentorShowAllNotes)}
+                  onClick={() => setShowAllMentorNotes(!showAllMentorNotes)}
                   className="text-xs text-blue-600 hover:text-blue-700"
                 >
-                  {mentorShowAllNotes
+                  {showAllMentorNotes
                     ? "Show Less"
-                    : `View All (${mentorReceivedNotes.length})`}
+                    : `View All (${mentorAdminNotes.length})`}
                 </button>
               )}
             </div>
           </div>
           <div className="p-5 space-y-3">
-            {mentorReceivedNotes.length === 0 ? (
+            {mentorAdminNotes.length === 0 ? (
               <div className="text-center py-6">
                 <MessageCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
                 <p className="text-gray-400 text-sm">
@@ -4824,40 +4762,43 @@ function RoleBasedDashboardContent({
                 </p>
               </div>
             ) : (
-              (mentorShowAllNotes
-                ? mentorReceivedNotes
-                : mentorReceivedNotes.slice(0, 3)
-              ).map((note: any) => (
-                <div
-                  key={note.id}
-                  className={`p-3 rounded-lg transition-colors cursor-pointer ${
-                    note.read
-                      ? "bg-gray-50"
-                      : "bg-blue-50 border border-blue-200"
-                  }`}
-                  onClick={() => !note.read && markMentorNoteAsRead(note.id)}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-medium text-blue-700">
-                        {note.subject}
-                      </span>
-                      {!note.read && (
-                        <span className="text-xs px-1.5 py-0.5 bg-blue-500 text-white rounded-full">
-                          New
+              (showAllMentorNotes
+                ? mentorAdminNotes
+                : mentorAdminNotes.slice(0, 3)
+              ).map((note) => {
+                const isRead = readMentorNoteIds.has(note.id);
+                return (
+                  <div
+                    key={note.id}
+                    className={`p-3 rounded-lg transition-colors cursor-pointer ${
+                      isRead ? "bg-gray-50" : "bg-blue-50 border border-blue-200"
+                    }`}
+                    onClick={() => !isRead && markMentorNoteRead(note.id)}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-medium text-blue-700">
+                          {note.subject}
                         </span>
-                      )}
+                        {!isRead && (
+                          <span className="text-xs px-1.5 py-0.5 bg-blue-500 text-white rounded-full">
+                            New
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-400 whitespace-nowrap">
+                        {new Date(note.created_at).toLocaleDateString()}
+                      </span>
                     </div>
-                    <span className="text-xs text-gray-400 whitespace-nowrap">
-                      {new Date(note.sentAt).toLocaleDateString()}
-                    </span>
+                    <p className="text-sm text-gray-700">{linkifyText(note.message)}</p>
+                    {note.sent_by && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        From: {note.sent_by}
+                      </p>
+                    )}
                   </div>
-                  <p className="text-sm text-gray-700">{linkifyText(note.message)}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    From: {note.sentBy}
-                  </p>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -5400,18 +5341,10 @@ function RoleBasedDashboardContent({
                 </div>
                 <button
                   onClick={() => {
-                    const currentUser = localStorage.getItem("currentUser");
-                    if (currentUser) {
-                      const notes = JSON.parse(
-                        localStorage.getItem(`mentee_notes_${currentUser}`) ||
-                          "[]",
-                      );
-                      if (notes.length > 0) {
-                        setAllNotes(notes);
-                        setShowAllNotesModal(true);
-                      } else {
-                        showToast("No notes yet from your mentor", "info");
-                      }
+                    if (myMentorNotes.length > 0) {
+                      setShowAllNotesModal(true);
+                    } else {
+                      showToast("No notes yet from your mentor", "info");
                     }
                   }}
                   className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
@@ -5421,115 +5354,44 @@ function RoleBasedDashboardContent({
               </div>
             </div>
             <div className="p-5 space-y-3">
-              {(() => {
-                const currentUser = localStorage.getItem("currentUser");
-                if (!currentUser) return null;
-
-                let notes = JSON.parse(
-                  localStorage.getItem(`mentee_notes_${currentUser}`) || "[]",
-                );
-
-                notes = notes.sort((a: any, b: any) => {
-                  if (a.pinned && !b.pinned) return -1;
-                  if (!a.pinned && b.pinned) return 1;
-                  return (
-                    new Date(b.date).getTime() - new Date(a.date).getTime()
-                  );
-                });
-
-                const displayNotes = notes.slice(0, 3);
-
-                if (notes.length === 0) {
-                  return (
-                    <div className="text-center py-6">
-                      <MessageCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                      <p className="text-gray-400 text-sm">No notes yet.</p>
-                      <p className="text-xs text-gray-400">
-                        Your mentor will leave feedback here.
-                      </p>
-                    </div>
-                  );
-                }
-
-                return (
-                  <>
-                    {displayNotes.map((note: any) => (
-                      <div
-                        key={note.id}
-                        className="bg-amber-50 rounded-xl p-3 border border-amber-100 group"
-                      >
-                        <div className="flex justify-between items-start mb-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-amber-700">
-                              {note.author}
-                            </span>
-                            <span className="text-xs text-gray-400">
-                              {new Date(note.date).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => {
-                              const currentUser =
-                                localStorage.getItem("currentUser");
-                              if (currentUser) {
-                                const allNotes = JSON.parse(
-                                  localStorage.getItem(
-                                    `mentee_notes_${currentUser}`,
-                                  ) || "[]",
-                                );
-                                const updatedNotes = allNotes.map((n: any) =>
-                                  n.id === note.id
-                                    ? { ...n, pinned: !n.pinned }
-                                    : n,
-                                );
-                                localStorage.setItem(
-                                  `mentee_notes_${currentUser}`,
-                                  JSON.stringify(updatedNotes),
-                                );
-                                window.location.reload();
-                              }
-                            }}
-                            className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg ${
-                              note.pinned
-                                ? "text-yellow-500"
-                                : "text-gray-400 hover:text-gray-500"
-                            }`}
-                            title={note.pinned ? "Unpin note" : "Pin note"}
-                          >
-                            📌
-                          </button>
+              {myMentorNotes.length === 0 ? (
+                <div className="text-center py-6">
+                  <MessageCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-gray-400 text-sm">No notes yet.</p>
+                  <p className="text-xs text-gray-400">
+                    Your mentor will leave feedback here.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {myMentorNotes.slice(0, 3).map((note) => (
+                    <div
+                      key={note.id}
+                      className="bg-amber-50 rounded-xl p-3 border border-amber-100"
+                    >
+                      <div className="flex justify-between items-start mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-amber-700">
+                            {note.author}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            {new Date(note.date).toLocaleDateString()}
+                          </span>
                         </div>
-                        <p className="text-sm text-gray-700">{linkifyText(note.note)}</p>
-                        {note.pinned && (
-                          <div className="mt-2 text-xs text-yellow-600 flex items-center gap-1">
-                            📌 Pinned note
-                          </div>
-                        )}
                       </div>
-                    ))}
-                    {notes.length > 3 && (
-                      <button
-                        onClick={() => {
-                          const currentUser =
-                            localStorage.getItem("currentUser");
-                          if (currentUser) {
-                            const allNotes = JSON.parse(
-                              localStorage.getItem(
-                                `mentee_notes_${currentUser}`,
-                              ) || "[]",
-                            );
-                            setAllNotes(allNotes);
-                            setShowAllNotesModal(true);
-                          }
-                        }}
-                        className="w-full text-center text-sm text-emerald-600 hover:text-emerald-700 py-2"
-                      >
-                        View all {notes.length} notes →
-                      </button>
-                    )}
-                  </>
-                );
-              })()}
+                      <p className="text-sm text-gray-700">{linkifyText(note.note)}</p>
+                    </div>
+                  ))}
+                  {myMentorNotes.length > 3 && (
+                    <button
+                      onClick={() => setShowAllNotesModal(true)}
+                      className="w-full text-center text-sm text-emerald-600 hover:text-emerald-700 py-2"
+                    >
+                      View all {myMentorNotes.length} notes →
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
@@ -5979,25 +5841,8 @@ function RoleBasedDashboardContent({
         {/* All Notes Modal - For Mentor Notes */}
         {showAllNotesModal && (
           <AllNotesModal
-            notes={allNotes}
+            notes={myMentorNotes}
             onClose={() => setShowAllNotesModal(false)}
-            onTogglePin={(noteId) => {
-              const currentUser = localStorage.getItem("currentUser");
-              if (currentUser) {
-                const notes = JSON.parse(
-                  localStorage.getItem(`mentee_notes_${currentUser}`) || "[]",
-                );
-                const updatedNotes = notes.map((n: any) =>
-                  n.id === noteId ? { ...n, pinned: !n.pinned } : n,
-                );
-                localStorage.setItem(
-                  `mentee_notes_${currentUser}`,
-                  JSON.stringify(updatedNotes),
-                );
-                setAllNotes(updatedNotes);
-                window.location.reload();
-              }
-            }}
           />
         )}
       </>

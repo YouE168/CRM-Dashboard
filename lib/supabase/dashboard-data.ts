@@ -1,17 +1,6 @@
 // lib/supabase/dashboard-data.ts
 import { supabase } from "./client";
 
-export interface OverviewStats {
-  total_participants: number;
-  total_participants_change: number;
-  active_mentors: number;
-  active_mentors_change: number;
-  sessions_this_month: number;
-  sessions_this_month_change: number;
-  avg_satisfaction: number;
-  avg_satisfaction_change: number;
-}
-
 export interface DashboardParticipant {
   id: string;
   name: string | null;
@@ -22,14 +11,6 @@ export interface DashboardParticipant {
   joined_at: string;
 }
 
-export interface OutcomeKPI {
-  key: string;
-  value: number;
-  change: number;
-  label: string | null;
-  icon: string | null;
-}
-
 export interface ChartRow {
   label: string;
   value: number;
@@ -38,25 +19,6 @@ export interface ChartRow {
 export interface SessionMonthRow {
   month: string;
   sessions: number;
-}
-
-// ---------- Overview tab ----------
-export async function getOverviewStats(): Promise<OverviewStats | null> {
-  const { data, error } = await supabase
-    .from("overview_stats")
-    .select("*")
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
-}
-
-// ---------- Analytics tab ----------
-export async function getOutcomeKPIs(): Promise<OutcomeKPI[]> {
-  const { data, error } = await supabase.from("outcome_kpis").select("*");
-  if (error) throw error;
-  return data;
 }
 
 // ---------- Participants tab ----------
@@ -98,35 +60,14 @@ export async function getParticipants(): Promise<DashboardParticipant[]> {
   }));
 }
 
-// ---------- Charts ----------
-export async function getClientsByProgramChart(): Promise<ChartRow[]> {
-  const { data, error } = await supabase
-    .from("clients_by_program")
-    .select("program_name, count");
-  if (error) throw error;
-  return data.map((r) => ({ label: r.program_name, value: r.count }));
-}
-
-export async function getSessionsPerMonth(): Promise<SessionMonthRow[]> {
-  const { data, error } = await supabase
-    .from("sessions_per_month")
-    .select("month, sessions");
-  if (error) throw error;
-  return data;
-}
-
 // ---------- Realtime ----------
-// Call from a component's useEffect. Fires onChange whenever any admin
-// edits dashboard data — from any device.
+// Call from a component's useEffect. Fires onChange whenever a participant
+// row changes - from any device.
 export function subscribeToDashboardChanges(onChange: () => void) {
   const channelName = `dashboard-changes-${Math.random().toString(36).slice(2)}`;
   const channel = supabase
     .channel(channelName)
-    .on("postgres_changes", { event: "*", schema: "public", table: "overview_stats" }, onChange)
-    .on("postgres_changes", { event: "*", schema: "public", table: "outcome_kpis" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "participants" }, onChange)
-    .on("postgres_changes", { event: "*", schema: "public", table: "clients_by_program" }, onChange)
-    .on("postgres_changes", { event: "*", schema: "public", table: "sessions_per_month" }, onChange)
     .subscribe();
 
   return () => {
