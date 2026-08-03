@@ -166,11 +166,22 @@ export function PartnersTab() {
                     <div className="flex flex-wrap gap-1">
                       {selected.programs.map((p) => {
                         // Business Professional Services is auto-approved
-                        // for every account at signup - always show it as
-                        // approved even if an older/invited account's
-                        // user_programs row is missing that flag.
-                        const isApproved =
-                          p.approved || p.name === "Business Professional Services";
+                        // for every account at signup and can't be revoked -
+                        // show it as a plain badge instead of a clickable
+                        // toggle, since there's nothing to approve/revoke.
+                        if (p.name === "Business Professional Services") {
+                          return (
+                            <span
+                              key={p.user_program_id}
+                              className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 inline-flex items-center gap-1"
+                              title="Granted automatically to every account - not editable"
+                            >
+                              <Check className="h-3 w-3" />
+                              {p.name}
+                            </span>
+                          );
+                        }
+                        const isApproved = p.approved;
                         return (
                           <button
                             key={p.user_program_id}

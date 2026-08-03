@@ -24,6 +24,8 @@ import {
 } from "@/lib/supabase/dashboard-data";
 import { PartnersTab } from "@/components/dashboard/partners-tab";
 import { CoalitionsTab } from "@/components/dashboard/coalitions-tab";
+import { MenteesTab } from "@/components/dashboard/mentees-tab";
+import { EntrepreneursTab } from "@/components/dashboard/entrepreneurs-tab";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -253,7 +255,7 @@ export default function ProgramManagementPage() {
   // self-reported by the partner) - looks similar (programs, hours,
   // outcomes) but is not the same records or the same table.
   const [pageView, setPageView] = useState<
-    "programs" | "partners" | "coalitions"
+    "programs" | "partners" | "coalitions" | "mentees" | "entrepreneurs"
   >("programs");
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
@@ -831,19 +833,47 @@ export default function ProgramManagementPage() {
           >
             🏛️ Coalitions
           </button>
+          <button
+            onClick={() => setPageView("mentees")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              pageView === "mentees"
+                ? "bg-teal-600 text-white"
+                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            🎓 Mentees
+          </button>
+          <button
+            onClick={() => setPageView("entrepreneurs")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              pageView === "entrepreneurs"
+                ? "bg-indigo-600 text-white"
+                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            💼 Entrepreneurs
+          </button>
         </div>
         <p className="text-xs text-gray-400 mb-6">
           {pageView === "programs"
             ? "Sessions, Program Access, Tracking, and Resources for mentee & entrepreneur participants enrolled in a program."
             : pageView === "partners"
               ? "Self-reported collaborations, internships, and shared resources from partner organizations - a separate set of accounts and data from the participants above, even though both reference the same programs catalog."
-              : "Self-reported meetings, initiatives, and shared resources from coalition leaders - a separate set of accounts and data from the participants above, even though both reference the same programs catalog."}
+              : pageView === "coalitions"
+                ? "Self-reported meetings, initiatives, and shared resources from coalition leaders - a separate set of accounts and data from the participants above, even though both reference the same programs catalog."
+                : pageView === "mentees"
+                  ? "Mentee accounts and which programs each one is approved for. Every mentee also has an Entrepreneur Hub view of their own account - manage that from the Entrepreneurs tab."
+                  : "Entrepreneur accounts and which programs each one is approved for - pure entrepreneur signups, plus mentees (who can toggle into this same view)."}
         </p>
 
         {pageView === "partners" ? (
           <PartnersTab />
         ) : pageView === "coalitions" ? (
           <CoalitionsTab />
+        ) : pageView === "mentees" ? (
+          <MenteesTab />
+        ) : pageView === "entrepreneurs" ? (
+          <EntrepreneursTab />
         ) : (
         <>
         {/* Program List */}

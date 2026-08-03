@@ -2179,6 +2179,100 @@ export async function setProgramAccessByName(
   if (error) throw error;
 }
 
+// Admin "Mentee"/"Entrepreneur" views - mirrors getAllPartnersOverview and
+// getAllCoalitionsOverview, but for mentee/entrepreneur accounts. These two
+// roles share one underlying account: a "mentee" primary_role account can
+// toggle into an entrepreneur view (see the Entrepreneur Hub/Mentee Hub
+// cards on their dashboard, "every mentee is also an entrepreneur"), so a
+// mentee shows up in BOTH the admin Mentee tab and the admin Entrepreneur
+// tab. A pure "entrepreneur" primary_role account only has its own
+// entrepreneur page, so it only shows up in the Entrepreneur tab.
+export interface ParticipantAccountRow {
+  userId: string;
+  name: string;
+  email: string;
+  primaryRole: string;
+  mentor: string | null;
+  status: string | null;
+  programs: UserProgramRow[];
+}
+
+export async function getAllMenteeEntrepreneurAccounts(): Promise<
+  ParticipantAccountRow[]
+> {
+  const { data: users, error: usersError } = await supabase
+    .from("users")
+    .select("id, name, email, primary_role")
+    .in("primary_role", ["mentee", "entrepreneur"]);
+  if (usersError) throw usersError;
+  if (!users || users.length === 0) return [];
+
+  const userIds = users.map((u) => u.id);
+  const [
+    { data: participants, error: participantsError },
+    { data: enrollments, error: enrollError },
+    { data: allPrograms, error: programsError },
+  ] = await Promise.all([
+    supabase.from("participants").select("user_id, mentor, status").in("user_id", userIds),
+    supabase.from("user_programs").select("*").in("user_id", userIds),
+    supabase.from("programs").select("*"),
+  ]);
+  if (participantsError) throw participantsError;
+  if (enrollError) throw enrollError;
+  if (programsError) throw programsError;
+
+  const programById = Object.fromEntries((allPrograms || []).map((p) => [p.id, p]));
+  const programsByUser = (enrollments || []).reduce<Record<string, UserProgramRow[]>>(
+    (acc, e) => {
+      const program = programById[e.program_id];
+      if (!program) return acc;
+      const row: UserProgramRow = {
+        user_program_id: e.id,
+        program_id: program.id,
+        name: program.name,
+        description: program.description,
+        status: program.status,
+        start_date: program.start_date,
+        end_date: program.end_date,
+        icon: program.icon,
+        color: program.color,
+        contact_email: program.contact_email,
+        contact_phone: program.contact_phone,
+        progress: e.progress,
+        approved: e.approved,
+      };
+      (acc[e.user_id] ||= []).push(row);
+      return acc;
+    },
+    {},
+  );
+
+  return users.map((u) => {
+    const participant = (participants || []).find((p) => p.user_id === u.id);
+    return {
+      userId: u.id,
+      name: u.name || u.email || "",
+      email: u.email || "",
+      primaryRole: u.primary_role || "",
+      mentor: participant?.mentor ?? null,
+      status: participant?.status ?? null,
+      programs: programsByUser[u.id] || [],
+    };
+  });
+}
+
+export function subscribeToMenteeEntrepreneurAccounts(onChange: () => void) {
+  const channelName = `admin-mentee-entrepreneur-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on("postgres_changes", { event: "*", schema: "public", table: "user_programs" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "participants" }, onChange)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 // ---------------------------------------------------------------------
 // Program tracking - admin-entered financial/outcomes numbers, one row
 // per (program, participant) since budget/grants/outcomes are specific
