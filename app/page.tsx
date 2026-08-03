@@ -1701,6 +1701,79 @@ function CoalitionDashboard({
         </div>
       </div>
 
+      {/* Zoom Meeting Section - Coalition */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
+          <div className="flex items-center gap-2">
+            <Video className="h-5 w-5 text-blue-600" />
+            <h3 className="font-semibold text-gray-900">Join Your Meeting</h3>
+          </div>
+        </div>
+        <div className="p-5">
+          <p className="text-sm text-gray-600 mb-3">
+            Enter your Zoom meeting ID and passcode to join your session
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Zoom Meeting ID
+              </label>
+              <input
+                type="text"
+                id="coalitionZoomMeetingId"
+                placeholder="e.g., 123 456 7890"
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Passcode (optional)
+              </label>
+              <input
+                type="text"
+                id="coalitionZoomPassword"
+                placeholder="Enter Zoom passcode"
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const meetingId = (
+                document.getElementById(
+                  "coalitionZoomMeetingId",
+                ) as HTMLInputElement
+              )?.value;
+              const password = (
+                document.getElementById(
+                  "coalitionZoomPassword",
+                ) as HTMLInputElement
+              )?.value;
+
+              if (!meetingId || meetingId.trim() === "") {
+                showToast("Please enter your Zoom Meeting ID", "error");
+                return;
+              }
+
+              const cleanMeetingId = meetingId.trim().replace(/\s/g, "");
+              let zoomUrl = `https://zoom.us/j/${cleanMeetingId}`;
+              if (password && password.trim() !== "") {
+                zoomUrl += `?pwd=${encodeURIComponent(password.trim())}`;
+              }
+
+              window.open(zoomUrl, "_blank");
+            }}
+            className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <Video className="h-4 w-4" />
+            Join Zoom Meeting
+          </button>
+          <p className="text-xs text-gray-400 text-center mt-3">
+            Tip: Your meeting host should provide the Meeting ID and passcode
+          </p>
+        </div>
+      </div>
+
       <RoundtableJoinCard
         profileName={profile?.name ?? ""}
         profileEmail={profile?.email ?? ""}
