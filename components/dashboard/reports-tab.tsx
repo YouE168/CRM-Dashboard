@@ -830,7 +830,6 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
                   {r.title}
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">{r.desc}</p>
-                <p className="text-xs text-gray-400 mt-1">{r.date}</p>
               </div>
               <span className="text-emerald-600 text-sm">→</span>
             </button>
