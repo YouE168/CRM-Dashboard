@@ -2688,3 +2688,36 @@ export async function sendMentorEmailNotification(
     return false;
   }
 }
+
+// Same real delivery path as sendMentorEmailNotification, but for
+// notifying staff (Jody) about things that need her attention - new
+// roundtable applications, new user signups, low ratings, etc. Does NOT
+// gate on the current user's own "Email notifications" toggle, since
+// that's the currently-signed-in person's personal preference (e.g. the
+// applicant filling out a form) and has nothing to do with whether staff
+// should be notified.
+export async function sendStaffNotificationEmail(
+  subject: string,
+  body: string,
+  type: string = "general",
+  to: string = "jody@hbcat.org",
+): Promise<boolean> {
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) return false;
+
+    const res = await fetch("/api/send-notification-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ to, subject, body, type }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to send staff notification email:", err);
+    return false;
+  }
+}

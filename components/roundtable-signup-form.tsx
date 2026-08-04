@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { COUNTY_LIST } from "@/lib/constants";
-import { submitRoundtableApplication } from "@/lib/supabase/dashboard-data";
-import { notifyJodyRoundtableApplication } from "@/lib/email-service";
+import {
+  submitRoundtableApplication,
+  sendStaffNotificationEmail,
+} from "@/lib/supabase/dashboard-data";
 
 export function RoundtableSignupForm({
   profileName,
@@ -143,14 +145,17 @@ export function RoundtableSignupForm({
 
             // Best-effort heads-up email to Jody - the application is
             // already real and visible on her admin dashboard either way.
-            notifyJodyRoundtableApplication({
-              name: form.name,
-              email: form.email,
-              organization: form.org,
-              county: form.county,
-              role: form.role,
-              reason: form.reason,
-            }).catch((err) =>
+            sendStaffNotificationEmail(
+              `New Leadership Roundtable Application: ${form.name}`,
+              `${form.name} just applied to join the Leadership Roundtable.\n\n` +
+                `Name: ${form.name}\nEmail: ${form.email}\n` +
+                (form.org ? `Organization: ${form.org}\n` : "") +
+                (form.county ? `County: ${form.county}\n` : "") +
+                (form.role ? `Role/Title: ${form.role}\n` : "") +
+                (form.reason ? `Why they want to join: ${form.reason}\n` : "") +
+                `\nReview and approve or decline from Admin Dashboard > Leadership Roundtable > Pending Applications.`,
+              "general",
+            ).catch((err) =>
               console.error(
                 "Failed to send roundtable application notification:",
                 err,
@@ -161,7 +166,12 @@ export function RoundtableSignupForm({
             onSuccess?.();
           } catch (err) {
             console.error("Failed to submit roundtable application:", err);
-            setError("Something went wrong submitting your application. Please try again.");
+            const detail = err instanceof Error ? err.message : "";
+            setError(
+              detail
+                ? `Something went wrong submitting your application: ${detail}`
+                : "Something went wrong submitting your application. Please try again.",
+            );
           } finally {
             setSubmitting(false);
           }

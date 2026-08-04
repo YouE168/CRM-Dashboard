@@ -414,7 +414,14 @@ export function LeadershipTab({
       showToast("Next meeting updated", "success");
     } catch (err) {
       console.error("Failed to update next meeting:", err);
-      showToast("Couldn't save the meeting details. Please try again.", "error");
+      const detail = err instanceof Error ? err.message : "";
+      showToast(
+        detail
+          ? `Couldn't save the meeting details: ${detail}`
+          : "Couldn't save the meeting details. Please try again.",
+        "error",
+        6000,
+      );
       throw err;
     }
   };
