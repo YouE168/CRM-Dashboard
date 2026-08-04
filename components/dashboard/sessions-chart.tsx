@@ -20,6 +20,7 @@ export function SessionsChart() {
   const [data, setData] = useState<SessionMonthRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(false);
   const chartRef = useRef<HTMLDivElement>(null);
 
   const loadData = useCallback(async () => {
@@ -42,14 +43,21 @@ export function SessionsChart() {
   const exportPDF = async () => {
     if (!chartRef.current) return;
     setExporting(true);
+    setExportError(false);
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import("html2canvas"),
+      // html2canvas can't parse the oklch() colors Tailwind v4's default
+      // palette uses (text-gray-900, border-gray-200, etc.) - it throws on
+      // them and the export silently does nothing. html-to-image's
+      // toCanvas renders through a real <foreignObject> in the browser
+      // instead of manually parsing every computed color string, so
+      // modern CSS colors just work.
+      const [{ toCanvas }, { default: jsPDF }] = await Promise.all([
+        import("html-to-image"),
         import("jspdf"),
       ]);
-      const canvas = await html2canvas(chartRef.current, {
+      const canvas = await toCanvas(chartRef.current, {
         backgroundColor: "#ffffff",
-        scale: 2,
+        pixelRatio: 2,
       });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({
@@ -62,6 +70,8 @@ export function SessionsChart() {
       pdf.save(`sessions-per-month-${dateLabel}.pdf`);
     } catch (err) {
       console.error("Failed to export sessions chart to PDF:", err);
+      setExportError(true);
+      setTimeout(() => setExportError(false), 4000);
     } finally {
       setExporting(false);
     }
@@ -84,7 +94,7 @@ export function SessionsChart() {
           className="flex items-center gap-1 text-xs text-gray-400 hover:text-emerald-600 transition-colors disabled:opacity-50"
         >
           <Download className="h-3.5 w-3.5" />
-          {exporting ? "Exporting…" : "PDF"}
+          {exporting ? "Exporting…" : exportError ? "Failed - retry" : "PDF"}
         </button>
       </div>
       {loading ? (
