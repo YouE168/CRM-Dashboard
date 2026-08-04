@@ -11,12 +11,14 @@ import {
   getLiveOverviewStats,
   getLiveMentorActivityReport,
   getLiveOutcomeReport,
+  getLiveClientsByCounty,
   subscribeToLiveDashboardData,
   type ReportData,
   type DashboardParticipant,
   type LiveOverviewStats,
   type LiveMentorActivityRow,
   type LiveOutcomeReport,
+  type ChartRow,
 } from "@/lib/supabase/dashboard-data";
 import {
   BarChart3,
@@ -25,13 +27,11 @@ import {
   Receipt,
   TrendingUp,
   ClipboardList,
-  Trash2,
   ArrowLeft,
   Download,
   Printer,
   Pencil,
   X,
-  Plus,
 } from "lucide-react";
 
 interface ReportsTabProps {
@@ -52,7 +52,6 @@ type ReportView =
   | "county";
 
 type FinancialReport = ReportData["financialReport"];
-type CountyReport = ReportData["countyReport"];
 
 // Edit Financial Summary - the only manually-entered report left, since
 // there's no real bookkeeping table anywhere in the schema to compute
@@ -168,121 +167,6 @@ function EditFinancialModal({
   );
 }
 
-// Edit County Distribution - same reasoning as Financial Summary: no real
-// county-tracking table exists, so this stays manually entered. Percentage
-// is always recalculated from the counts on save, never typed in directly.
-function EditCountyModal({
-  initial,
-  onClose,
-  onSave,
-}: {
-  initial: CountyReport["counties"];
-  onClose: () => void;
-  onSave: (counties: CountyReport["counties"]) => Promise<void>;
-}) {
-  const [rows, setRows] = useState<{ name: string; count: number }[]>(
-    initial.map((c) => ({ name: c.name, count: c.count })),
-  );
-  const [saving, setSaving] = useState(false);
-
-  const total = rows.reduce((sum, r) => sum + (r.count || 0), 0);
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
-        <div className="p-5 border-b border-gray-100 flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Edit County Distribution
-          </h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="p-5 space-y-3">
-          <p className="text-xs text-gray-400">
-            Percentages are calculated automatically from the counts below.
-          </p>
-          {rows.map((row, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={row.name}
-                onChange={(e) =>
-                  setRows((p) =>
-                    p.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r)),
-                  )
-                }
-                placeholder="County name"
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-              />
-              <input
-                type="number"
-                value={row.count}
-                onChange={(e) =>
-                  setRows((p) =>
-                    p.map((r, i) =>
-                      i === idx ? { ...r, count: Number(e.target.value) } : r,
-                    ),
-                  )
-                }
-                placeholder="Count"
-                className="w-24 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-              />
-              <button
-                onClick={() => setRows((p) => p.filter((_, i) => i !== idx))}
-                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-          <button
-            onClick={() => setRows((p) => [...p, { name: "", count: 0 }])}
-            className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add county
-          </button>
-          <div className="text-xs text-gray-400 pt-2 border-t border-gray-100">
-            Total: {total} participants
-          </div>
-        </div>
-        <div className="p-5 border-t border-gray-100 flex gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            disabled={saving}
-            onClick={async () => {
-              setSaving(true);
-              try {
-                const counties = rows
-                  .filter((r) => r.name.trim())
-                  .map((r) => ({
-                    name: r.name.trim(),
-                    count: r.count,
-                    percentage:
-                      total > 0 ? Math.round((r.count / total) * 100) : 0,
-                  }));
-                await onSave(counties);
-                onClose();
-              } finally {
-                setSaving(false);
-              }
-            }}
-            className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function ReportsTab({ showToast }: ReportsTabProps) {
   const [currentView, setCurrentView] = useState<ReportView>("list");
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -290,9 +174,9 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
   const [overviewStats, setOverviewStats] = useState<LiveOverviewStats | null>(null);
   const [mentorActivity, setMentorActivity] = useState<LiveMentorActivityRow[]>([]);
   const [outcomeReport, setOutcomeReport] = useState<LiveOutcomeReport | null>(null);
+  const [countyChartData, setCountyChartData] = useState<ChartRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingFinancial, setEditingFinancial] = useState(false);
-  const [editingCounty, setEditingCounty] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -308,6 +192,7 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
       setOverviewStats(overview);
       setMentorActivity(mentors);
       setOutcomeReport(outcome);
+      setCountyChartData(await getLiveClientsByCounty(parts));
     } catch (err) {
       console.error("Failed to load report data:", err);
     } finally {
@@ -339,11 +224,6 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
   const saveFinancial = async (data: FinancialReport) => {
     await updateReportData({ financialReport: data });
     showToast("Financial summary updated", "success");
-  };
-
-  const saveCounty = async (counties: CountyReport["counties"]) => {
-    await updateReportData({ countyReport: { counties } });
-    showToast("County distribution updated", "success");
   };
 
   const reports = [
@@ -674,6 +554,8 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
     </div>
   );
 
+  const countyTotal = countyChartData.reduce((sum, c) => sum + c.value, 0);
+
   const CountyReport = () => (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
       <div className="flex items-start justify-between mb-4">
@@ -683,35 +565,32 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
           </h2>
           <p className="text-sm text-gray-500 mt-1">{monthYearLabel}</p>
         </div>
-        <button
-          onClick={() => setEditingCounty(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          Edit
-        </button>
       </div>
 
       <div className="space-y-3">
-        {reportData.countyReport.counties.length === 0 ? (
+        {countyChartData.length === 0 ? (
           <p className="text-sm text-gray-400">No county data yet.</p>
         ) : (
-          reportData.countyReport.counties.map((item) => (
-            <div key={item.name}>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="font-medium text-gray-700">{item.name}</span>
-                <span className="text-gray-500">
-                  {item.count} participants ({item.percentage}%)
-                </span>
+          countyChartData.map((item) => {
+            const percentage =
+              countyTotal > 0 ? Math.round((item.value / countyTotal) * 100) : 0;
+            return (
+              <div key={item.label}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="font-medium text-gray-700">{item.label}</span>
+                  <span className="text-gray-500">
+                    {item.value} participants ({percentage}%)
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-emerald-600 h-2 rounded-full"
+                    style={{ width: `${percentage}%` }}
+                  ></div>
+                </div>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-emerald-600 h-2 rounded-full"
-                  style={{ width: `${item.percentage}%` }}
-                ></div>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
@@ -746,11 +625,6 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
         return null;
     }
   };
-
-  const countyChartData = reportData.countyReport.counties.map((c) => ({
-    label: c.name,
-    value: c.count,
-  }));
 
   // If viewing a specific report
   if (currentView !== "list") {
@@ -805,13 +679,6 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
             initial={reportData.financialReport}
             onClose={() => setEditingFinancial(false)}
             onSave={saveFinancial}
-          />
-        )}
-        {editingCounty && (
-          <EditCountyModal
-            initial={reportData.countyReport.counties}
-            onClose={() => setEditingCounty(false)}
-            onSave={saveCounty}
           />
         )}
       </div>

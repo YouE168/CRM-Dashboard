@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Calendar, ChevronDown } from "lucide-react";
-import { DATE_RANGES } from "@/lib/analytics-constants";
+import { DATE_RANGES, COUNTIES } from "@/lib/analytics-constants";
 import { getAllPrograms } from "@/lib/supabase/dashboard-data";
 
 interface FiltersProps {
@@ -22,14 +22,11 @@ interface FiltersProps {
   setSelectedDateRange: (value: string) => void;
 }
 
-// Note: county filtering was removed - there is no real county field
-// anywhere in the schema (participants/users/profiles), so it was always
-// backed by a hand-typed static list. The selectedCounty prop is kept so
-// the parent component doesn't need to change, but it's always
-// "All Counties" now.
 export function Filters({
   selectedProgram,
   setSelectedProgram,
+  selectedCounty,
+  setSelectedCounty,
   selectedDateRange,
   setSelectedDateRange,
 }: FiltersProps) {
@@ -62,6 +59,29 @@ export function Filters({
               className="text-gray-700 hover:bg-gray-50"
             >
               {program}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select value={selectedCounty} onValueChange={setSelectedCounty}>
+        <SelectTrigger className="w-[180px] bg-white border-gray-200 text-gray-700 rounded-lg shadow-sm hover:border-gray-300 focus:ring-emerald-500">
+          <SelectValue placeholder="All Counties" />
+        </SelectTrigger>
+        <SelectContent className="bg-white border-gray-200 shadow-lg">
+          <SelectItem
+            value="All Counties"
+            className="text-gray-700 hover:bg-gray-50"
+          >
+            All Counties
+          </SelectItem>
+          {COUNTIES.map((county) => (
+            <SelectItem
+              key={county}
+              value={county}
+              className="text-gray-700 hover:bg-gray-50"
+            >
+              {county}
             </SelectItem>
           ))}
         </SelectContent>

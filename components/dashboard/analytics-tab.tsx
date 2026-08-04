@@ -51,8 +51,8 @@ export default function AnalyticsTab({
     try {
       const [participantsData, operationalData, outcomeData] = await Promise.all([
         getParticipants(),
-        getLiveOperationalMetrics(selectedProgram, selectedDateRange),
-        getLiveOutcomeMetrics(selectedProgram),
+        getLiveOperationalMetrics(selectedProgram, selectedDateRange, selectedCounty),
+        getLiveOutcomeMetrics(selectedProgram, selectedCounty),
       ]);
       setParticipants(participantsData);
       setOperational(operationalData);
@@ -62,7 +62,7 @@ export default function AnalyticsTab({
     } finally {
       setLoading(false);
     }
-  }, [selectedProgram, selectedDateRange]);
+  }, [selectedProgram, selectedDateRange, selectedCounty]);
 
   useEffect(() => {
     loadAll();
@@ -73,13 +73,14 @@ export default function AnalyticsTab({
     return unsubscribe;
   }, [loadAll]);
 
-  // Participants table can only filter by program - the real
-  // `participants` table has no county column.
   const filteredParticipants = participants.filter((p) => {
     if (
       selectedProgram !== "All Programs" &&
       p.program_name !== selectedProgram
     ) {
+      return false;
+    }
+    if (selectedCounty !== "All Counties" && p.county !== selectedCounty) {
       return false;
     }
     return true;
@@ -113,8 +114,10 @@ export default function AnalyticsTab({
       <div className="mb-4 p-3 bg-green-50 rounded-lg text-sm text-green-700">
         📊{" "}
         {selectedProgram === "All Programs"
-          ? `Showing live totals across all programs for ${selectedDateRange}`
-          : `Showing live totals for "${selectedProgram}" for ${selectedDateRange}`}
+          ? "Showing live totals across all programs"
+          : `Showing live totals for "${selectedProgram}"`}
+        {selectedCounty !== "All Counties" && ` in ${selectedCounty} County`}
+        {` for ${selectedDateRange}`}
       </div>
 
       <div className="text-right mb-2">

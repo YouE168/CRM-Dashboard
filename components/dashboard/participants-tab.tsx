@@ -7,6 +7,7 @@ import { Users, UserCheck, ClipboardList, Award } from "lucide-react";
 import {
   getParticipants,
   subscribeToDashboardChanges,
+  updateParticipantCounty,
   type DashboardParticipant,
 } from "@/lib/supabase/dashboard-data";
 
@@ -30,6 +31,18 @@ export function ParticipantsTab() {
     const unsubscribe = subscribeToDashboardChanges(loadData);
     return unsubscribe;
   }, [loadData]);
+
+  const handleCountyChange = async (id: string, county: string | null) => {
+    setParticipants((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, county } : p)),
+    );
+    try {
+      await updateParticipantCounty(id, county);
+    } catch (err) {
+      console.error("Failed to update county:", err);
+      loadData();
+    }
+  };
 
   const total = participants.length;
   const active = participants.filter((p) => p.status === "active").length;
@@ -88,7 +101,9 @@ export function ParticipantsTab() {
           program: p.program_name ?? "",
           stage: p.status,
           mentor: p.mentor ?? "",
+          county: p.county,
         }))}
+        onCountyChange={handleCountyChange}
       />
     </>
   );

@@ -9,6 +9,7 @@ export interface DashboardParticipant {
   mentor: string | null;
   status: string;
   joined_at: string;
+  county: string | null;
 }
 
 export interface ChartRow {
@@ -36,6 +37,7 @@ export async function getParticipants(): Promise<DashboardParticipant[]> {
       status,
       joined_at,
       program_name,
+      county,
       users:user_id ( name, email ),
       programs:program_id ( name )
     `,
@@ -57,7 +59,21 @@ export async function getParticipants(): Promise<DashboardParticipant[]> {
     mentor: row.mentor,
     status: row.status,
     joined_at: row.joined_at,
+    county: row.county ?? null,
   }));
+}
+
+// Admins set/edit this on the Participants tab; new signups can also set it
+// going forward via the signup form. Nothing else writes to this column.
+export async function updateParticipantCounty(
+  id: string,
+  county: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from("participants")
+    .update({ county })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 // ---------- Realtime ----------
@@ -163,6 +179,20 @@ export async function getLiveClientsByProgram(
     .sort((a, b) => b.value - a.value);
 }
 
+export async function getLiveClientsByCounty(
+  participants?: DashboardParticipant[],
+): Promise<ChartRow[]> {
+  const rows = participants || (await getParticipants());
+  const counts: Record<string, number> = {};
+  for (const p of rows) {
+    const label = p.county || "Unassigned";
+    counts[label] = (counts[label] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
 export async function getLiveSessionsPerMonth(
   sessions?: MenteeSessionRow[],
 ): Promise<SessionMonthRow[]> {
@@ -211,15 +241,19 @@ export interface LiveOperationalMetrics {
 export async function getLiveOperationalMetrics(
   programName: string,
   dateRangeLabel: string,
+  countyName: string = "All Counties",
 ): Promise<LiveOperationalMetrics> {
   const [participants, sessions] = await Promise.all([
     getParticipants(),
     getAllMenteeSessions(),
   ]);
   const filteredParticipants = participants.filter(
-    (p) => programName === "All Programs" || p.program_name === programName,
+    (p) =>
+      (programName === "All Programs" || p.program_name === programName) &&
+      (countyName === "All Counties" || p.county === countyName),
   );
   const participantIds = new Set(filteredParticipants.map((p) => p.id));
+  const isFiltered = programName !== "All Programs" || countyName !== "All Counties";
   const rangeStart = dateRangeStart(dateRangeLabel);
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -227,7 +261,7 @@ export async function getLiveOperationalMetrics(
   const inRangeSessions = sessions.filter((s) => {
     const d = new Date(s.date);
     if (rangeStart && d < rangeStart) return false;
-    if (programName !== "All Programs" && s.participant_id && !participantIds.has(s.participant_id)) {
+    if (isFiltered && s.participant_id && !participantIds.has(s.participant_id)) {
       return false;
     }
     return true;
@@ -254,7 +288,10 @@ export interface LiveOutcomeMetrics {
   alumni_conversion_pct: number | null;
 }
 
-export async function getLiveOutcomeMetrics(programName: string): Promise<LiveOutcomeMetrics> {
+export async function getLiveOutcomeMetrics(
+  programName: string,
+  countyName: string = "All Counties",
+): Promise<LiveOutcomeMetrics> {
   const [programs, tracking, participants, ratingsRes] = await Promise.all([
     getAllPrograms(),
     getAllProgramTracking(),
@@ -265,11 +302,17 @@ export async function getLiveOutcomeMetrics(programName: string): Promise<LiveOu
 
   const programId =
     programName === "All Programs" ? null : programs.find((p) => p.name === programName)?.id;
-  const filteredTracking =
+  let filteredTracking =
     programName === "All Programs" ? tracking : tracking.filter((t) => t.program_id === programId);
   const filteredParticipants = participants.filter(
-    (p) => programName === "All Programs" || p.program_name === programName,
+    (p) =>
+      (programName === "All Programs" || p.program_name === programName) &&
+      (countyName === "All Counties" || p.county === countyName),
   );
+  if (countyName !== "All Counties") {
+    const participantIds = new Set(filteredParticipants.map((p) => p.id));
+    filteredTracking = filteredTracking.filter((t) => participantIds.has(t.participant_id));
+  }
 
   const ratingRows = ratingsRes.data || [];
   const satisfactionPct =
@@ -791,9 +834,6 @@ export interface ReportData {
     pendingInvoices: number;
     pendingAmount: number;
   };
-  countyReport: {
-    counties: Array<{ name: string; count: number; percentage: number }>;
-  };
 }
 
 export async function getReportData(): Promise<ReportData | null> {
@@ -824,14 +864,15 @@ export function subscribeToReportData(onChange: () => void) {
 // of that page) and never updated again, so it drifted from reality (e.g.
 // it still listed mentors that were deleted from the real mentors table).
 // Those four sections are now computed live from the same real tables the
-// rest of the dashboard uses. Only financialReport/countyReport stay as
-// manually-entered fields in report_data, since there's no real
-// bookkeeping or county-tracking table to compute them from - they're
-// edited via the real editor built into the Reports page itself
-// (updateReportData below), not the old CMS editor.
+// rest of the dashboard uses. Only financialReport stays as a
+// manually-entered field in report_data, since there's no real
+// bookkeeping table to compute it from - it's edited via the real editor
+// built into the Reports page itself (updateReportData below), not the old
+// CMS editor. County Distribution used to live here too but is now
+// computed live from participants.county (see getLiveClientsByCounty).
 
 export async function updateReportData(
-  patch: Partial<Pick<ReportData, "financialReport" | "countyReport">>,
+  patch: Partial<Pick<ReportData, "financialReport">>,
 ): Promise<void> {
   const current = (await getReportData()) ?? ({} as ReportData);
   const merged = { ...current, ...patch };

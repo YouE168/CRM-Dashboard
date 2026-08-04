@@ -370,6 +370,7 @@ export type Database = {
           user_id: string | null;
           phone: string | null;
           sessions_completed: number;
+          county: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -385,6 +386,7 @@ export type Database = {
           user_id?: string | null;
           phone?: string | null;
           sessions_completed?: number;
+          county?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -400,6 +402,7 @@ export type Database = {
           user_id?: string | null;
           phone?: string | null;
           sessions_completed?: number;
+          county?: string | null;
           created_at?: string;
           updated_at?: string;
         };

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Search } from "lucide-react";
+import { COUNTIES } from "@/lib/analytics-constants";
 
 interface Participant {
   id: string;
@@ -10,10 +11,12 @@ interface Participant {
   stage: string;
   mentor: string;
   enrolledDate?: string;
+  county?: string | null;
 }
 
 interface ParticipantsTableProps {
   participants?: Participant[];
+  onCountyChange?: (id: string, county: string | null) => void;
 }
 
 const stageBadge: Record<string, string> = {
@@ -39,6 +42,7 @@ function initials(name: string) {
 
 export function ParticipantsTable({
   participants: propParticipants,
+  onCountyChange,
 }: ParticipantsTableProps) {
   const [q, setQ] = useState("");
 
@@ -68,23 +72,27 @@ export function ParticipantsTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              {["Name", "Program", "Stage", "Assigned Mentor"].map(
-                (h) => (
-                  <th
-                    key={h}
-                    className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap"
-                  >
-                    {h}
-                  </th>
-                ),
-              )}
+              {[
+                "Name",
+                "Program",
+                "Stage",
+                "Assigned Mentor",
+                ...(onCountyChange ? ["County"] : []),
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap"
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={onCountyChange ? 5 : 4}
                   className="px-5 py-10 text-center text-sm text-gray-400"
                 >
                   No participants found.
@@ -118,6 +126,24 @@ export function ParticipantsTable({
                   <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
                     {p.mentor}
                   </td>
+                  {onCountyChange && (
+                    <td className="px-5 py-3 whitespace-nowrap">
+                      <select
+                        value={p.county ?? ""}
+                        onChange={(e) =>
+                          onCountyChange(p.id, e.target.value || null)
+                        }
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      >
+                        <option value="">Unassigned</option>
+                        {COUNTIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
