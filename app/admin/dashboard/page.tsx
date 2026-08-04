@@ -295,7 +295,7 @@ function AdminDashboardContent() {
     onConfirm: () => {},
   });
 
-  // ✅ REAL-TIME NOTIFICATIONS - Replace the hardcoded notifications
+  // Real-time notifications
   const [unreadCount, setUnreadCount] = useState(0);
 
   // Subscribe to real-time notifications
@@ -620,11 +620,11 @@ function AdminDashboardContent() {
             return;
           }
 
-          // ✅ Add real-time notification
+          // Add real-time notification
           notificationService.addNotification(
             "inapp",
             "general",
-            `✅ Access Approved: ${request.name}`,
+            `Access Approved: ${request.name}`,
             result.emailSent === false
               ? `${request.name} was approved, but the invite email failed to send. Check server logs.`
               : `${request.name} was approved for ${request.requestedRole === "program_manager" ? "Program Manager" : "Staff/Admin"} access. They've been emailed a link to set their password.`,
@@ -693,11 +693,11 @@ function AdminDashboardContent() {
             return;
           }
 
-          // ✅ Add real-time notification
+          // Add real-time notification
           notificationService.addNotification(
             "inapp",
             "general",
-            `❌ Access Rejected: ${request.name}`,
+            `Access Rejected: ${request.name}`,
             `${request.name}'s access request was rejected.`,
             { user: request },
           );
