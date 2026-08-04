@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { SessionsChart } from "./sessions-chart";
 import { ClientsByCountyChart } from "./clients-by-county-chart";
 import {
@@ -228,6 +228,8 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
   const [transactions, setTransactions] = useState<FinancialTransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showLogTransaction, setShowLogTransaction] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const reportContentRef = useRef<HTMLDivElement>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -718,15 +720,36 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
     </div>
   );
 
-  const generatePDF = () => {
-    showToast("📄 Preparing PDF export...", "info", 2000);
-    setTimeout(() => {
-      showToast(
-        "✅ PDF export complete! Your file has been downloaded.",
-        "success",
-        3000,
-      );
-    }, 1500);
+  const generatePDF = async () => {
+    if (!reportContentRef.current) return;
+    setExportingPdf(true);
+    try {
+      const [{ toCanvas }, { default: jsPDF }] = await Promise.all([
+        import("html-to-image"),
+        import("jspdf"),
+      ]);
+      const canvas = await toCanvas(reportContentRef.current, {
+        backgroundColor: "#ffffff",
+        pixelRatio: 2,
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "px",
+        format: [canvas.width, canvas.height],
+      });
+      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
+      const reportTitle = reports.find((r) => r.id === currentView)?.title || "report";
+      const fileSlug = reportTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const dateLabel = new Date().toISOString().slice(0, 10);
+      pdf.save(`${fileSlug}-${dateLabel}.pdf`);
+      showToast("PDF downloaded", "success");
+    } catch (err) {
+      console.error("Failed to export report to PDF:", err);
+      showToast("Couldn't export that report to PDF. Please try again.", "error");
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const renderReportContent = () => {
@@ -787,14 +810,15 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
             </button>
             <button
               onClick={generatePDF}
-              className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center gap-2"
+              disabled={exportingPdf}
+              className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center gap-2 disabled:opacity-50"
             >
               <Download className="h-4 w-4" />
-              Export PDF
+              {exportingPdf ? "Exporting…" : "Export PDF"}
             </button>
           </div>
         </div>
-        {renderReportContent()}
+        <div ref={reportContentRef}>{renderReportContent()}</div>
 
         {showLogTransaction && (
           <LogTransactionModal
