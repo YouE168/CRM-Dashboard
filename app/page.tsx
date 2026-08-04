@@ -64,6 +64,7 @@ import {
   subscribeToCoalitionData,
 } from "@/lib/supabase/dashboard-data";
 import { RoundtableJoinCard } from "@/components/dashboard/roundtable-join-card";
+import { DirectMessageChat } from "@/components/dashboard/direct-message-chat";
 import { linkifyText } from "@/lib/linkify";
 import { useRouter } from "next/navigation";
 import {
@@ -1731,6 +1732,12 @@ function CoalitionDashboard({
         </div>
       </div>
 
+      {/* Message Admin - Coalition */}
+      <DirectMessageChat
+        userId={userId}
+        userName={profile?.name || "Coalition Leader"}
+      />
+
       {/* Zoom Meeting Section - Coalition */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
@@ -3333,6 +3340,12 @@ function PartnerDashboard({
         </div>
       </div>
 
+      {/* Message Admin - Partner */}
+      <DirectMessageChat
+        userId={userId}
+        userName={profile?.name || "Partner"}
+      />
+
       {/* Zoom Meeting Section - Partner */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
@@ -4259,6 +4272,17 @@ function RoleBasedDashboardContent({
     });
   };
 
+  // Real auth user id for the Mentor's "Message Admin" chat - the mentee
+  // effect above already resolves this for entrepreneur/mentee roles, but
+  // mentors take a different code path, so it's fetched separately here.
+  const [mentorUserId, setMentorUserId] = useState<string | null>(null);
+  useEffect(() => {
+    if (authProfile?.primaryRole !== "mentor") return;
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setMentorUserId(data.user.id);
+    });
+  }, [authProfile?.primaryRole]);
+
   useEffect(() => {
     setLoading(false);
   }, []);
@@ -4802,6 +4826,12 @@ function RoleBasedDashboardContent({
             )}
           </div>
         </div>
+
+        {/* Message Admin - Mentor */}
+        <DirectMessageChat
+          userId={mentorUserId}
+          userName={authProfile?.name || "Mentor"}
+        />
 
         <div
           onClick={() =>

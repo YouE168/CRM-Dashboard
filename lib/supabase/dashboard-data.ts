@@ -952,6 +952,100 @@ export function subscribeToAdminNotes(onChange: () => void) {
 }
 
 // ============================================
+// DIRECT MESSAGES - private 1:1 chat between admin and a single coalition
+// leader / mentor / partner. Separate from admin_notes above, which stays
+// a one-way broadcast to a whole recipient type - this is a real
+// back-and-forth conversation tied to one specific user_id.
+// ============================================
+
+export interface DirectMessageRow {
+  id: string;
+  user_id: string;
+  sender_role: "admin" | "user";
+  sender_name: string | null;
+  message: string;
+  created_at: string;
+}
+
+export interface MessageableUserRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  primaryRole: string;
+}
+
+// Every coalition/mentor/partner account admin can start or continue a
+// conversation with - independent of whether any messages exist yet.
+export async function getMessageableUsers(): Promise<MessageableUserRow[]> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, name, email, primary_role")
+    .in("primary_role", ["coalition", "mentor", "partner"])
+    .order("name");
+  if (error) throw error;
+  return (data ?? []).map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    primaryRole: u.primary_role || "",
+  }));
+}
+
+// All conversations at once, for the admin inbox view (grouped/threaded
+// client-side by user_id) - avoids one query per person.
+export async function getAllDirectMessages(): Promise<DirectMessageRow[]> {
+  const { data, error } = await supabase
+    .from("direct_messages")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data as DirectMessageRow[];
+}
+
+// One person's thread - used on that person's own dashboard.
+export async function getDirectMessagesForUser(
+  userId: string,
+): Promise<DirectMessageRow[]> {
+  const { data, error } = await supabase
+    .from("direct_messages")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data as DirectMessageRow[];
+}
+
+export async function sendDirectMessage(
+  userId: string,
+  senderRole: "admin" | "user",
+  senderName: string,
+  message: string,
+): Promise<void> {
+  const { error } = await supabase.from("direct_messages").insert({
+    user_id: userId,
+    sender_role: senderRole,
+    sender_name: senderName,
+    message,
+  });
+  if (error) throw error;
+}
+
+export function subscribeToDirectMessages(onChange: () => void) {
+  const channelName = `direct-messages-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "direct_messages" },
+      onChange,
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ============================================
 // PARTNER DASHBOARD - real Supabase-backed replacement for what used to be
 // entirely localStorage("partner_dashboard_data"). Each partner user gets
 // one profile-data row (hero/metrics) plus their own collaborations and

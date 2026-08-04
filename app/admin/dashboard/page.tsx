@@ -9,6 +9,12 @@ import {
   getAllMenteeNotesWithContext,
   subscribeToMenteeData,
   type MenteeNoteWithContext,
+  getMessageableUsers,
+  getAllDirectMessages,
+  sendDirectMessage,
+  subscribeToDirectMessages,
+  type MessageableUserRow,
+  type DirectMessageRow,
 } from "@/lib/supabase/dashboard-data";
 import { NotificationPanel } from "@/components/dashboard/notification-panel";
 import {
@@ -86,14 +92,6 @@ interface SettingsData {
   darkMode: boolean;
   twoFactorAuth: boolean;
   dashboardLayout: string;
-}
-
-interface TeamNote {
-  id: number;
-  author: string;
-  content: string;
-  time: string;
-  pinned: boolean;
 }
 
 interface ToastState {
@@ -378,6 +376,60 @@ function AdminDashboardContent() {
     const unsubscribe = subscribeToMenteeData(loadMentorMenteeNotes);
     return unsubscribe;
   }, [loadMentorMenteeNotes]);
+
+  // Direct Messages - private 1:1 chat with each coalition/mentor/partner
+  // account, separate from the admin_notes broadcast above.
+  const [messageableUsers, setMessageableUsers] = useState<
+    MessageableUserRow[]
+  >([]);
+  const [allDirectMessages, setAllDirectMessages] = useState<
+    DirectMessageRow[]
+  >([]);
+  const [selectedMessageUserId, setSelectedMessageUserId] = useState<
+    string | null
+  >(null);
+  const [messageInput, setMessageInput] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
+
+  useEffect(() => {
+    getMessageableUsers()
+      .then(setMessageableUsers)
+      .catch((err) => console.error("Failed to load messageable users:", err));
+  }, []);
+
+  const loadDirectMessages = useCallback(async () => {
+    try {
+      const data = await getAllDirectMessages();
+      setAllDirectMessages(data);
+    } catch (err) {
+      console.error("Failed to load direct messages:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDirectMessages();
+    const unsubscribe = subscribeToDirectMessages(loadDirectMessages);
+    return unsubscribe;
+  }, [loadDirectMessages]);
+
+  const handleSendDirectMessage = async () => {
+    if (!messageInput.trim() || !selectedMessageUserId) return;
+    setSendingMessage(true);
+    try {
+      await sendDirectMessage(
+        selectedMessageUserId,
+        "admin",
+        profile.name || "Admin",
+        messageInput.trim(),
+      );
+      setMessageInput("");
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      showToast("Failed to send message.", "error");
+    } finally {
+      setSendingMessage(false);
+    }
+  };
 
   // Send admin note
   const sendAdminNote = async () => {
@@ -687,24 +739,6 @@ function AdminDashboardContent() {
   });
   const [passwordError, setPasswordError] = useState("");
   const [passwordSaved, setPasswordSaved] = useState(false);
-  const [notes, setNotes] = useState<TeamNote[]>([
-    {
-      id: 1,
-      author: "Admin User",
-      content:
-        "Monthly reports are due by the 5th. Please ensure all mentor hours are logged before submission.",
-      time: "Today 9:14 AM",
-      pinned: true,
-    },
-    {
-      id: 2,
-      author: "Michael Chen",
-      content:
-        "Reminder: Q1 outcome metrics review call is scheduled for Friday at 2pm.",
-      time: "Yesterday",
-      pinned: false,
-    },
-  ]);
 
   const updateSetting = (key: keyof SettingsData, value: boolean | string) => {
     setSettings((p) => ({ ...p, [key]: value }));
@@ -812,27 +846,6 @@ function AdminDashboardContent() {
     );
   };
 
-  const addNote = (content: string) => {
-    setNotes((p) => [
-      {
-        id: Date.now(),
-        author: profile.name,
-        content,
-        time: "Just now",
-        pinned: false,
-      },
-      ...p,
-    ]);
-    showToast("Note added successfully!", "success");
-  };
-  const deleteNote = (id: number) => {
-    setNotes((p) => p.filter((n) => n.id !== id));
-    showToast("Note deleted", "info");
-  };
-  const togglePin = (id: number) =>
-    setNotes((p) =>
-      p.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)),
-    );
 
   // Apply saved settings on load
   useEffect(() => {
@@ -1935,14 +1948,7 @@ function AdminDashboardContent() {
         )}
         {(isAdmin || isStaff) && activeTab === "Resources" && <ResourcesTab />}
         {(isAdmin || isStaff) && activeTab === "Reports" && (
-          <ReportsTab
-            profileName={profile.name}
-            notes={notes}
-            onAddNote={addNote}
-            onDeleteNote={deleteNote}
-            onTogglePin={togglePin}
-            showToast={showToast}
-          />
+          <ReportsTab showToast={showToast} />
         )}
 
         {/* ============================================ */}
@@ -2052,6 +2058,181 @@ function AdminDashboardContent() {
                     </div>
                   ))
               )}
+            </div>
+
+            {/* ============================================ */}
+            {/* Direct Messages - private 1:1 chat, separate from the */}
+            {/* broadcast announcements above. Sending here never touches */}
+            {/* admin_notes. */}
+            {/* ============================================ */}
+            <div className="pt-4 border-t border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">
+                💬 Direct Messages
+              </h2>
+              <p className="text-sm text-gray-500 mt-1 mb-4">
+                Private conversations with Coalition Leaders, Mentors, and
+                Partners - they can reply, unlike the announcements above
+              </p>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* People list */}
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden lg:col-span-1">
+                  <div className="divide-y divide-gray-50 max-h-[520px] overflow-y-auto">
+                    {messageableUsers.length === 0 ? (
+                      <div className="p-6 text-center text-sm text-gray-400">
+                        No coalition, mentor, or partner accounts yet.
+                      </div>
+                    ) : (
+                      messageableUsers.map((u) => {
+                        const thread = allDirectMessages.filter(
+                          (m) => m.user_id === u.id,
+                        );
+                        const last = thread[thread.length - 1];
+                        return (
+                          <button
+                            key={u.id}
+                            onClick={() => setSelectedMessageUserId(u.id)}
+                            className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${
+                              selectedMessageUserId === u.id
+                                ? "bg-emerald-50"
+                                : ""
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center shrink-0">
+                                {(u.name || u.email || "?")
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-sm font-medium text-gray-900 truncate">
+                                    {u.name || u.email}
+                                  </span>
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 capitalize shrink-0">
+                                    {u.primaryRole}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-400 truncate mt-0.5">
+                                  {last ? last.message : "No messages yet"}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Thread */}
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden lg:col-span-2 flex flex-col">
+                  {!selectedMessageUserId ? (
+                    <div className="flex-1 flex items-center justify-center py-16 text-sm text-gray-400">
+                      Select a person to view the conversation
+                    </div>
+                  ) : (
+                    (() => {
+                      const person = messageableUsers.find(
+                        (u) => u.id === selectedMessageUserId,
+                      );
+                      const thread = allDirectMessages.filter(
+                        (m) => m.user_id === selectedMessageUserId,
+                      );
+                      return (
+                        <>
+                          <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-white">
+                            <h3 className="font-semibold text-gray-900">
+                              {person?.name || person?.email}
+                            </h3>
+                            <p className="text-xs text-gray-400 capitalize">
+                              {person?.primaryRole}
+                            </p>
+                          </div>
+                          <div className="p-5 space-y-3 max-h-[380px] overflow-y-auto">
+                            {thread.length === 0 ? (
+                              <div className="text-center py-8 text-gray-400 text-sm">
+                                No messages yet. Say hello!
+                              </div>
+                            ) : (
+                              thread.map((m) => (
+                                <div
+                                  key={m.id}
+                                  className={`flex ${
+                                    m.sender_role === "admin"
+                                      ? "justify-end"
+                                      : "justify-start"
+                                  }`}
+                                >
+                                  <div
+                                    className={`max-w-[75%] rounded-xl px-3 py-2 ${
+                                      m.sender_role === "admin"
+                                        ? "bg-emerald-600 text-white"
+                                        : "bg-gray-100 text-gray-800"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <span
+                                        className={`text-xs font-medium ${
+                                          m.sender_role === "admin"
+                                            ? "text-emerald-100"
+                                            : "text-gray-500"
+                                        }`}
+                                      >
+                                        {m.sender_role === "admin"
+                                          ? m.sender_name || "Admin"
+                                          : person?.name || "Them"}
+                                      </span>
+                                      <span
+                                        className={`text-[10px] ${
+                                          m.sender_role === "admin"
+                                            ? "text-emerald-100"
+                                            : "text-gray-400"
+                                        }`}
+                                      >
+                                        {new Date(
+                                          m.created_at,
+                                        ).toLocaleString()}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm whitespace-pre-wrap">
+                                      {linkifyText(m.message)}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+                            <textarea
+                              value={messageInput}
+                              onChange={(e) =>
+                                setMessageInput(e.target.value)
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && (e.metaKey || e.ctrlKey))
+                                  handleSendDirectMessage();
+                              }}
+                              placeholder={`Message ${person?.name || "them"}… (⌘Enter to send)`}
+                              rows={2}
+                              className="w-full text-sm text-gray-700 placeholder:text-gray-400 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
+                            />
+                            <div className="flex justify-end mt-2">
+                              <button
+                                onClick={handleSendDirectMessage}
+                                disabled={sendingMessage || !messageInput.trim()}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              >
+                                <Send className="h-3 w-3" />
+                                Send
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* ============================================ */}

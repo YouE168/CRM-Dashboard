@@ -1107,6 +1107,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      direct_messages: {
+        Row: {
+          id: string;
+          user_id: string;
+          sender_role: string;
+          sender_name: string | null;
+          message: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          sender_role: string;
+          sender_name?: string | null;
+          message: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          sender_role?: string;
+          sender_name?: string | null;
+          message?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       partner_profile_data: {
         Row: {
           user_id: string;
