@@ -593,7 +593,8 @@ export interface NextMeetingInfo {
   time?: string;
   title?: string;
   description?: string;
-  zoomPlaceholder?: string;
+  zoomPlaceholder?: string; // Meeting ID
+  zoomPasscode?: string;
   zoomLink?: string;
 }
 

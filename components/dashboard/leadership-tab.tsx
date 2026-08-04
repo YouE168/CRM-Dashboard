@@ -289,18 +289,30 @@ function EditMeetingModal({
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
             />
           </div>
+          <p className="text-xs text-gray-400">
+            Fill in whichever ones apply - link and ID/passcode aren't
+            exclusive, both can show at once for members to use.
+          </p>
           {field(
-            "Zoom link (optional) - skips the manual ID/passcode entry",
+            "Zoom link (optional)",
             "zoomLink",
             "text",
             "https://zoom.us/j/123456789",
           )}
-          {field(
-            "Zoom Meeting ID",
-            "zoomPlaceholder",
-            "text",
-            "e.g. 123 456 7890",
-          )}
+          <div className="grid grid-cols-2 gap-3">
+            {field(
+              "Zoom Meeting ID",
+              "zoomPlaceholder",
+              "text",
+              "e.g. 123 456 7890",
+            )}
+            {field(
+              "Passcode (optional)",
+              "zoomPasscode",
+              "text",
+              "e.g. 482913",
+            )}
+          </div>
         </div>
         <div className="p-5 border-t border-gray-100 flex gap-3">
           <button
@@ -467,6 +479,7 @@ export function LeadershipTab({
     title: nextMeeting?.title ?? "No meeting scheduled yet",
     description: nextMeeting?.description ?? "",
     zoomPlaceholder: nextMeeting?.zoomPlaceholder ?? "",
+    zoomPasscode: nextMeeting?.zoomPasscode ?? "",
     zoomLink: nextMeeting?.zoomLink ?? "",
   };
 
@@ -606,80 +619,76 @@ export function LeadershipTab({
                         Join via Zoom
                       </span>
                     </div>
-                    {meeting.zoomLink ? (
-                      // A full Zoom link was set directly on this meeting -
-                      // skip the manual ID/passcode entry entirely.
-                      <button
-                        onClick={() =>
-                          window.open(meeting.zoomLink, "_blank")
-                        }
-                        className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
-                      >
-                        <Video className="h-4 w-4" />
-                        Join Zoom Meeting
-                      </button>
-                    ) : (
+                    {meeting.zoomLink || meeting.zoomPlaceholder ? (
                       <>
-                        <div className="flex items-center justify-end mb-3">
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(
-                                meeting.zoomPlaceholder,
-                              );
-                              showToast(
-                                "Meeting ID copied to clipboard!",
-                                "success",
-                              );
-                            }}
-                            className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                          >
-                            <Copy className="h-3 w-3" />
-                            Copy ID
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                          <input
-                            type="text"
-                            id="leadershipZoomId"
-                            placeholder={
-                              meeting.zoomPlaceholder
-                                ? `Zoom Meeting ID (e.g., ${meeting.zoomPlaceholder})`
-                                : "Zoom Meeting ID"
-                            }
-                            className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                          <input
-                            type="text"
-                            id="leadershipZoomPassword"
-                            placeholder="Passcode (if required)"
-                            className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
+                        {(meeting.zoomPlaceholder || meeting.zoomPasscode) && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                            {meeting.zoomPlaceholder && (
+                              <div className="flex items-center justify-between px-4 py-2.5 bg-white border border-gray-200 rounded-lg">
+                                <div>
+                                  <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                                    Meeting ID
+                                  </div>
+                                  <div className="text-sm text-gray-900">
+                                    {meeting.zoomPlaceholder}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(
+                                      meeting.zoomPlaceholder,
+                                    );
+                                    showToast(
+                                      "Meeting ID copied to clipboard!",
+                                      "success",
+                                    );
+                                  }}
+                                  className="text-blue-600 hover:text-blue-700"
+                                  title="Copy Meeting ID"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                            {meeting.zoomPasscode && (
+                              <div className="flex items-center justify-between px-4 py-2.5 bg-white border border-gray-200 rounded-lg">
+                                <div>
+                                  <div className="text-[10px] uppercase tracking-wide text-gray-400">
+                                    Passcode
+                                  </div>
+                                  <div className="text-sm text-gray-900">
+                                    {meeting.zoomPasscode}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(
+                                      meeting.zoomPasscode,
+                                    );
+                                    showToast(
+                                      "Passcode copied to clipboard!",
+                                      "success",
+                                    );
+                                  }}
+                                  className="text-blue-600 hover:text-blue-700"
+                                  title="Copy passcode"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <button
                           onClick={() => {
-                            const meetingId = (
-                              document.getElementById(
-                                "leadershipZoomId",
-                              ) as HTMLInputElement
-                            )?.value;
-                            const password = (
-                              document.getElementById(
-                                "leadershipZoomPassword",
-                              ) as HTMLInputElement
-                            )?.value;
-                            if (!meetingId || meetingId.trim() === "") {
-                              showToast(
-                                "Please enter the Zoom Meeting ID",
-                                "info",
-                              );
+                            if (meeting.zoomLink) {
+                              window.open(meeting.zoomLink, "_blank");
                               return;
                             }
-                            const cleanMeetingId = meetingId
-                              .trim()
-                              .replace(/\s/g, "");
-                            let zoomUrl = `https://zoom.us/j/${cleanMeetingId}`;
-                            if (password && password.trim() !== "")
-                              zoomUrl += `?pwd=${encodeURIComponent(password.trim())}`;
+                            const cleanId = meeting.zoomPlaceholder.replace(/\s/g, "");
+                            let zoomUrl = `https://zoom.us/j/${cleanId}`;
+                            if (meeting.zoomPasscode)
+                              zoomUrl += `?pwd=${encodeURIComponent(meeting.zoomPasscode)}`;
                             window.open(zoomUrl, "_blank");
                           }}
                           className="w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
@@ -687,10 +696,12 @@ export function LeadershipTab({
                           <Video className="h-4 w-4" />
                           Join Zoom Meeting
                         </button>
-                        <p className="text-xs text-gray-500 mt-3">
-                          💡 The meeting ID will be sent via email
-                        </p>
                       </>
+                    ) : (
+                      <p className="text-sm text-gray-500">
+                        No Zoom link or meeting ID set yet - add one with the
+                        pencil icon above.
+                      </p>
                     )}
                   </div>
                 </div>

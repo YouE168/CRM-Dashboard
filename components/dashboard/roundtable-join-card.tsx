@@ -101,29 +101,35 @@ export function RoundtableJoinCard({
                   </p>
                 )}
                 <div className="mt-3">
-                  {nextMeeting.zoomLink ? (
-                    <button
-                      onClick={() =>
-                        window.open(nextMeeting.zoomLink, "_blank")
-                      }
-                      className="px-4 py-2 bg-white text-emerald-700 font-medium rounded-lg hover:bg-gray-50 transition-all text-sm flex items-center gap-2"
-                    >
-                      <Video className="h-4 w-4" />
-                      Join Zoom Meeting
-                    </button>
-                  ) : nextMeeting.zoomPlaceholder ? (
-                    <button
-                      onClick={() =>
-                        window.open(
-                          `https://zoom.us/j/${nextMeeting.zoomPlaceholder!.replace(/\s/g, "")}`,
-                          "_blank",
-                        )
-                      }
-                      className="px-4 py-2 bg-white text-emerald-700 font-medium rounded-lg hover:bg-gray-50 transition-all text-sm flex items-center gap-2"
-                    >
-                      <Video className="h-4 w-4" />
-                      Join Zoom Meeting
-                    </button>
+                  {nextMeeting.zoomLink || nextMeeting.zoomPlaceholder ? (
+                    <>
+                      {(nextMeeting.zoomPlaceholder || nextMeeting.zoomPasscode) && (
+                        <p className="text-emerald-100 text-xs mb-2">
+                          {nextMeeting.zoomPlaceholder &&
+                            `Meeting ID: ${nextMeeting.zoomPlaceholder}`}
+                          {nextMeeting.zoomPlaceholder && nextMeeting.zoomPasscode && "  ·  "}
+                          {nextMeeting.zoomPasscode &&
+                            `Passcode: ${nextMeeting.zoomPasscode}`}
+                        </p>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (nextMeeting.zoomLink) {
+                            window.open(nextMeeting.zoomLink, "_blank");
+                            return;
+                          }
+                          const cleanId = nextMeeting.zoomPlaceholder!.replace(/\s/g, "");
+                          let zoomUrl = `https://zoom.us/j/${cleanId}`;
+                          if (nextMeeting.zoomPasscode)
+                            zoomUrl += `?pwd=${encodeURIComponent(nextMeeting.zoomPasscode)}`;
+                          window.open(zoomUrl, "_blank");
+                        }}
+                        className="px-4 py-2 bg-white text-emerald-700 font-medium rounded-lg hover:bg-gray-50 transition-all text-sm flex items-center gap-2"
+                      >
+                        <Video className="h-4 w-4" />
+                        Join Zoom Meeting
+                      </button>
+                    </>
                   ) : (
                     <p className="text-emerald-100 text-xs">
                       Zoom details coming soon
