@@ -48,7 +48,6 @@ const USER_ROLES = [
       "RCP Small Business Mentorship",
       "SEED Micro-Grant",
       "Business Professional Services",
-      "Microloan Program",
     ],
   },
   {
@@ -60,7 +59,6 @@ const USER_ROLES = [
       "RCP Small Business Mentorship",
       "SEED Micro-Grant",
       "Business Professional Services",
-      "Microloan Program",
     ],
   },
   {

@@ -810,6 +810,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      financial_transactions: {
+        Row: {
+          id: string;
+          category: string;
+          amount: number;
+          description: string | null;
+          status: string;
+          transaction_date: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          category: string;
+          amount: number;
+          description?: string | null;
+          status?: string;
+          transaction_date?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          category?: string;
+          amount?: number;
+          description?: string | null;
+          status?: string;
+          transaction_date?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       leadership_stats: {
         Row: {
           id: number;

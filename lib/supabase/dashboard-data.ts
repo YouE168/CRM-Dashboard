@@ -804,82 +804,122 @@ export function subscribeToResourcesChanges(onChange: () => void) {
   };
 }
 
-export interface ReportData {
-  monthlyReport: {
-    totalParticipants: number;
-    sessions: number;
-    satisfaction: number;
-    highlights: string[];
-  };
-  participantReport: {
-    participants: Array<{ name: string; program: string; stage: string; progress: number }>;
-  };
-  mentorReport: {
-    mentors: Array<{ name: string; sessions: number; hours: number; rating: number; mentees: number }>;
-  };
-  outcomeReport: {
-    businessLaunches: number;
-    satisfaction: number;
-    mentorMatches: number;
-    referrals: number;
-    successStory: string;
-  };
-  financialReport: {
-    grants: number;
-    donations: number;
-    personnel: number;
-    programming: number;
-    operations: number;
-    netSurplus: number;
-    pendingInvoices: number;
-    pendingAmount: number;
-  };
+// The Reports page's Monthly/Participant/Mentor/Outcome/County sections
+// used to read from a report_data JSON blob, but that was only ever
+// hand-edited once as a demo (via the old CMS editor's "Reports Data" tab,
+// which actually only wrote to localStorage and was removed along with the
+// rest of that page) and never updated again, so it drifted from reality.
+// All of those sections are now computed live from the real tables the
+// rest of the dashboard uses. Financial Summary was the last holdout since
+// there was no real bookkeeping table to compute it from - financial_
+// transactions below is that table, so report_data is no longer read or
+// written anywhere in the app.
+
+export type FinancialTransactionCategory =
+  | "grants"
+  | "donations"
+  | "personnel"
+  | "programming"
+  | "operations";
+
+export interface FinancialTransactionRow {
+  id: string;
+  category: FinancialTransactionCategory;
+  amount: number;
+  description: string | null;
+  status: "pending" | "approved";
+  transaction_date: string;
+  created_by: string | null;
+  created_at: string;
 }
 
-export async function getReportData(): Promise<ReportData | null> {
+export async function getAllFinancialTransactions(): Promise<FinancialTransactionRow[]> {
   const { data, error } = await supabase
-    .from("report_data")
-    .select("data")
-    .eq("id", 1)
-    .maybeSingle();
+    .from("financial_transactions")
+    .select("*")
+    .order("transaction_date", { ascending: false });
   if (error) throw error;
-  return (data?.data as unknown as ReportData) ?? null;
+  return data as unknown as FinancialTransactionRow[];
 }
 
-export function subscribeToReportData(onChange: () => void) {
-  const channelName = `report-data-${Math.random().toString(36).slice(2)}`;
+export async function addFinancialTransaction(input: {
+  category: FinancialTransactionCategory;
+  amount: number;
+  description: string;
+  status: "pending" | "approved";
+  transaction_date: string;
+  created_by: string;
+}): Promise<void> {
+  const { error } = await supabase.from("financial_transactions").insert(input);
+  if (error) throw error;
+}
+
+export async function deleteFinancialTransaction(id: string): Promise<void> {
+  const { error } = await supabase.from("financial_transactions").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export function subscribeToFinancialTransactions(onChange: () => void) {
+  const channelName = `financial-tx-${Math.random().toString(36).slice(2)}`;
   const channel = supabase
     .channel(channelName)
-    .on("postgres_changes", { event: "*", schema: "public", table: "report_data" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "financial_transactions" }, onChange)
     .subscribe();
   return () => {
     supabase.removeChannel(channel);
   };
 }
 
-// The Reports page's Monthly/Participant/Mentor/Outcome sections used to
-// read from report_data too, but that JSON blob was only ever hand-edited
-// once as a demo (via the old CMS editor's "Reports Data" tab, which
-// actually only wrote to localStorage and was removed along with the rest
-// of that page) and never updated again, so it drifted from reality (e.g.
-// it still listed mentors that were deleted from the real mentors table).
-// Those four sections are now computed live from the same real tables the
-// rest of the dashboard uses. Only financialReport stays as a
-// manually-entered field in report_data, since there's no real
-// bookkeeping table to compute it from - it's edited via the real editor
-// built into the Reports page itself (updateReportData below), not the old
-// CMS editor. County Distribution used to live here too but is now
-// computed live from participants.county (see getLiveClientsByCounty).
+export interface LiveFinancialSummary {
+  grants: number;
+  donations: number;
+  personnel: number;
+  programming: number;
+  operations: number;
+  totalRevenue: number;
+  totalExpenses: number;
+  netSurplus: number;
+  pendingCount: number;
+  pendingAmount: number;
+}
 
-export async function updateReportData(
-  patch: Partial<Pick<ReportData, "financialReport">>,
-): Promise<void> {
-  const current = (await getReportData()) ?? ({} as ReportData);
-  const merged = { ...current, ...patch };
-  const { error } = await supabase
-    .from("report_data")
-    .upsert({ id: 1, data: merged as unknown as Record<string, unknown> });
-  if (error) throw error;
+// Computed for a given month from real logged transactions - only
+// "approved" entries count toward the totals; "pending" ones are called
+// out separately, same distinction the old manual fields used to draw.
+export function computeFinancialSummary(
+  transactions: FinancialTransactionRow[],
+  monthStart: Date,
+  monthEnd: Date,
+): LiveFinancialSummary {
+  const inMonth = transactions.filter((t) => {
+    const d = new Date(t.transaction_date);
+    return d >= monthStart && d < monthEnd;
+  });
+
+  const sum = (category: FinancialTransactionCategory) =>
+    inMonth
+      .filter((t) => t.category === category && t.status === "approved")
+      .reduce((total, t) => total + Number(t.amount), 0);
+
+  const grants = sum("grants");
+  const donations = sum("donations");
+  const personnel = sum("personnel");
+  const programming = sum("programming");
+  const operations = sum("operations");
+  const pending = inMonth.filter((t) => t.status === "pending");
+
+  return {
+    grants,
+    donations,
+    personnel,
+    programming,
+    operations,
+    totalRevenue: grants + donations,
+    totalExpenses: personnel + programming + operations,
+    netSurplus: grants + donations - (personnel + programming + operations),
+    pendingCount: pending.length,
+    pendingAmount: pending.reduce((total, t) => total + Number(t.amount), 0),
+  };
 }
 
 export interface LiveMentorActivityRow {

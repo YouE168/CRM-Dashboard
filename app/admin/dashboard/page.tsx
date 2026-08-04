@@ -1948,7 +1948,7 @@ function AdminDashboardContent() {
         )}
         {(isAdmin || isStaff) && activeTab === "Resources" && <ResourcesTab />}
         {(isAdmin || isStaff) && activeTab === "Reports" && (
-          <ReportsTab showToast={showToast} />
+          <ReportsTab showToast={showToast} profileName={profile.name || "Admin"} />
         )}
 
         {/* ============================================ */}

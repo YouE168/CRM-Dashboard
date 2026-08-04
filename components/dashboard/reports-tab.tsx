@@ -4,21 +4,24 @@ import { useState, useEffect, useCallback } from "react";
 import { SessionsChart } from "./sessions-chart";
 import { ClientsByCountyChart } from "./clients-by-county-chart";
 import {
-  getReportData,
-  subscribeToReportData,
-  updateReportData,
   getParticipants,
   getLiveOverviewStats,
   getLiveMentorActivityReport,
   getLiveOutcomeReport,
   getLiveClientsByCounty,
+  getAllFinancialTransactions,
+  addFinancialTransaction,
+  deleteFinancialTransaction,
+  subscribeToFinancialTransactions,
+  computeFinancialSummary,
   subscribeToLiveDashboardData,
-  type ReportData,
   type DashboardParticipant,
   type LiveOverviewStats,
   type LiveMentorActivityRow,
   type LiveOutcomeReport,
   type ChartRow,
+  type FinancialTransactionRow,
+  type FinancialTransactionCategory,
 } from "@/lib/supabase/dashboard-data";
 import {
   BarChart3,
@@ -30,7 +33,8 @@ import {
   ArrowLeft,
   Download,
   Printer,
-  Pencil,
+  Trash2,
+  Plus,
   X,
 } from "lucide-react";
 
@@ -40,6 +44,7 @@ interface ReportsTabProps {
     type: "success" | "error" | "info" | "warning",
     duration?: number,
   ) => void;
+  profileName: string;
 }
 
 type ReportView =
@@ -51,92 +56,132 @@ type ReportView =
   | "outcome"
   | "county";
 
-type FinancialReport = ReportData["financialReport"];
+const REVENUE_CATEGORIES: { value: FinancialTransactionCategory; label: string }[] = [
+  { value: "grants", label: "Grants" },
+  { value: "donations", label: "Donations" },
+];
+const EXPENSE_CATEGORIES: { value: FinancialTransactionCategory; label: string }[] = [
+  { value: "personnel", label: "Personnel" },
+  { value: "programming", label: "Programming" },
+  { value: "operations", label: "Operations" },
+];
+const CATEGORY_LABELS: Record<FinancialTransactionCategory, string> = {
+  grants: "Grants",
+  donations: "Donations",
+  personnel: "Personnel",
+  programming: "Programming",
+  operations: "Operations",
+};
 
-// Edit Financial Summary - the only manually-entered report left, since
-// there's no real bookkeeping table anywhere in the schema to compute
-// grants/donations/expenses from. Net surplus is always derived from the
-// other numbers rather than typed in separately, so it can't drift.
-function EditFinancialModal({
-  initial,
+// Log a real transaction (grant received, donation received, or an
+// expense) - this is what the Financial Summary report is actually
+// computed from now, instead of a hand-typed total.
+function LogTransactionModal({
   onClose,
   onSave,
 }: {
-  initial: FinancialReport;
   onClose: () => void;
-  onSave: (data: FinancialReport) => Promise<void>;
+  onSave: (input: {
+    category: FinancialTransactionCategory;
+    amount: number;
+    description: string;
+    status: "pending" | "approved";
+    transaction_date: string;
+  }) => Promise<void>;
 }) {
-  const [form, setForm] = useState<FinancialReport>(initial);
+  const [category, setCategory] = useState<FinancialTransactionCategory>("grants");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [status, setStatus] = useState<"pending" | "approved">("approved");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [saving, setSaving] = useState(false);
-
-  const field = (
-    label: string,
-    key: keyof FinancialReport,
-    placeholder?: string,
-  ) => (
-    <div>
-      <label className="block text-xs font-medium text-gray-500 mb-1">
-        {label}
-      </label>
-      <input
-        type="number"
-        value={form[key] as number}
-        onChange={(e) =>
-          setForm((p) => ({ ...p, [key]: Number(e.target.value) }))
-        }
-        placeholder={placeholder}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-      />
-    </div>
-  );
-
-  const totalRevenue = (form.grants || 0) + (form.donations || 0);
-  const totalExpenses =
-    (form.personnel || 0) + (form.programming || 0) + (form.operations || 0);
-  const netSurplus = totalRevenue - totalExpenses;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
         <div className="p-5 border-b border-gray-100 flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Edit Financial Summary
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-900">Log Transaction</h2>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
             <X className="h-5 w-5" />
           </button>
         </div>
         <div className="p-5 space-y-4">
-          <p className="text-xs text-gray-400">
-            Total revenue, total expenses, and net surplus are calculated
-            automatically from the numbers below.
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            {field("Grants", "grants")}
-            {field("Donations", "donations")}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Category
+            </label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as FinancialTransactionCategory)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+            >
+              <optgroup label="Revenue">
+                {REVENUE_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Expenses">
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {field("Personnel", "personnel")}
-            {field("Programming", "programming")}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Amount ($)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                Date
+              </label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
           </div>
-          {field("Operations", "operations")}
-          <div className="grid grid-cols-2 gap-3">
-            {field("Pending invoices (count)", "pendingInvoices")}
-            {field("Pending amount ($)", "pendingAmount")}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Description
+            </label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g. USDA Rural Development grant"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
           </div>
-          <div className="rounded-lg bg-gray-50 p-3 text-sm space-y-1">
-            <div className="flex justify-between text-gray-600">
-              <span>Total revenue</span>
-              <span className="font-medium">${totalRevenue.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-gray-600">
-              <span>Total expenses</span>
-              <span className="font-medium">${totalExpenses.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between font-semibold text-gray-900 pt-1 border-t border-gray-200">
-              <span>Net surplus</span>
-              <span>${netSurplus.toLocaleString()}</span>
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Status
+            </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as "pending" | "approved")}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+            >
+              <option value="approved">Approved - counts toward totals</option>
+              <option value="pending">Pending - shown separately, not counted yet</option>
+            </select>
           </div>
         </div>
         <div className="p-5 border-t border-gray-100 flex gap-3">
@@ -147,11 +192,17 @@ function EditFinancialModal({
             Cancel
           </button>
           <button
-            disabled={saving}
+            disabled={saving || !amount || Number(amount) <= 0}
             onClick={async () => {
               setSaving(true);
               try {
-                await onSave({ ...form, netSurplus });
+                await onSave({
+                  category,
+                  amount: Number(amount),
+                  description,
+                  status,
+                  transaction_date: date,
+                });
                 onClose();
               } finally {
                 setSaving(false);
@@ -167,31 +218,31 @@ function EditFinancialModal({
   );
 }
 
-export function ReportsTab({ showToast }: ReportsTabProps) {
+export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
   const [currentView, setCurrentView] = useState<ReportView>("list");
-  const [reportData, setReportData] = useState<ReportData | null>(null);
   const [participants, setParticipants] = useState<DashboardParticipant[]>([]);
   const [overviewStats, setOverviewStats] = useState<LiveOverviewStats | null>(null);
   const [mentorActivity, setMentorActivity] = useState<LiveMentorActivityRow[]>([]);
   const [outcomeReport, setOutcomeReport] = useState<LiveOutcomeReport | null>(null);
   const [countyChartData, setCountyChartData] = useState<ChartRow[]>([]);
+  const [transactions, setTransactions] = useState<FinancialTransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingFinancial, setEditingFinancial] = useState(false);
+  const [showLogTransaction, setShowLogTransaction] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [rd, parts, overview, mentors, outcome] = await Promise.all([
-        getReportData(),
+      const [parts, overview, mentors, outcome, txns] = await Promise.all([
         getParticipants(),
         getLiveOverviewStats(),
         getLiveMentorActivityReport(),
         getLiveOutcomeReport(),
+        getAllFinancialTransactions(),
       ]);
-      setReportData(rd);
       setParticipants(parts);
       setOverviewStats(overview);
       setMentorActivity(mentors);
       setOutcomeReport(outcome);
+      setTransactions(txns);
       setCountyChartData(await getLiveClientsByCounty(parts));
     } catch (err) {
       console.error("Failed to load report data:", err);
@@ -202,15 +253,15 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
 
   useEffect(() => {
     loadData();
-    const unsubReport = subscribeToReportData(loadData);
+    const unsubTxns = subscribeToFinancialTransactions(loadData);
     const unsubLive = subscribeToLiveDashboardData(loadData);
     return () => {
-      unsubReport();
+      unsubTxns();
       unsubLive();
     };
   }, [loadData]);
 
-  if (loading || !reportData || !overviewStats || !outcomeReport) {
+  if (loading || !overviewStats || !outcomeReport) {
     return <div className="p-6 text-sm text-gray-400">Loading reports…</div>;
   }
 
@@ -220,10 +271,33 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
     year: "numeric",
   });
   const quarterLabel = `Q${Math.floor(now.getMonth() / 3) + 1} ${now.getFullYear()}`;
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const financialSummary = computeFinancialSummary(transactions, monthStart, monthEnd);
+  const monthTransactions = transactions.filter((t) => {
+    const d = new Date(t.transaction_date);
+    return d >= monthStart && d < monthEnd;
+  });
 
-  const saveFinancial = async (data: FinancialReport) => {
-    await updateReportData({ financialReport: data });
-    showToast("Financial summary updated", "success");
+  const logTransaction = async (input: {
+    category: FinancialTransactionCategory;
+    amount: number;
+    description: string;
+    status: "pending" | "approved";
+    transaction_date: string;
+  }) => {
+    await addFinancialTransaction({ ...input, created_by: profileName });
+    showToast("Transaction logged", "success");
+  };
+
+  const removeTransaction = async (id: string) => {
+    try {
+      await deleteFinancialTransaction(id);
+      showToast("Transaction removed", "info");
+    } catch (err) {
+      console.error("Failed to delete transaction:", err);
+      showToast("Couldn't remove that transaction. Please try again.", "error");
+    }
   };
 
   const reports = [
@@ -422,96 +496,144 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
   );
 
   const FinancialReport = () => (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h2 className="text-lg font-bold text-gray-900">Financial Summary</h2>
-          <p className="text-sm text-gray-500 mt-1">{monthYearLabel}</p>
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Financial Summary</h2>
+            <p className="text-sm text-gray-500 mt-1">{monthYearLabel}</p>
+          </div>
+          <button
+            onClick={() => setShowLogTransaction(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Log Transaction
+          </button>
         </div>
-        <button
-          onClick={() => setEditingFinancial(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          Edit
-        </button>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <h3 className="font-semibold text-gray-900 mb-3">Revenue</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Grants</span>
-              <span className="font-medium">
-                ${reportData.financialReport.grants.toLocaleString()}
-              </span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-3">Revenue</h3>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Grants</span>
+                <span className="font-medium">
+                  ${financialSummary.grants.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Donations</span>
+                <span className="font-medium">
+                  ${financialSummary.donations.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm border-t pt-2 mt-2">
+                <span className="font-semibold">Total Revenue</span>
+                <span className="font-semibold">
+                  ${financialSummary.totalRevenue.toLocaleString()}
+                </span>
+              </div>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Donations</span>
-              <span className="font-medium">
-                ${reportData.financialReport.donations.toLocaleString()}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm border-t pt-2 mt-2">
-              <span className="font-semibold">Total Revenue</span>
-              <span className="font-semibold">
-                $
-                {(
-                  reportData.financialReport.grants +
-                  reportData.financialReport.donations
-                ).toLocaleString()}
-              </span>
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-3">Expenses</h3>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Personnel</span>
+                <span className="font-medium">
+                  ${financialSummary.personnel.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Programming</span>
+                <span className="font-medium">
+                  ${financialSummary.programming.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Operations</span>
+                <span className="font-medium">
+                  ${financialSummary.operations.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm border-t pt-2 mt-2">
+                <span className="font-semibold">Total Expenses</span>
+                <span className="font-semibold">
+                  ${financialSummary.totalExpenses.toLocaleString()}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-        <div>
-          <h3 className="font-semibold text-gray-900 mb-3">Expenses</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Personnel</span>
-              <span className="font-medium">
-                ${reportData.financialReport.personnel.toLocaleString()}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Programming</span>
-              <span className="font-medium">
-                ${reportData.financialReport.programming.toLocaleString()}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Operations</span>
-              <span className="font-medium">
-                ${reportData.financialReport.operations.toLocaleString()}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm border-t pt-2 mt-2">
-              <span className="font-semibold">Total Expenses</span>
-              <span className="font-semibold">
-                $
-                {(
-                  reportData.financialReport.personnel +
-                  reportData.financialReport.programming +
-                  reportData.financialReport.operations
-                ).toLocaleString()}
-              </span>
-            </div>
+
+        <div className="mt-6 pt-4 border-t border-gray-100">
+          <div className="flex justify-between text-sm">
+            <span className="font-semibold text-gray-900">Net Surplus</span>
+            <span className="font-semibold text-emerald-600">
+              ${financialSummary.netSurplus.toLocaleString()}
+            </span>
+          </div>
+          <div className="mt-2 text-xs text-gray-500">
+            {financialSummary.pendingCount} invoice
+            {financialSummary.pendingCount === 1 ? "" : "s"} pending approval ($
+            {financialSummary.pendingAmount.toLocaleString()})
           </div>
         </div>
       </div>
 
-      <div className="mt-6 pt-4 border-t border-gray-100">
-        <div className="flex justify-between text-sm">
-          <span className="font-semibold text-gray-900">Net Surplus</span>
-          <span className="font-semibold text-emerald-600">
-            ${reportData.financialReport.netSurplus.toLocaleString()}
-          </span>
-        </div>
-        <div className="mt-2 text-xs text-gray-500">
-          {reportData.financialReport.pendingInvoices} invoices pending approval
-          (${reportData.financialReport.pendingAmount.toLocaleString()})
-        </div>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <h3 className="font-semibold text-gray-900 mb-3">
+          {monthYearLabel} Transactions
+        </h3>
+        {monthTransactions.length === 0 ? (
+          <p className="text-sm text-gray-400">
+            No transactions logged for {monthYearLabel} yet.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {monthTransactions.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900">
+                      {CATEGORY_LABELS[t.category]}
+                    </span>
+                    {t.status === "pending" && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">
+                        Pending
+                      </span>
+                    )}
+                  </div>
+                  {t.description && (
+                    <p className="text-xs text-gray-500 truncate">{t.description}</p>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    {new Date(t.transaction_date).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    {t.created_by ? ` · ${t.created_by}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-sm font-semibold text-gray-900">
+                    ${Number(t.amount).toLocaleString()}
+                  </span>
+                  <button
+                    onClick={() => removeTransaction(t.id)}
+                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -674,11 +796,10 @@ export function ReportsTab({ showToast }: ReportsTabProps) {
         </div>
         {renderReportContent()}
 
-        {editingFinancial && (
-          <EditFinancialModal
-            initial={reportData.financialReport}
-            onClose={() => setEditingFinancial(false)}
-            onSave={saveFinancial}
+        {showLogTransaction && (
+          <LogTransactionModal
+            onClose={() => setShowLogTransaction(false)}
+            onSave={logTransaction}
           />
         )}
       </div>
