@@ -635,7 +635,10 @@ export default function ProgramManagerDashboardPage() {
                       { id: authData.user.id, avatar_position: pos },
                       { onConflict: "id" },
                     );
-                  if (error) console.error("Failed to save avatar position:", error);
+                  if (error) {
+                    console.error("Failed to save avatar position:", error);
+                    showToast("Failed to save photo position.", "error");
+                  }
                 }}
                 size={96}
                 fallback={profile.name.charAt(0).toUpperCase()}

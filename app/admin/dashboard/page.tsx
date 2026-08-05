@@ -788,6 +788,8 @@ function AdminDashboardContent() {
         );
         if (avatarError) {
           console.error("Failed to save avatar:", avatarError);
+          showToast("Failed to save profile photo.", "error");
+          return;
         }
       }
     }

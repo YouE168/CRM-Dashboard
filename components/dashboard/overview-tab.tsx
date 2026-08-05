@@ -95,7 +95,15 @@ export function OverviewTab() {
         participants={participants.map((p) => ({
           id: p.id,
           name: p.name ?? "",
-          program: p.program_name ?? "",
+          // Same fix as participants-tab.tsx: mentee/entrepreneur signups
+          // are all tagged "Business Professional Services" by default, so
+          // show their real role instead of that generic program name.
+          program:
+            p.role === "mentee"
+              ? "Mentee"
+              : p.role === "entrepreneur"
+                ? "Entrepreneur"
+                : (p.program_name ?? ""),
           stage: p.status,
           mentor: p.mentor ?? "",
         }))}
