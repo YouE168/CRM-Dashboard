@@ -65,7 +65,11 @@ const avatarColors = [
 ];
 
 function initials(name: string): string {
-  const p = name.split(" ");
+  // Guard against double spaces / stray whitespace producing an empty
+  // element after split - see participants-table.tsx's initials() for
+  // the "Aundefined" bug this caused there.
+  const p = name.trim().split(/\s+/).filter(Boolean);
+  if (p.length === 0) return "?";
   return p.length >= 2 ? p[0][0] + p[1][0] : p[0][0];
 }
 

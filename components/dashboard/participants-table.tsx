@@ -36,7 +36,13 @@ const avatarColor: Record<number, string> = {
 };
 
 function initials(name: string) {
-  const p = name.split(" ");
+  // split(" ") alone breaks on names with double spaces or leading/
+  // trailing whitespace (e.g. "Austin  Kevin" from a stray extra space
+  // typed at signup) - a name like that produced ["Austin", "", "Kevin"],
+  // and p[1][0] on that empty string is undefined, rendering as the
+  // literal text "Aundefined" instead of "AK".
+  const p = name.trim().split(/\s+/).filter(Boolean);
+  if (p.length === 0) return "?";
   return p.length >= 2 ? p[0][0] + p[1][0] : p[0][0];
 }
 

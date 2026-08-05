@@ -98,7 +98,19 @@ export function ParticipantsTab() {
         participants={participants.map((p) => ({
           id: p.id,
           name: p.name ?? "",
-          program: p.program_name ?? "",
+          // Every mentee/entrepreneur gets tagged with "Business
+          // Professional Services" at signup regardless of which real
+          // program they're actually there for (see signup/page.tsx) -
+          // showing their role instead is far more useful here than that
+          // generic default. Partner/coalition accounts already get a
+          // real, specific label ("Partner Organization" / "Coalition
+          // Organization"), so leave those as-is.
+          program:
+            p.role === "mentee"
+              ? "Mentee"
+              : p.role === "entrepreneur"
+                ? "Entrepreneur"
+                : (p.program_name ?? ""),
           stage: p.status,
           mentor: p.mentor ?? "",
           county: p.county,

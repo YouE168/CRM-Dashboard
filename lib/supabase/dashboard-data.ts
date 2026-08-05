@@ -6,6 +6,7 @@ export interface DashboardParticipant {
   name: string | null;
   email: string | null;
   program_name: string | null;
+  role: string | null;
   mentor: string | null;
   status: string;
   joined_at: string;
@@ -38,7 +39,7 @@ export async function getParticipants(): Promise<DashboardParticipant[]> {
       joined_at,
       program_name,
       county,
-      users:user_id ( name, email ),
+      users:user_id ( name, email, primary_role ),
       programs:program_id ( name )
     `,
     )
@@ -56,6 +57,7 @@ export async function getParticipants(): Promise<DashboardParticipant[]> {
     name: row.users?.name ?? null,
     email: row.users?.email ?? null,
     program_name: row.programs?.name ?? row.program_name ?? null,
+    role: row.users?.primary_role ?? null,
     mentor: row.mentor,
     status: row.status,
     joined_at: row.joined_at,
