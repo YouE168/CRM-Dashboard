@@ -173,7 +173,15 @@ export async function getLiveClientsByProgram(
   const rows = participants || (await getParticipants());
   const counts: Record<string, number> = {};
   for (const p of rows) {
-    const label = p.program_name || "Unassigned";
+    // Same fix as the Participants tables: mentee/entrepreneur signups are
+    // all tagged "Business Professional Services" by default, so group by
+    // their real role instead of that generic program name.
+    const label =
+      p.role === "mentee"
+        ? "Mentee"
+        : p.role === "entrepreneur"
+          ? "Entrepreneur"
+          : p.program_name || "Unassigned";
     counts[label] = (counts[label] || 0) + 1;
   }
   return Object.entries(counts)

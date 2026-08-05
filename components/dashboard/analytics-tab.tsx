@@ -186,7 +186,15 @@ export default function AnalyticsTab({
             participants={filteredParticipants.map((p) => ({
               id: p.id,
               name: p.name ?? "",
-              program: p.program_name ?? "",
+              // Same fix as the other Participants tables: show the real
+              // role instead of the generic "Business Professional
+              // Services" every mentee/entrepreneur is tagged with.
+              program:
+                p.role === "mentee"
+                  ? "Mentee"
+                  : p.role === "entrepreneur"
+                    ? "Entrepreneur"
+                    : (p.program_name ?? ""),
               stage: p.status,
               mentor: p.mentor ?? "",
             }))}
