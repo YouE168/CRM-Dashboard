@@ -457,8 +457,25 @@ export function CoalitionsTab() {
                                 <option value="In Progress">In Progress</option>
                                 <option value="Completed">Completed</option>
                               </select>
-                              <span className="text-[11px] text-gray-400">
-                                {i.progress}% complete
+                              <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  defaultValue={i.progress}
+                                  onBlur={async (e) => {
+                                    const value = Math.max(
+                                      0,
+                                      Math.min(100, Number(e.target.value) || 0),
+                                    );
+                                    await updateCoalitionInitiative(i.id, {
+                                      progress: value,
+                                    });
+                                    loadData();
+                                  }}
+                                  className="w-10 text-right border rounded px-1 py-0.5 text-[11px]"
+                                />
+                                % complete
                               </span>
                             </div>
                           </div>
