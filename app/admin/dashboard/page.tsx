@@ -1540,6 +1540,7 @@ function AdminDashboardContent() {
                 <img
                   src={profile.avatar}
                   alt={profile.name}
+                  style={{ objectPosition: profile.avatarPosition || "50% 50%" }}
                   className="w-full h-full object-cover"
                 />
               ) : (
