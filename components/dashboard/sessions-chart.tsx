@@ -55,9 +55,16 @@ export function SessionsChart() {
         import("html-to-image"),
         import("jspdf"),
       ]);
+      // See the same fix in reports-tab.tsx's generatePDF - without an
+      // explicit width/height, toCanvas can measure the node narrower than
+      // its real rendered size and silently clip content off the right
+      // edge of the exported PDF. Pass the real on-screen size instead.
+      const rect = chartRef.current.getBoundingClientRect();
       const canvas = await toCanvas(chartRef.current, {
         backgroundColor: "#ffffff",
         pixelRatio: 2,
+        width: Math.ceil(rect.width),
+        height: Math.ceil(rect.height),
       });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({

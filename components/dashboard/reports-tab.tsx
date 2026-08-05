@@ -807,9 +807,21 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
         import("html-to-image"),
         import("jspdf"),
       ]);
+      // Without an explicit width/height, toCanvas falls back to its own
+      // measurement of the node, which came out narrower than the real
+      // rendered content on reports using a two-column layout (Financial
+      // Summary) - the right-aligned $ amounts in the Expenses column and
+      // every transaction row got silently clipped off the edge of the
+      // exported PDF even though they display fine on screen. Passing the
+      // real on-screen size from getBoundingClientRect (rounded up so a
+      // fractional pixel doesn't get truncated) forces it to capture
+      // exactly what's visible instead of guessing.
+      const rect = reportContentRef.current.getBoundingClientRect();
       const canvas = await toCanvas(reportContentRef.current, {
         backgroundColor: "#ffffff",
         pixelRatio: 2,
+        width: Math.ceil(rect.width),
+        height: Math.ceil(rect.height),
       });
       const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({
