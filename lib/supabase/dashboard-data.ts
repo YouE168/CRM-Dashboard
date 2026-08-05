@@ -1258,25 +1258,22 @@ export async function getNotificationFeedForUser(params: {
   return items.slice(0, 30);
 }
 
-// First call for a user creates their row with last_seen_at = now(), so
-// nothing from before this feature existed shows up as a surprise wall
-// of "unread" - only things created after they've actually had a bell to
-// see them with count as new.
-export async function getLastSeenNotificationsAt(userId: string): Promise<string> {
+// Read-only - returns null if this user has never opened their
+// notification bell before (in which case everything currently in their
+// feed should count as unread, not just things from this exact moment
+// forward). The row only gets created the first time they actually open
+// the bell, via markNotificationsSeen below - never just from loading
+// the page, or the badge would clear itself before they ever saw it.
+export async function getLastSeenNotificationsAt(
+  userId: string,
+): Promise<string | null> {
   const { data, error } = await supabase
     .from("notification_seen_state")
     .select("last_seen_at")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
-  if (data) return data.last_seen_at;
-
-  const now = new Date().toISOString();
-  const { error: insertError } = await supabase
-    .from("notification_seen_state")
-    .insert({ user_id: userId, last_seen_at: now });
-  if (insertError) throw insertError;
-  return now;
+  return data?.last_seen_at ?? null;
 }
 
 export async function markNotificationsSeen(userId: string): Promise<void> {

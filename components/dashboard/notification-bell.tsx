@@ -59,9 +59,12 @@ export function NotificationBell({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const unreadCount = lastSeenAt
-    ? items.filter((i) => new Date(i.createdAt) > new Date(lastSeenAt)).length
-    : 0;
+  // lastSeenAt === null means this person has never opened the bell
+  // before - everything currently in the feed counts as unread, not
+  // nothing (see getLastSeenNotificationsAt).
+  const isItemUnread = (createdAt: string) =>
+    lastSeenAt === null || new Date(createdAt) > new Date(lastSeenAt);
+  const unreadCount = items.filter((i) => isItemUnread(i.createdAt)).length;
 
   const toggleOpen = async () => {
     const next = !open;
@@ -126,9 +129,7 @@ export function NotificationBell({
               </div>
             ) : (
               items.map((item) => {
-                const isUnread = lastSeenAt
-                  ? new Date(item.createdAt) > new Date(lastSeenAt)
-                  : false;
+                const isUnread = isItemUnread(item.createdAt);
                 return (
                   <div
                     key={item.id}
