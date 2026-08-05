@@ -492,13 +492,39 @@ export interface MenteeRow {
   sessions_completed: number;
 }
 
+// active_clients and rating on the mentors table itself are static
+// columns that nothing ever writes to (they're whatever they were at
+// signup, usually 0) - the real counts live in the participants table
+// (participants.mentor) and mentor_ratings table respectively. Compute
+// both live here so the Mentor Directory reflects real assignments and
+// real submitted ratings instead of stale zeros. See also
+// getLiveMentorActivityReport, which does the same thing for the
+// Reports page.
 export async function getMentors(): Promise<MentorRow[]> {
-  const { data, error } = await supabase
-    .from("mentors")
-    .select("*")
-    .order("name");
-  if (error) throw error;
-  return data;
+  const [mentorsRes, participantsRes, ratingsRes] = await Promise.all([
+    supabase.from("mentors").select("*").order("name"),
+    supabase.from("participants").select("mentor"),
+    supabase.from("mentor_ratings").select("mentor_name, rating"),
+  ]);
+  if (mentorsRes.error) throw mentorsRes.error;
+  if (participantsRes.error) throw participantsRes.error;
+  if (ratingsRes.error) throw ratingsRes.error;
+
+  const participants = participantsRes.data ?? [];
+  const ratingsByMentor: Record<string, number[]> = {};
+  for (const r of ratingsRes.data ?? []) {
+    (ratingsByMentor[r.mentor_name] ||= []).push(r.rating);
+  }
+
+  return (mentorsRes.data ?? []).map((m) => {
+    const active_clients = participants.filter((p) => p.mentor === m.name).length;
+    const ratings = ratingsByMentor[m.name] || [];
+    const rating =
+      ratings.length > 0
+        ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10
+        : 0;
+    return { ...m, active_clients, rating };
+  });
 }
 
 // LIVE - computed from the real mentors + participants tables instead
@@ -581,6 +607,7 @@ export function subscribeToMentorsChanges(onChange: () => void) {
     .on("postgres_changes", { event: "*", schema: "public", table: "mentors" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "mentors_stats" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "participants" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "mentor_ratings" }, onChange)
     .subscribe();
   return () => {
     supabase.removeChannel(channel);
