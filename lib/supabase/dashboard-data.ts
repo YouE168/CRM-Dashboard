@@ -1162,6 +1162,159 @@ export function subscribeToDirectMessages(onChange: () => void) {
 }
 
 // ============================================
+// NOTIFICATION BELL - unified feed of "notes from other users" for the
+// mentee/entrepreneur/mentor/coalition/partner dashboards, pulled live
+// from three existing tables that each already have their own UI
+// elsewhere (mentee_notes, admin_notes, direct_messages). None of those
+// tables track read/unread per person, so "unread" here is computed
+// client-side: anything created after the viewer's last_seen_at (stored
+// in notification_seen_state) counts as new.
+// ============================================
+
+export type NotificationSource = "mentor_note" | "admin_note" | "direct_message";
+
+export interface NotificationFeedItem {
+  id: string;
+  source: NotificationSource;
+  title: string;
+  message: string;
+  authorName: string | null;
+  createdAt: string;
+}
+
+// Which roles see which sources: everyone sees admin_notes broadcast to
+// their own role; mentee/entrepreneur additionally see notes from their
+// mentor; coalition/partner/mentor additionally see their direct-message
+// thread with admin (mentors have this too - see roundtable/notes work
+// earlier in this project).
+export async function getNotificationFeedForUser(params: {
+  userId: string;
+  role: string;
+  participantId?: string | null;
+}): Promise<NotificationFeedItem[]> {
+  const { userId, role, participantId } = params;
+  const items: NotificationFeedItem[] = [];
+
+  const { data: adminNotes, error: adminNotesError } = await supabase
+    .from("admin_notes")
+    .select("*")
+    .eq("recipient_type", role)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (adminNotesError) throw adminNotesError;
+  for (const n of adminNotes || []) {
+    items.push({
+      id: `admin_note-${n.id}`,
+      source: "admin_note",
+      title: n.subject || "Note from Admin",
+      message: n.message,
+      authorName: n.sent_by,
+      createdAt: n.created_at,
+    });
+  }
+
+  if ((role === "mentee" || role === "entrepreneur") && participantId) {
+    const { data: notes, error: notesError } = await supabase
+      .from("mentee_notes")
+      .select("*")
+      .eq("participant_id", participantId)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    if (notesError) throw notesError;
+    for (const n of notes || []) {
+      items.push({
+        id: `mentor_note-${n.id}`,
+        source: "mentor_note",
+        title: "Note from your mentor",
+        message: n.note,
+        authorName: n.author,
+        createdAt: n.created_at,
+      });
+    }
+  }
+
+  if (role === "coalition" || role === "partner" || role === "mentor") {
+    const { data: messages, error: messagesError } = await supabase
+      .from("direct_messages")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("sender_role", "admin")
+      .order("created_at", { ascending: false })
+      .limit(30);
+    if (messagesError) throw messagesError;
+    for (const m of messages || []) {
+      items.push({
+        id: `direct_message-${m.id}`,
+        source: "direct_message",
+        title: `Message from ${m.sender_name || "Admin"}`,
+        message: m.message,
+        authorName: m.sender_name,
+        createdAt: m.created_at,
+      });
+    }
+  }
+
+  items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return items.slice(0, 30);
+}
+
+// First call for a user creates their row with last_seen_at = now(), so
+// nothing from before this feature existed shows up as a surprise wall
+// of "unread" - only things created after they've actually had a bell to
+// see them with count as new.
+export async function getLastSeenNotificationsAt(userId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("notification_seen_state")
+    .select("last_seen_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (data) return data.last_seen_at;
+
+  const now = new Date().toISOString();
+  const { error: insertError } = await supabase
+    .from("notification_seen_state")
+    .insert({ user_id: userId, last_seen_at: now });
+  if (insertError) throw insertError;
+  return now;
+}
+
+export async function markNotificationsSeen(userId: string): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("notification_seen_state")
+    .upsert({ user_id: userId, last_seen_at: now }, { onConflict: "user_id" });
+  if (error) throw error;
+}
+
+export function subscribeToNotificationFeed(role: string, onChange: () => void) {
+  const channelName = `notification-feed-${Math.random().toString(36).slice(2)}`;
+  let channel = supabase.channel(channelName).on(
+    "postgres_changes",
+    { event: "INSERT", schema: "public", table: "admin_notes" },
+    onChange,
+  );
+  if (role === "mentee" || role === "entrepreneur") {
+    channel = channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "mentee_notes" },
+      onChange,
+    );
+  }
+  if (role === "coalition" || role === "partner" || role === "mentor") {
+    channel = channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "direct_messages" },
+      onChange,
+    );
+  }
+  channel.subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// ============================================
 // PARTNER DASHBOARD - real Supabase-backed replacement for what used to be
 // entirely localStorage("partner_dashboard_data"). Each partner user gets
 // one profile-data row (hero/metrics) plus their own collaborations and

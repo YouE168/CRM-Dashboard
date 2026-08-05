@@ -1170,6 +1170,21 @@ export type Database = {
         };
         Relationships: [];
       };
+      notification_seen_state: {
+        Row: {
+          user_id: string;
+          last_seen_at: string;
+        };
+        Insert: {
+          user_id: string;
+          last_seen_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          last_seen_at?: string;
+        };
+        Relationships: [];
+      };
       partner_profile_data: {
         Row: {
           user_id: string;

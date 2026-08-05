@@ -65,6 +65,7 @@ import {
 } from "@/lib/supabase/dashboard-data";
 import { RoundtableJoinCard } from "@/components/dashboard/roundtable-join-card";
 import { DirectMessageChat } from "@/components/dashboard/direct-message-chat";
+import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { linkifyText } from "@/lib/linkify";
 import { useRouter } from "next/navigation";
 import {
@@ -104,6 +105,7 @@ import {
 
 // Types
 interface ProfileData {
+  id?: string;
   name: string;
   email: string;
   role: string;
@@ -5910,6 +5912,7 @@ export default function DashboardPage() {
     email: "",
     role: "",
   });
+  const [myParticipantId, setMyParticipantId] = useState<string | null>(null);
   // checkForUpcomingSessions is called from setTimeout/setInterval callbacks
   // created once inside a mount-only useEffect, which would otherwise close
   // over the stale initial `profile` (still {name:"",email:"",...} at that
@@ -6103,6 +6106,7 @@ export default function DashboardPage() {
       if (cancelled) return;
 
       const loadedProfile = {
+        id: authData.user.id,
         name: userRow.name || userRow.email.split("@")[0],
         email: userRow.email,
         role: userRow.primary_role || "Member",
@@ -6113,6 +6117,27 @@ export default function DashboardPage() {
       setProfile(loadedProfile);
       setEditForm(loadedProfile);
       setIsAuthenticated(true);
+
+      // Notification bell needs the viewer's own participant_id for
+      // mentee/entrepreneur roles (mentee_notes is keyed by that, not
+      // user_id directly) - fetch once here alongside the rest of the
+      // profile load.
+      if (
+        userRow.primary_role === "mentee" ||
+        userRow.primary_role === "entrepreneur"
+      ) {
+        try {
+          const records = await getParticipantRecordsForUser(
+            authData.user.id,
+            userRow.email,
+          );
+          if (!cancelled && records.length > 0) {
+            setMyParticipantId(records[0].id);
+          }
+        } catch (err) {
+          console.error("Failed to load participant id for notifications:", err);
+        }
+      }
 
       // Local UI preferences (not sensitive, fine to keep in localStorage)
       const savedEmailNotifications = localStorage.getItem(
@@ -6316,6 +6341,14 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-1">
+              {profile.id && profile.primaryRole && (
+                <NotificationBell
+                  userId={profile.id}
+                  role={profile.primaryRole}
+                  participantId={myParticipantId}
+                />
+              )}
+
               <button
                 onClick={() => setPanel("settings")}
                 className="p-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-all hover:scale-105"
