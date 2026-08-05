@@ -7,6 +7,7 @@ import {
   getParticipants,
   getLiveOverviewStats,
   getLiveMentorActivityReport,
+  getLiveMentorIncomeReport,
   getLiveOutcomeReport,
   getLiveClientsByCounty,
   getAllFinancialTransactions,
@@ -18,6 +19,7 @@ import {
   type DashboardParticipant,
   type LiveOverviewStats,
   type LiveMentorActivityRow,
+  type LiveMentorIncomeRow,
   type LiveOutcomeReport,
   type ChartRow,
   type FinancialTransactionRow,
@@ -36,6 +38,7 @@ import {
   Trash2,
   Plus,
   X,
+  DollarSign,
 } from "lucide-react";
 
 interface ReportsTabProps {
@@ -52,6 +55,7 @@ type ReportView =
   | "monthly"
   | "participant"
   | "mentor"
+  | "mentor-income"
   | "financial"
   | "outcome"
   | "county";
@@ -223,6 +227,7 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
   const [participants, setParticipants] = useState<DashboardParticipant[]>([]);
   const [overviewStats, setOverviewStats] = useState<LiveOverviewStats | null>(null);
   const [mentorActivity, setMentorActivity] = useState<LiveMentorActivityRow[]>([]);
+  const [mentorIncome, setMentorIncome] = useState<LiveMentorIncomeRow[]>([]);
   const [outcomeReport, setOutcomeReport] = useState<LiveOutcomeReport | null>(null);
   const [countyChartData, setCountyChartData] = useState<ChartRow[]>([]);
   const [transactions, setTransactions] = useState<FinancialTransactionRow[]>([]);
@@ -233,16 +238,18 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
 
   const loadData = useCallback(async () => {
     try {
-      const [parts, overview, mentors, outcome, txns] = await Promise.all([
+      const [parts, overview, mentors, income, outcome, txns] = await Promise.all([
         getParticipants(),
         getLiveOverviewStats(),
         getLiveMentorActivityReport(),
+        getLiveMentorIncomeReport(),
         getLiveOutcomeReport(),
         getAllFinancialTransactions(),
       ]);
       setParticipants(parts);
       setOverviewStats(overview);
       setMentorActivity(mentors);
+      setMentorIncome(income);
       setOutcomeReport(outcome);
       setTransactions(txns);
       setCountyChartData(await getLiveClientsByCounty(parts));
@@ -326,6 +333,14 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
       date: monthYearLabel,
       icon: UserCheck,
       color: "bg-purple-100 text-purple-600",
+    },
+    {
+      id: "mentor-income",
+      title: "Mentor Income Report",
+      desc: "Each mentor's accrued earnings from logged sessions",
+      date: monthYearLabel,
+      icon: DollarSign,
+      color: "bg-green-100 text-green-600",
     },
     {
       id: "financial",
@@ -496,6 +511,70 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
       </div>
     </div>
   );
+
+  const MentorIncomeReport = () => {
+    const totalIncome = mentorIncome.reduce((sum, m) => sum + m.income, 0);
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-1">
+          Mentor Income Report
+        </h2>
+        <p className="text-sm text-gray-500 mb-6">
+          Accrued earnings from logged sessions to date - not a payout,
+          nothing here has actually been paid out yet.
+        </p>
+
+        {mentorIncome.length === 0 ? (
+          <p className="text-sm text-gray-400">No mentors yet.</p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">
+                      Mentor
+                    </th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-600">
+                      Hours
+                    </th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-600">
+                      Rate
+                    </th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-600">
+                      Accrued Income
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {mentorIncome.map((m) => (
+                    <tr key={m.name}>
+                      <td className="px-4 py-3">{m.name}</td>
+                      <td className="px-4 py-3 text-right">{m.hours}</td>
+                      <td className="px-4 py-3 text-right">
+                        ${m.hourlyRate.toLocaleString()}/hr
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium">
+                        ${m.income.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between text-sm">
+              <span className="font-semibold text-gray-900">
+                Total Accrued Income
+              </span>
+              <span className="font-semibold text-green-600">
+                ${totalIncome.toLocaleString()}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
 
   const FinancialReport = () => (
     <div className="space-y-4">
@@ -760,6 +839,8 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
         return <ParticipantReport />;
       case "mentor":
         return <MentorReport />;
+      case "mentor-income":
+        return <MentorIncomeReport />;
       case "financial":
         return <FinancialReport />;
       case "outcome":

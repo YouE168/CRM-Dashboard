@@ -13,6 +13,7 @@ import {
   type MentorMatchParticipantRow,
   getAllPrograms,
   updateProgramContact,
+  deleteProgram,
   getProgramTracking,
   getProgramTrackingForProgram,
   upsertProgramTracking,
@@ -623,13 +624,20 @@ export default function ProgramManagementPage() {
     }
   };
 
-  const handleDelete = (programId: string) => {
-    if (confirm("Are you sure you want to delete this program?")) {
-      const updatedPrograms = programs.filter((p) => p.id !== programId);
-      savePrograms(updatedPrograms);
+  // Real delete against the programs table - this used to just call
+  // savePrograms (localStorage only), so a "deleted" program silently
+  // reappeared on the next page load since it never left the database.
+  const handleDelete = async (programId: string) => {
+    if (!confirm("Are you sure you want to delete this program?")) return;
+    try {
+      await deleteProgram(programId);
+      setPrograms((prev) => prev.filter((p) => p.id !== programId));
       if (selectedProgram?.id === programId) {
         setSelectedProgram(null);
       }
+    } catch (err) {
+      console.error("Failed to delete program:", err);
+      alert("Failed to delete that program. Please try again.");
     }
   };
 
@@ -730,8 +738,8 @@ export default function ProgramManagementPage() {
   // Tracking tab's "select a participant" dropdown, since each
   // entrepreneur's budget/grants/outcomes are entered individually.
   const trackingProgramParticipants = selectedProgram
-    ? matchingParticipants.filter(
-        (p) => p.program_name === selectedProgram.name,
+    ? matchingParticipants.filter((p) =>
+        p.programNames.includes(selectedProgram.name),
       )
     : [];
 
@@ -1532,8 +1540,8 @@ export default function ProgramManagementPage() {
                               </tr>
                             ) : (
                               matchingParticipants
-                                .filter(
-                                  (p) => p.program_name === selectedProgram.name,
+                                .filter((p) =>
+                                  p.programNames.includes(selectedProgram.name),
                                 )
                                 .map((p) => (
                                   <tr

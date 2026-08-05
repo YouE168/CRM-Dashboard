@@ -963,6 +963,40 @@ export async function getLiveMentorActivityReport(): Promise<LiveMentorActivityR
   });
 }
 
+export interface LiveMentorIncomeRow {
+  name: string;
+  hourlyRate: number;
+  hours: number;
+  income: number;
+}
+
+// Accrued mentor earnings to date - real hours logged in mentee_sessions
+// x their real hourly_rate from the mentors table. This is informational
+// only ("what they've earned so far"), not an actual payout - there's no
+// payment processing anywhere in this app, so nothing here moves money,
+// marks anything as paid, or generates a 1099. Same all-time (not
+// month-scoped) convention as getLiveMentorActivityReport above.
+export async function getLiveMentorIncomeReport(): Promise<LiveMentorIncomeRow[]> {
+  const [{ data: mentors, error: mentorsError }, sessions] = await Promise.all([
+    supabase.from("mentors").select("name, hourly_rate"),
+    getAllMenteeSessions(),
+  ]);
+  if (mentorsError) throw mentorsError;
+
+  return (mentors || []).map((m) => {
+    const mentorSessions = sessions.filter((s) => s.mentor_name === m.name);
+    const hours =
+      Math.round((mentorSessions.reduce((sum, s) => sum + (s.duration || 0), 0) / 60) * 10) / 10;
+    const hourlyRate = m.hourly_rate ?? 0;
+    return {
+      name: m.name,
+      hourlyRate,
+      hours,
+      income: Math.round(hours * hourlyRate * 100) / 100,
+    };
+  });
+}
+
 export interface LiveOutcomeReport {
   businessLaunches: number;
   satisfactionPct: number | null;
@@ -2205,6 +2239,36 @@ export async function updateProgramContact(
   if (error) throw error;
 }
 
+// Real delete for the admin Program Management "Delete" button - previously
+// this only wrote to localStorage("entrepreneur_programs_data") and never
+// touched the real programs table, so a deleted program silently came back
+// on the next page load. Clears out the tables that reference program_id
+// first (user_programs, program_tracking, program_resources) since there's
+// no ON DELETE CASCADE on those foreign keys, then deletes the program row
+// itself. participants.program_id is left alone (set null) rather than
+// deleting participant records - a participant shouldn't disappear just
+// because the program they were tagged with was removed.
+export async function deleteProgram(programId: string): Promise<void> {
+  const [{ error: userProgramsError }, { error: trackingError }, { error: resourcesError }] =
+    await Promise.all([
+      supabase.from("user_programs").delete().eq("program_id", programId),
+      supabase.from("program_tracking").delete().eq("program_id", programId),
+      supabase.from("program_resources").delete().eq("program_id", programId),
+    ]);
+  if (userProgramsError) throw userProgramsError;
+  if (trackingError) throw trackingError;
+  if (resourcesError) throw resourcesError;
+
+  const { error: participantsError } = await supabase
+    .from("participants")
+    .update({ program_id: null })
+    .eq("program_id", programId);
+  if (participantsError) throw participantsError;
+
+  const { error } = await supabase.from("programs").delete().eq("id", programId);
+  if (error) throw error;
+}
+
 export interface UserProgramRow {
   user_program_id: string;
   program_id: string;
@@ -2263,24 +2327,62 @@ export interface MentorMatchParticipantRow {
   id: string;
   email: string | null;
   name: string | null;
-  program_name: string | null;
+  programNames: string[];
   mentor: string | null;
   status: string;
 }
 
-// Real participants table rows for the admin "Mentor Matching" tab -
-// this is the actual mentorship enrollment/assignment record (also used
-// by getParticipantRecordsForUser and getMenteesForMentor), separate
-// from user_programs (business-services approval).
+// Real participants table rows for the admin "Mentor Matching" tab - this
+// is the actual mentorship enrollment/assignment record (mentor field),
+// separate from user_programs (business-services approval).
+//
+// Eligibility used to be `participants.program_name === selectedProgram`,
+// but every mentee/entrepreneur's participants row is tagged with
+// "Business Professional Services" at signup regardless of which programs
+// they actually picked (see signup/page.tsx) - so RCP/SEED/SEK's Matching
+// tab always showed 0 participants even for approved users. The real
+// per-program membership lives in user_programs (approved rows), so build
+// each participant's list of approved program names from there instead.
 export async function getAllParticipantsForMatching(): Promise<
   MentorMatchParticipantRow[]
 > {
-  const { data, error } = await supabase
-    .from("participants")
-    .select("id, email, name, program_name, mentor, status")
-    .order("name");
-  if (error) throw error;
-  return data;
+  const [
+    { data: participants, error: participantsError },
+    { data: enrollments, error: enrollError },
+    { data: programs, error: programError },
+  ] = await Promise.all([
+    supabase
+      .from("participants")
+      .select("id, user_id, email, name, mentor, status")
+      .order("name"),
+    supabase.from("user_programs").select("user_id, program_id, approved"),
+    supabase.from("programs").select("id, name"),
+  ]);
+  if (participantsError) throw participantsError;
+  if (enrollError) throw enrollError;
+  if (programError) throw programError;
+
+  const programNameById = Object.fromEntries(
+    (programs || []).map((p) => [p.id, p.name]),
+  );
+  const approvedProgramNamesByUser = (enrollments || []).reduce<
+    Record<string, string[]>
+  >((acc, e) => {
+    if (!e.approved) return acc;
+    const name = programNameById[e.program_id];
+    if (!name) return acc;
+    (acc[e.user_id] ||= []).push(name);
+    return acc;
+  }, {});
+
+  return (participants || []).map((p) => ({
+    id: p.id,
+    email: p.email,
+    name: p.name,
+    programNames: p.user_id ? approvedProgramNamesByUser[p.user_id] || [] : [],
+    mentor: p.mentor,
+    status: p.status,
+  }));
 }
 
 // Assign (or clear, with mentorName = null) the mentor for a participant.
