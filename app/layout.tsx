@@ -7,7 +7,7 @@ const geist = Geist({ subsets: ["latin"] });
 const geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Rural Community Partners | Mentoring Dashboard",
+  title: "Rural Community Partners",
   description: "Analytics dashboard for mentoring program management",
   icons: {
     icon: [
