@@ -11,6 +11,7 @@ import { ParticipantsTab } from "@/components/dashboard/participants-tab";
 import { MentorsTab } from "@/components/dashboard/mentors-tab";
 import { SlidePanel } from "@/components/slide-panel";
 import { NotificationPanel } from "@/components/dashboard/notification-panel";
+import { AvatarPositionEditor } from "@/components/dashboard/avatar-position-editor";
 import { notificationService } from "@/lib/notification-service";
 import {
   Bell,
@@ -35,6 +36,7 @@ interface ProfileData {
   email: string;
   role: string;
   avatar?: string;
+  avatarPosition?: string;
 }
 
 interface SettingsData {
@@ -186,7 +188,7 @@ export default function ProgramManagerDashboardPage() {
 
       const { data: profileRow } = await supabase
         .from("profiles")
-        .select("avatar")
+        .select("avatar, avatar_position")
         .eq("id", authData.user.id)
         .maybeSingle();
 
@@ -202,6 +204,7 @@ export default function ProgramManagerDashboardPage() {
               ? "Admin"
               : "Staff",
         avatar: profileRow?.avatar ?? undefined,
+        avatarPosition: profileRow?.avatar_position ?? "50% 50%",
       };
 
       setProfile(loadedProfile);
@@ -616,16 +619,27 @@ export default function ProgramManagerDashboardPage() {
       >
         <div className="flex flex-col items-center gap-2 py-4">
           <div className="relative">
-            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-3xl font-bold overflow-hidden">
-              {profile.avatar ? (
-                <img
-                  src={profile.avatar}
-                  alt={profile.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                profile.name.charAt(0).toUpperCase()
-              )}
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-3xl font-bold">
+              <AvatarPositionEditor
+                src={profile.avatar}
+                position={profile.avatarPosition || "50% 50%"}
+                onPositionChange={(pos) =>
+                  setProfile((prev) => ({ ...prev, avatarPosition: pos }))
+                }
+                onCommit={async (pos) => {
+                  const { data: authData } = await supabase.auth.getUser();
+                  if (!authData.user) return;
+                  const { error } = await supabase
+                    .from("profiles")
+                    .upsert(
+                      { id: authData.user.id, avatar_position: pos },
+                      { onConflict: "id" },
+                    );
+                  if (error) console.error("Failed to save avatar position:", error);
+                }}
+                size={96}
+                fallback={profile.name.charAt(0).toUpperCase()}
+              />
             </div>
             <button
               onClick={() => {

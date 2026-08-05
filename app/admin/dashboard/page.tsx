@@ -17,6 +17,7 @@ import {
   type DirectMessageRow,
 } from "@/lib/supabase/dashboard-data";
 import { NotificationPanel } from "@/components/dashboard/notification-panel";
+import { AvatarPositionEditor } from "@/components/dashboard/avatar-position-editor";
 import {
   notificationService,
   NotificationHelpers,
@@ -80,6 +81,7 @@ interface ProfileData {
   email: string;
   role: string;
   avatar?: string;
+  avatarPosition?: string;
   userType?: string;
   primaryRole?: string;
 }
@@ -476,7 +478,7 @@ function AdminDashboardContent() {
             .maybeSingle(),
           supabase
             .from("profiles")
-            .select("avatar")
+            .select("avatar, avatar_position")
             .eq("id", authData.user.id)
             .maybeSingle(),
         ]);
@@ -511,6 +513,7 @@ function AdminDashboardContent() {
         primaryRole: userRow.primary_role ?? undefined,
         userType: userRow.primary_role ?? undefined,
         avatar: profileRow?.avatar ?? undefined,
+        avatarPosition: profileRow?.avatar_position ?? "50% 50%",
       };
 
       setProfile(loadedProfile);
@@ -771,13 +774,18 @@ function AdminDashboardContent() {
         showToast("Failed to save profile.", "error");
         return;
       }
-      if (editForm.avatar !== profile.avatar) {
-        const { error: avatarError } = await supabase
-          .from("profiles")
-          .upsert(
-            { id: authData.user.id, avatar: editForm.avatar || null },
-            { onConflict: "id" },
-          );
+      if (
+        editForm.avatar !== profile.avatar ||
+        editForm.avatarPosition !== profile.avatarPosition
+      ) {
+        const { error: avatarError } = await supabase.from("profiles").upsert(
+          {
+            id: authData.user.id,
+            avatar: editForm.avatar || null,
+            avatar_position: editForm.avatarPosition || "50% 50%",
+          },
+          { onConflict: "id" },
+        );
         if (avatarError) {
           console.error("Failed to save avatar:", avatarError);
         }
@@ -1620,18 +1628,21 @@ function AdminDashboardContent() {
         onBack={() => setPanel("profile")}
       >
         <div className="space-y-4">
-          <div className="flex justify-center">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-2xl font-bold overflow-hidden">
-              {editForm.avatar ? (
-                <img
-                  src={editForm.avatar}
-                  alt={editForm.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                editForm.name.charAt(0).toUpperCase()
-              )}
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-2xl font-bold">
+              <AvatarPositionEditor
+                src={editForm.avatar}
+                position={editForm.avatarPosition || "50% 50%"}
+                onPositionChange={(pos) =>
+                  setEditForm({ ...editForm, avatarPosition: pos })
+                }
+                size={80}
+                fallback={editForm.name.charAt(0).toUpperCase()}
+              />
             </div>
+            {editForm.avatar && (
+              <p className="text-[11px] text-gray-400">Drag photo to reposition</p>
+            )}
           </div>
 
           <div>

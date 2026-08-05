@@ -60,6 +60,7 @@ export type Database = {
           status: string | null;
           business_professional_status: string | null;
           avatar: string | null;
+          avatar_position: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -83,6 +84,7 @@ export type Database = {
           status?: string | null;
           business_professional_status?: string | null;
           avatar?: string | null;
+          avatar_position?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -106,6 +108,7 @@ export type Database = {
           status?: string | null;
           business_professional_status?: string | null;
           avatar?: string | null;
+          avatar_position?: string | null;
           created_at?: string;
           updated_at?: string;
         };
