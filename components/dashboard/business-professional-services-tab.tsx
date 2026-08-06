@@ -37,9 +37,9 @@ import {
   togglePersonalNote,
   deletePersonalNote,
   subscribeToPersonalNotes,
-  getMyNotepad,
-  saveNotepad,
-  deleteNotepad,
+  getMyNotepadEntries,
+  addNotepadEntry,
+  deleteNotepadEntry,
   subscribeToNotepad,
   type CrmMemberRow,
   type CaseNoteRow,
@@ -723,25 +723,24 @@ function PersonalReminders({ adminId }: { adminId: string }) {
   );
 }
 
-// A single big private notepad - not tied to any member, not a checklist,
-// just one free-form note the logged-in admin/staff user can write into,
-// save, and clear whenever they want. Private via RLS, same as the
-// reminder checklist above, but sized to match it since this is meant to
-// be the "everything else" scratchpad for longer-form notes to self.
+// Private notepad - not tied to any member, not a checklist. Jody (or
+// whoever's logged in) can save as many free-form notes here as she
+// wants, each independently deletable. Any URL pasted into a note is
+// rendered as a clickable link via linkifyText, so a pasted meeting/doc
+// link can be opened directly from the note instead of being copy-pasted
+// elsewhere. Private via RLS, same as the reminder checklist above.
 function MyNotepad({ adminId }: { adminId: string }) {
-  const [content, setContent] = useState("");
-  const [savedContent, setSavedContent] = useState("");
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [entries, setEntries] = useState<NotepadRow[]>([]);
+  const [newContent, setNewContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const row = await getMyNotepad(adminId);
-      setContent(row?.content ?? "");
-      setSavedContent(row?.content ?? "");
-      setUpdatedAt(row?.updated_at ?? null);
+      const data = await getMyNotepadEntries(adminId);
+      setEntries(data);
     } catch (err) {
       console.error("Failed to load notepad:", err);
     } finally {
@@ -755,95 +754,107 @@ function MyNotepad({ adminId }: { adminId: string }) {
     return unsubscribe;
   }, [adminId, load]);
 
-  const handleSave = async () => {
+  const handleAdd = async () => {
+    if (!newContent.trim()) return;
     setSaving(true);
     try {
-      await saveNotepad(adminId, content);
-      setSavedContent(content);
-      setUpdatedAt(new Date().toISOString());
+      await addNotepadEntry(adminId, newContent);
+      setNewContent("");
+      await load();
     } catch (err) {
-      console.error("Failed to save notepad:", err);
-      alert("Couldn't save your note. Please try again.");
+      console.error("Failed to save note:", err);
+      alert("Couldn't save that note. Please try again.");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleClear = async () => {
-    setSaving(true);
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    setDeleting(true);
     try {
-      await deleteNotepad(adminId);
-      setContent("");
-      setSavedContent("");
-      setUpdatedAt(null);
-      setConfirmClear(false);
+      await deleteNotepadEntry(pendingDeleteId);
+      await load();
+      setPendingDeleteId(null);
     } catch (err) {
-      console.error("Failed to clear notepad:", err);
-      alert("Couldn't clear your note. Please try again.");
+      console.error("Failed to delete note:", err);
+      alert("Couldn't delete that note. Please try again.");
     } finally {
-      setSaving(false);
+      setDeleting(false);
     }
   };
-
-  const isDirty = content !== savedContent;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <NotebookPen className="h-5 w-5 text-amber-600" />
-          <h2 className="text-sm font-semibold text-gray-900">My Notepad</h2>
+          <h2 className="text-sm font-semibold text-gray-900">
+            My Notepad {entries.length > 0 && `(${entries.length})`}
+          </h2>
         </div>
-        <span className="text-xs text-gray-400">
-          {isDirty
-            ? "Unsaved changes"
-            : updatedAt
-              ? `Saved ${new Date(updatedAt).toLocaleString()}`
-              : "Private to you"}
-        </span>
+        <span className="text-xs text-gray-400">Private to you</span>
+      </div>
+
+      <div className="flex gap-2 mb-4">
+        <textarea
+          value={newContent}
+          onChange={(e) => setNewContent(e.target.value)}
+          placeholder="Jot down anything you want to remember - paste a link and it'll be clickable once saved..."
+          rows={3}
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-y"
+        />
+        <button
+          onClick={handleAdd}
+          disabled={saving || !newContent.trim()}
+          className="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 self-start whitespace-nowrap"
+        >
+          <Plus className="h-4 w-4" />
+          {saving ? "Saving…" : "Save Note"}
+        </button>
       </div>
 
       {loading ? (
         <p className="text-sm text-gray-400">Loading…</p>
+      ) : entries.length === 0 ? (
+        <p className="text-sm text-gray-400">No notes yet.</p>
       ) : (
-        <>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Jot down anything you want to remember - only you can see this note."
-            rows={8}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-y"
-          />
-          <div className="flex items-center justify-end gap-2 mt-3">
-            <button
-              onClick={() => setConfirmClear(true)}
-              disabled={saving || (!content && !savedContent)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        <div className="space-y-2">
+          {entries.map((n) => (
+            <div
+              key={n.id}
+              className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
             >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || !isDirty}
-              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Check className="h-4 w-4" />
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                {linkifyText(n.content)}
+              </p>
+              <div className="flex items-center justify-between mt-1.5">
+                <p className="text-xs text-gray-400">
+                  {new Date(n.created_at).toLocaleString()}
+                </p>
+                <button
+                  onClick={() => setPendingDeleteId(n.id)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
+                  title="Delete note"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span className="text-xs font-medium">Delete</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       <ConfirmationModal
-        isOpen={confirmClear}
+        isOpen={pendingDeleteId !== null}
         title="Delete note"
-        message="Delete your entire notepad? This can't be undone."
-        confirmText={saving ? "Deleting…" : "Delete"}
+        message="Delete this note? This can't be undone."
+        confirmText={deleting ? "Deleting…" : "Delete"}
         cancelText="Cancel"
         type="danger"
-        onConfirm={handleClear}
-        onCancel={() => setConfirmClear(false)}
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDeleteId(null)}
       />
     </div>
   );

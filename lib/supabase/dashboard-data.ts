@@ -3333,48 +3333,53 @@ export function subscribeToPersonalNotes(adminId: string, onChange: () => void) 
   };
 }
 
-// A single free-form private notepad per admin/staff user - one big note
-// they can write into and save, separate from the itemized reminder
-// checklist above. Private via RLS (admin_id = auth.uid()), same as
-// admin_personal_notes.
+// Free-form private notepad entries per admin/staff user - as many notes
+// as they want, separate from the itemized reminder checklist above.
+// Note text is rendered through linkifyText on display, so any URL
+// pasted into a note becomes a clickable link. Private via RLS
+// (admin_id = auth.uid()), same as admin_personal_notes.
 export interface NotepadRow {
   id: string;
   admin_id: string;
   content: string;
+  created_at: string;
   updated_at: string;
 }
 
-export async function getMyNotepad(
+export async function getMyNotepadEntries(
   adminId: string,
-): Promise<NotepadRow | null> {
+): Promise<NotepadRow[]> {
   const { data, error } = await supabase
     .from("admin_notepad")
     .select("*")
     .eq("admin_id", adminId)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
   if (error) throw error;
   return data;
 }
 
-export async function saveNotepad(
+export async function addNotepadEntry(
   adminId: string,
   content: string,
 ): Promise<void> {
   const { error } = await supabase
     .from("admin_notepad")
-    .upsert(
-      { admin_id: adminId, content, updated_at: new Date().toISOString() },
-      { onConflict: "admin_id" },
-    );
+    .insert({ admin_id: adminId, content });
   if (error) throw error;
 }
 
-export async function deleteNotepad(adminId: string): Promise<void> {
-  const { error } = await supabase
+export async function deleteNotepadEntry(id: string): Promise<void> {
+  const { data, error } = await supabase
     .from("admin_notepad")
     .delete()
-    .eq("admin_id", adminId);
+    .eq("id", id)
+    .select("id");
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error(
+      "Delete was blocked by a database permission. Please try again.",
+    );
+  }
 }
 
 export function subscribeToNotepad(adminId: string, onChange: () => void) {

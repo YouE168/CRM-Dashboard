@@ -205,18 +205,21 @@ export type Database = {
           id: string;
           admin_id: string;
           content: string;
+          created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
           admin_id: string;
           content?: string;
+          created_at?: string;
           updated_at?: string;
         };
         Update: {
           id?: string;
           admin_id?: string;
           content?: string;
+          created_at?: string;
           updated_at?: string;
         };
         Relationships: [];
