@@ -3100,6 +3100,14 @@ export interface CaseNoteRow {
   member_name: string;
   note: string;
   author: string | null;
+  // Optional details about the actual interaction/meeting this note is
+  // about - separate from created_at, which is just when the note was
+  // typed into the system. Mirrors the fields coalition_meetings already
+  // uses for the "Upcoming Meetings" feature (date/time/link/location).
+  meeting_date: string | null;
+  meeting_time: string | null;
+  meeting_location: string | null;
+  meeting_link: string | null;
   created_at: string;
 }
 
@@ -3121,6 +3129,12 @@ export async function addCaseNote(
   memberName: string,
   note: string,
   author: string,
+  meetingDetails?: {
+    date?: string;
+    time?: string;
+    location?: string;
+    link?: string;
+  },
 ): Promise<void> {
   const { error } = await supabase.from("case_notes").insert({
     member_type: memberType,
@@ -3128,6 +3142,10 @@ export async function addCaseNote(
     member_name: memberName,
     note,
     author,
+    meeting_date: meetingDetails?.date || null,
+    meeting_time: meetingDetails?.time || null,
+    meeting_location: meetingDetails?.location || null,
+    meeting_link: meetingDetails?.link || null,
   });
   if (error) throw error;
 }

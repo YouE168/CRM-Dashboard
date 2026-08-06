@@ -16,6 +16,12 @@ import {
   Check,
   Trash2,
   ClipboardList,
+  Calendar,
+  Clock,
+  MapPin,
+  Link as LinkIcon,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   getAllCrmMembers,
@@ -78,6 +84,11 @@ function MemberDetailModal({
   const [loading, setLoading] = useState(true);
   const [newNote, setNewNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showMeetingDetails, setShowMeetingDetails] = useState(false);
+  const [meetingDate, setMeetingDate] = useState("");
+  const [meetingTime, setMeetingTime] = useState("");
+  const [meetingLocation, setMeetingLocation] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
 
   const loadNotes = useCallback(async () => {
     try {
@@ -106,8 +117,19 @@ function MemberDetailModal({
         member.name,
         newNote,
         currentAuthorName,
+        {
+          date: meetingDate,
+          time: meetingTime,
+          location: meetingLocation,
+          link: meetingLink,
+        },
       );
       setNewNote("");
+      setMeetingDate("");
+      setMeetingTime("");
+      setMeetingLocation("");
+      setMeetingLink("");
+      setShowMeetingDetails(false);
       await loadNotes();
     } catch (err) {
       console.error("Failed to save case note:", err);
@@ -191,7 +213,7 @@ function MemberDetailModal({
               <h3 className="font-semibold text-gray-900">Case Notes</h3>
             </div>
 
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-2">
               <textarea
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}
@@ -208,6 +230,61 @@ function MemberDetailModal({
               </button>
             </div>
 
+            <button
+              onClick={() => setShowMeetingDetails(!showMeetingDetails)}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-emerald-600 mb-3"
+            >
+              {showMeetingDetails ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+              Add date, time, location, or link (optional)
+            </button>
+
+            {showMeetingDetails && (
+              <div className="grid grid-cols-2 gap-2 mb-4 bg-gray-50 p-3 rounded-xl">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={meetingDate}
+                    onChange={(e) => setMeetingDate(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Time</label>
+                  <input
+                    type="time"
+                    value={meetingTime}
+                    onChange={(e) => setMeetingTime(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={meetingLocation}
+                    onChange={(e) => setMeetingLocation(e.target.value)}
+                    placeholder="e.g. RCP office"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Link</label>
+                  <input
+                    type="text"
+                    value={meetingLink}
+                    onChange={(e) => setMeetingLink(e.target.value)}
+                    placeholder="Zoom / meeting URL"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+              </div>
+            )}
+
             {loading ? (
               <p className="text-sm text-gray-400">Loading notes…</p>
             ) : notes.length === 0 ? (
@@ -216,6 +293,39 @@ function MemberDetailModal({
               <div className="space-y-2">
                 {notes.map((n) => (
                   <div key={n.id} className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    {(n.meeting_date || n.meeting_time || n.meeting_location || n.meeting_link) && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs text-emerald-700">
+                        {n.meeting_date && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {new Date(n.meeting_date + "T00:00:00").toLocaleDateString()}
+                          </span>
+                        )}
+                        {n.meeting_time && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {n.meeting_time}
+                          </span>
+                        )}
+                        {n.meeting_location && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {n.meeting_location}
+                          </span>
+                        )}
+                        {n.meeting_link && (
+                          <a
+                            href={n.meeting_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 hover:underline"
+                          >
+                            <LinkIcon className="h-3 w-3" />
+                            Meeting link
+                          </a>
+                        )}
+                      </div>
+                    )}
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">
                       {linkifyText(n.note)}
                     </p>
