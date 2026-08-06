@@ -20,7 +20,27 @@ export default function BusinessProfessionalServicesPage() {
         router.push("/login");
         return;
       }
+
+      // Admin/staff only - this page shows case notes across every
+      // member, so it needs the same gate as the "Business Professional
+      // Services" launch link on the main dashboard (which is itself only
+      // shown to isAdmin || isStaff). Without this check, anyone who knew
+      // the URL could load the page, even though the actual note data
+      // underneath is already protected separately by case_notes' RLS
+      // policies (admin/staff-only reads and writes).
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("primary_role")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
       if (cancelled) return;
+
+      if (userRow?.primary_role !== "admin" && userRow?.primary_role !== "staff") {
+        router.push("/admin/dashboard");
+        return;
+      }
+
       setCheckingAuth(false);
     };
 
