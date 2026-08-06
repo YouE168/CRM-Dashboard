@@ -3176,6 +3176,10 @@ export async function getUpcomingCaseNotes(
     .select("*")
     .gte("meeting_date", today)
     .order("meeting_date", { ascending: true })
+    // Same-day entries also need to sort by time, or "Tomorrow at 2pm"
+    // can end up listed before "Tomorrow at 1pm" - meeting_date alone
+    // ties everything on the same day together in insert order.
+    .order("meeting_time", { ascending: true, nullsFirst: false })
     .limit(limit);
   if (error) throw error;
   return data;
@@ -3205,6 +3209,11 @@ export async function addCaseNote(
     meeting_location: meetingDetails?.location || null,
     meeting_link: meetingDetails?.link || null,
   });
+  if (error) throw error;
+}
+
+export async function deleteCaseNote(id: string): Promise<void> {
+  const { error } = await supabase.from("case_notes").delete().eq("id", id);
   if (error) throw error;
 }
 

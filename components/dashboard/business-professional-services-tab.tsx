@@ -27,6 +27,7 @@ import {
   getAllCrmMembers,
   getCaseNotesForMember,
   addCaseNote,
+  deleteCaseNote,
   subscribeToCaseNotes,
   getUpcomingCaseNotes,
   getMyPersonalNotes,
@@ -137,6 +138,17 @@ function MemberDetailModal({
       alert("Couldn't save that note. Please try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteNote = async (id: string) => {
+    if (!confirm("Delete this note? This can't be undone.")) return;
+    try {
+      await deleteCaseNote(id);
+      await loadNotes();
+    } catch (err) {
+      console.error("Failed to delete case note:", err);
+      alert("Couldn't delete that note. Please try again.");
     }
   };
 
@@ -334,7 +346,10 @@ function MemberDetailModal({
             ) : (
               <div className="space-y-2">
                 {notes.map((n) => (
-                  <div key={n.id} className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <div
+                    key={n.id}
+                    className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
+                  >
                     {(n.meeting_date || n.meeting_time || n.meeting_location || n.meeting_link) && (
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs text-emerald-700">
                         {n.meeting_date && (
@@ -371,9 +386,18 @@ function MemberDetailModal({
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">
                       {linkifyText(n.note)}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {n.author || "Staff"} · {new Date(n.created_at).toLocaleString()}
-                    </p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-gray-400">
+                        {n.author || "Staff"} · {new Date(n.created_at).toLocaleString()}
+                      </p>
+                      <button
+                        onClick={() => handleDeleteNote(n.id)}
+                        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"
+                        title="Delete note"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
