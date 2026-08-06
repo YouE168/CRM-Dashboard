@@ -28,7 +28,6 @@ import { OverviewTab } from "@/components/dashboard/overview-tab";
 import AnalyticsTab from "@/components/dashboard/analytics-tab";
 import { ParticipantsTab } from "@/components/dashboard/participants-tab";
 import { MentorsTab } from "@/components/dashboard/mentors-tab";
-import { BusinessProfessionalServicesTab } from "@/components/dashboard/business-professional-services-tab";
 import { LeadershipTab } from "@/components/dashboard/leadership-tab";
 import { ResourcesTab } from "@/components/dashboard/resources-tab";
 import { ReportsTab } from "@/components/dashboard/reports-tab";
@@ -900,13 +899,7 @@ function AdminDashboardContent() {
     }
 
     if (isAdmin || isStaff) {
-      tabs.push(
-        "Business Professional Services",
-        "Leadership Roundtable",
-        "Resources",
-        "Reports",
-        "Notes",
-      );
+      tabs.push("Leadership Roundtable", "Resources", "Reports", "Notes");
     }
 
     return tabs;
@@ -1117,6 +1110,21 @@ function AdminDashboardContent() {
                   className="w-full text-left px-3 py-2 text-sm text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors flex items-center justify-between"
                 >
                   <span>📊 Manage All Programs →</span>
+                </button>
+              </div>
+
+              {/* Business Professional Services */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  🗂️ Business Professional Services
+                </h3>
+                <button
+                  onClick={() =>
+                    router.push("/admin/business-professional-services")
+                  }
+                  className="w-full text-left px-3 py-2 text-sm text-teal-600 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors flex items-center justify-between"
+                >
+                  <span>🗂️ Open Member Roster & Case Notes →</span>
                 </button>
               </div>
 
@@ -1957,10 +1965,6 @@ function AdminDashboardContent() {
         )}
         {activeTab === "Participants" && <ParticipantsTab />}
         {activeTab === "Mentors" && <MentorsTab />}
-        {(isAdmin || isStaff) &&
-          activeTab === "Business Professional Services" && (
-            <BusinessProfessionalServicesTab />
-          )}
         {(isAdmin || isStaff) && activeTab === "Leadership Roundtable" && (
           <LeadershipTab
             profileName={profile.name}
