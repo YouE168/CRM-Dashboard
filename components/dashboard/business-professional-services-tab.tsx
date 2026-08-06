@@ -687,12 +687,13 @@ export function BusinessProfessionalServicesTab() {
   const [selectedMember, setSelectedMember] = useState<CrmMemberRow | null>(null);
   const [currentAuthorName, setCurrentAuthorName] = useState("Staff");
   const [adminId, setAdminId] = useState<string | null>(null);
+  const [showAllSessions, setShowAllSessions] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
       const [membersData, upcomingData] = await Promise.all([
         getAllCrmMembers(),
-        getUpcomingCaseNotes(),
+        getUpcomingCaseNotes(50),
       ]);
       setMembers(membersData);
       setUpcoming(upcomingData);
@@ -753,6 +754,75 @@ export function BusinessProfessionalServicesTab() {
     document
       .getElementById("bps-all-members")
       ?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const renderSessionRow = (note: CaseNoteRow, idx: number) => {
+    const colors = [
+      { bg: "bg-emerald-100", text: "text-emerald-600" },
+      { bg: "bg-purple-100", text: "text-purple-600" },
+    ][idx % 2];
+
+    const sessionDate = new Date(note.meeting_date + "T00:00:00");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    let whenLabel = sessionDate.toLocaleDateString();
+    if (sessionDate.getTime() === today.getTime()) {
+      whenLabel = "Today";
+    } else if (sessionDate.getTime() === tomorrow.getTime()) {
+      whenLabel = "Tomorrow";
+    }
+    if (note.meeting_time) whenLabel += ` at ${note.meeting_time}`;
+
+    const matchingMember = members.find(
+      (m) => m.id === note.member_id && m.member_type === note.member_type,
+    );
+
+    return (
+      <div className="p-4" key={note.id}>
+        <div className="flex items-center gap-3">
+          <div
+            className={`w-10 h-10 rounded-full ${colors.bg} flex items-center justify-center`}
+          >
+            <span className={`text-sm font-bold ${colors.text}`}>
+              {initials(note.member_name)}
+            </span>
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-gray-800">{note.member_name}</p>
+            <p className="text-xs text-gray-500">
+              {whenLabel}
+              {note.meeting_location ? ` - ${note.meeting_location}` : ""}
+            </p>
+            {note.meeting_link && (
+              <a
+                href={note.meeting_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-0.5"
+              >
+                <LinkIcon className="h-3 w-3" />
+                Join link
+              </a>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              if (matchingMember) {
+                setShowAllSessions(false);
+                setSelectedMember(matchingMember);
+              }
+            }}
+            disabled={!matchingMember}
+            className="text-xs text-emerald-600 hover:text-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            Log Session →
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -870,11 +940,19 @@ export function BusinessProfessionalServicesTab() {
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 rounded-t-xl">
+          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 rounded-t-xl flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-emerald-600" />
               <h3 className="font-semibold text-gray-900">Upcoming Sessions</h3>
             </div>
+            {upcoming.length > 3 && (
+              <button
+                onClick={() => setShowAllSessions(true)}
+                className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+              >
+                View all →
+              </button>
+            )}
           </div>
           <div className="divide-y divide-gray-100">
             {upcoming.length === 0 ? (
@@ -882,77 +960,39 @@ export function BusinessProfessionalServicesTab() {
                 No upcoming sessions logged yet.
               </div>
             ) : (
-              upcoming.map((note, idx) => {
-                const colors = [
-                  { bg: "bg-emerald-100", text: "text-emerald-600" },
-                  { bg: "bg-purple-100", text: "text-purple-600" },
-                ][idx % 2];
-
-                const sessionDate = new Date(note.meeting_date + "T00:00:00");
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const tomorrow = new Date(today);
-                tomorrow.setDate(today.getDate() + 1);
-                let whenLabel = sessionDate.toLocaleDateString();
-                if (sessionDate.getTime() === today.getTime()) {
-                  whenLabel = "Today";
-                } else if (sessionDate.getTime() === tomorrow.getTime()) {
-                  whenLabel = "Tomorrow";
-                }
-                if (note.meeting_time) whenLabel += ` at ${note.meeting_time}`;
-
-                const matchingMember = members.find(
-                  (m) => m.id === note.member_id && m.member_type === note.member_type,
-                );
-
-                return (
-                  <div className="p-4" key={note.id}>
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-10 h-10 rounded-full ${colors.bg} flex items-center justify-center`}
-                      >
-                        <span className={`text-sm font-bold ${colors.text}`}>
-                          {initials(note.member_name)}
-                        </span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-800">
-                          {note.member_name}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {whenLabel}
-                          {note.meeting_location ? ` - ${note.meeting_location}` : ""}
-                        </p>
-                        {note.meeting_link && (
-                          <a
-                            href={note.meeting_link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-0.5"
-                          >
-                            <LinkIcon className="h-3 w-3" />
-                            Join link
-                          </a>
-                        )}
-                      </div>
-                      <button
-                        onClick={() =>
-                          matchingMember && setSelectedMember(matchingMember)
-                        }
-                        disabled={!matchingMember}
-                        className="text-xs text-emerald-600 hover:text-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-                      >
-                        Log Session →
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
+              upcoming.slice(0, 3).map((note, idx) => renderSessionRow(note, idx))
             )}
           </div>
         </div>
       </div>
+
+      {showAllSessions && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowAllSessions(false)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 rounded-t-2xl flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-emerald-600" />
+                <h3 className="font-semibold text-gray-900">
+                  All Upcoming Sessions ({upcoming.length})
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowAllSessions(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="divide-y divide-gray-100 overflow-y-auto">
+              {upcoming.map((note, idx) => renderSessionRow(note, idx))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {adminId && <PersonalReminders adminId={adminId} />}
 
