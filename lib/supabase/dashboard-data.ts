@@ -3332,3 +3332,67 @@ export function subscribeToPersonalNotes(adminId: string, onChange: () => void) 
     supabase.removeChannel(channel);
   };
 }
+
+// A single free-form private notepad per admin/staff user - one big note
+// they can write into and save, separate from the itemized reminder
+// checklist above. Private via RLS (admin_id = auth.uid()), same as
+// admin_personal_notes.
+export interface NotepadRow {
+  id: string;
+  admin_id: string;
+  content: string;
+  updated_at: string;
+}
+
+export async function getMyNotepad(
+  adminId: string,
+): Promise<NotepadRow | null> {
+  const { data, error } = await supabase
+    .from("admin_notepad")
+    .select("*")
+    .eq("admin_id", adminId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function saveNotepad(
+  adminId: string,
+  content: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("admin_notepad")
+    .upsert(
+      { admin_id: adminId, content, updated_at: new Date().toISOString() },
+      { onConflict: "admin_id" },
+    );
+  if (error) throw error;
+}
+
+export async function deleteNotepad(adminId: string): Promise<void> {
+  const { error } = await supabase
+    .from("admin_notepad")
+    .delete()
+    .eq("admin_id", adminId);
+  if (error) throw error;
+}
+
+export function subscribeToNotepad(adminId: string, onChange: () => void) {
+  const channelName = `notepad-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "admin_notepad",
+        filter: `admin_id=eq.${adminId}`,
+      },
+      onChange,
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}

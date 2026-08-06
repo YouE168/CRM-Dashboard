@@ -200,6 +200,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      admin_notepad: {
+        Row: {
+          id: string;
+          admin_id: string;
+          content: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          admin_id: string;
+          content?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          admin_id?: string;
+          content?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       programs: {
         Row: {
           id: string;

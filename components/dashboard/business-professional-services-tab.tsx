@@ -22,6 +22,8 @@ import {
   Link as LinkIcon,
   ChevronDown,
   ChevronUp,
+  History,
+  NotebookPen,
 } from "lucide-react";
 import {
   getAllCrmMembers,
@@ -35,9 +37,14 @@ import {
   togglePersonalNote,
   deletePersonalNote,
   subscribeToPersonalNotes,
+  getMyNotepad,
+  saveNotepad,
+  deleteNotepad,
+  subscribeToNotepad,
   type CrmMemberRow,
   type CaseNoteRow,
   type PersonalNoteRow,
+  type NotepadRow,
 } from "@/lib/supabase/dashboard-data";
 import { supabase } from "@/lib/supabase/client";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
@@ -162,6 +169,75 @@ function MemberDetailModal({
       setDeleting(false);
     }
   };
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const upcomingNotes = notes.filter(
+    (n) =>
+      n.meeting_date && new Date(n.meeting_date + "T00:00:00") >= todayStart,
+  );
+  const historyNotes = notes.filter(
+    (n) =>
+      !n.meeting_date || new Date(n.meeting_date + "T00:00:00") < todayStart,
+  );
+
+  const renderNoteCard = (n: CaseNoteRow) => (
+    <div
+      key={n.id}
+      className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
+    >
+      {(n.meeting_date || n.meeting_time || n.meeting_location || n.meeting_link) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs text-emerald-700">
+          {n.meeting_date && (
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {new Date(n.meeting_date + "T00:00:00").toLocaleDateString()}
+            </span>
+          )}
+          {n.meeting_time && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {n.meeting_time}
+            </span>
+          )}
+          {n.meeting_location && (
+            <span className="flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {n.meeting_location}
+            </span>
+          )}
+          {n.meeting_link && (
+            <a
+              href={n.meeting_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 hover:underline"
+            >
+              <LinkIcon className="h-3 w-3" />
+              Meeting link
+            </a>
+          )}
+        </div>
+      )}
+      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+        {linkifyText(n.note)}
+      </p>
+      <div className="flex items-center justify-between mt-1.5">
+        <p className="text-xs text-gray-400">
+          {n.author || "Staff"} · {new Date(n.created_at).toLocaleString()}
+        </p>
+        <button
+          onClick={() => handleDeleteNote(n.id)}
+          className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
+          title="Delete note"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Delete</span>
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -355,64 +431,33 @@ function MemberDetailModal({
             ) : notes.length === 0 ? (
               <p className="text-sm text-gray-400">No notes yet for this member.</p>
             ) : (
-              <div className="space-y-2">
-                {notes.map((n) => (
-                  <div
-                    key={n.id}
-                    className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
-                  >
-                    {(n.meeting_date || n.meeting_time || n.meeting_location || n.meeting_link) && (
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs text-emerald-700">
-                        {n.meeting_date && (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {new Date(n.meeting_date + "T00:00:00").toLocaleDateString()}
-                          </span>
-                        )}
-                        {n.meeting_time && (
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {n.meeting_time}
-                          </span>
-                        )}
-                        {n.meeting_location && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {n.meeting_location}
-                          </span>
-                        )}
-                        {n.meeting_link && (
-                          <a
-                            href={n.meeting_link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 hover:underline"
-                          >
-                            <LinkIcon className="h-3 w-3" />
-                            Meeting link
-                          </a>
-                        )}
-                      </div>
-                    )}
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                      {linkifyText(n.note)}
+              <>
+                {upcomingNotes.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">
+                      Upcoming
                     </p>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <p className="text-xs text-gray-400">
-                        {n.author || "Staff"} · {new Date(n.created_at).toLocaleString()}
-                      </p>
-                      <button
-                        onClick={() => handleDeleteNote(n.id)}
-                        className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
-                        title="Delete note"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        <span className="text-xs font-medium">Delete</span>
-                      </button>
+                    <div className="space-y-2">
+                      {upcomingNotes.map((n) => renderNoteCard(n))}
                     </div>
                   </div>
-                ))}
-              </div>
+                )}
+                <div className="flex items-center gap-1.5 mb-2">
+                  <History className="h-3.5 w-3.5 text-gray-400" />
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    Session History
+                  </p>
+                </div>
+                {historyNotes.length === 0 ? (
+                  <p className="text-sm text-gray-400">
+                    No past sessions logged yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {historyNotes.map((n) => renderNoteCard(n))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -674,6 +719,132 @@ function PersonalReminders({ adminId }: { adminId: string }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// A single big private notepad - not tied to any member, not a checklist,
+// just one free-form note the logged-in admin/staff user can write into,
+// save, and clear whenever they want. Private via RLS, same as the
+// reminder checklist above, but sized to match it since this is meant to
+// be the "everything else" scratchpad for longer-form notes to self.
+function MyNotepad({ adminId }: { adminId: string }) {
+  const [content, setContent] = useState("");
+  const [savedContent, setSavedContent] = useState("");
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const row = await getMyNotepad(adminId);
+      setContent(row?.content ?? "");
+      setSavedContent(row?.content ?? "");
+      setUpdatedAt(row?.updated_at ?? null);
+    } catch (err) {
+      console.error("Failed to load notepad:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [adminId]);
+
+  useEffect(() => {
+    load();
+    const unsubscribe = subscribeToNotepad(adminId, load);
+    return unsubscribe;
+  }, [adminId, load]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await saveNotepad(adminId, content);
+      setSavedContent(content);
+      setUpdatedAt(new Date().toISOString());
+    } catch (err) {
+      console.error("Failed to save notepad:", err);
+      alert("Couldn't save your note. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = async () => {
+    setSaving(true);
+    try {
+      await deleteNotepad(adminId);
+      setContent("");
+      setSavedContent("");
+      setUpdatedAt(null);
+      setConfirmClear(false);
+    } catch (err) {
+      console.error("Failed to clear notepad:", err);
+      alert("Couldn't clear your note. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isDirty = content !== savedContent;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <NotebookPen className="h-5 w-5 text-amber-600" />
+          <h2 className="text-sm font-semibold text-gray-900">My Notepad</h2>
+        </div>
+        <span className="text-xs text-gray-400">
+          {isDirty
+            ? "Unsaved changes"
+            : updatedAt
+              ? `Saved ${new Date(updatedAt).toLocaleString()}`
+              : "Private to you"}
+        </span>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : (
+        <>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Jot down anything you want to remember - only you can see this note."
+            rows={8}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-y"
+          />
+          <div className="flex items-center justify-end gap-2 mt-3">
+            <button
+              onClick={() => setConfirmClear(true)}
+              disabled={saving || (!content && !savedContent)}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !isDirty}
+              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Check className="h-4 w-4" />
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </>
+      )}
+
+      <ConfirmationModal
+        isOpen={confirmClear}
+        title="Delete note"
+        message="Delete your entire notepad? This can't be undone."
+        confirmText={saving ? "Deleting…" : "Delete"}
+        cancelText="Cancel"
+        type="danger"
+        onConfirm={handleClear}
+        onCancel={() => setConfirmClear(false)}
+      />
     </div>
   );
 }
@@ -995,6 +1166,7 @@ export function BusinessProfessionalServicesTab() {
       )}
 
       {adminId && <PersonalReminders adminId={adminId} />}
+      {adminId && <MyNotepad adminId={adminId} />}
 
       {/* Search + Filter */}
       <div className="mb-6 flex flex-col sm:flex-row gap-3">
