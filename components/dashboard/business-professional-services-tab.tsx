@@ -1,0 +1,566 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { KPICard } from "./kpi-card";
+import { linkifyText } from "@/lib/linkify";
+import {
+  Users,
+  UserCheck,
+  Heart,
+  Briefcase,
+  MessageCircle,
+  Send,
+  X,
+  Mail,
+  Phone,
+  Plus,
+  Check,
+  Trash2,
+  ClipboardList,
+} from "lucide-react";
+import {
+  getAllCrmMembers,
+  getCaseNotesForMember,
+  addCaseNote,
+  subscribeToCaseNotes,
+  getMyPersonalNotes,
+  addPersonalNote,
+  togglePersonalNote,
+  deletePersonalNote,
+  subscribeToPersonalNotes,
+  type CrmMemberRow,
+  type CaseNoteRow,
+  type PersonalNoteRow,
+} from "@/lib/supabase/dashboard-data";
+import { supabase } from "@/lib/supabase/client";
+
+const typeLabels: Record<string, string> = {
+  mentee: "Mentee",
+  entrepreneur: "Entrepreneur",
+  partner: "Partner",
+  coalition: "Coalition",
+  mentor: "Mentor",
+};
+
+const typeBadge: Record<string, string> = {
+  mentee: "bg-emerald-100 text-emerald-700",
+  entrepreneur: "bg-blue-100 text-blue-700",
+  partner: "bg-purple-100 text-purple-700",
+  coalition: "bg-amber-100 text-amber-700",
+  mentor: "bg-rose-100 text-rose-700",
+};
+
+const avatarColors = [
+  "bg-emerald-100 text-emerald-700",
+  "bg-blue-100 text-blue-700",
+  "bg-purple-100 text-purple-700",
+  "bg-amber-100 text-amber-700",
+  "bg-rose-100 text-rose-700",
+];
+
+function initials(name: string): string {
+  const p = name.trim().split(/\s+/).filter(Boolean);
+  if (p.length === 0) return "?";
+  return p.length >= 2 ? p[0][0] + p[1][0] : p[0][0];
+}
+
+// Case notes + contact details for one member, regardless of what role
+// they are - opened from the roster table below.
+function MemberDetailModal({
+  member,
+  currentAuthorName,
+  onClose,
+}: {
+  member: CrmMemberRow;
+  currentAuthorName: string;
+  onClose: () => void;
+}) {
+  const [notes, setNotes] = useState<CaseNoteRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newNote, setNewNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const loadNotes = useCallback(async () => {
+    try {
+      const data = await getCaseNotesForMember(member.id);
+      setNotes(data);
+    } catch (err) {
+      console.error("Failed to load case notes:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [member.id]);
+
+  useEffect(() => {
+    loadNotes();
+    const unsubscribe = subscribeToCaseNotes(loadNotes);
+    return unsubscribe;
+  }, [loadNotes]);
+
+  const handleAddNote = async () => {
+    if (!newNote.trim()) return;
+    setSaving(true);
+    try {
+      await addCaseNote(
+        member.member_type,
+        member.id,
+        member.name,
+        newNote,
+        currentAuthorName,
+      );
+      setNewNote("");
+      await loadNotes();
+    } catch (err) {
+      console.error("Failed to save case note:", err);
+      alert("Couldn't save that note. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white p-5 border-b border-gray-100 flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">{member.name}</h2>
+            <div className="flex items-center gap-2 mt-1">
+              <span
+                className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                  typeBadge[member.member_type] ?? "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {typeLabels[member.member_type] ?? member.member_type}
+              </span>
+              {member.detail && (
+                <span className="text-xs text-gray-400">{member.detail}</span>
+              )}
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-6">
+          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl">
+            <div>
+              <p className="text-xs text-gray-400">Email</p>
+              <div className="flex items-center gap-1">
+                <p className="text-sm font-medium">{member.email || "—"}</p>
+                {member.email && (
+                  <button
+                    onClick={() => (window.location.href = `mailto:${member.email}`)}
+                    className="text-emerald-600 hover:text-emerald-700"
+                  >
+                    <Mail className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Phone</p>
+              <div className="flex items-center gap-1">
+                <p className="text-sm font-medium">{member.phone || "—"}</p>
+                {member.phone && (
+                  <button
+                    onClick={() => (window.location.href = `tel:${member.phone}`)}
+                    className="text-emerald-600 hover:text-emerald-700"
+                  >
+                    <Phone className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Status</p>
+              <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs capitalize">
+                {member.status}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Type</p>
+              <p className="text-sm font-medium">
+                {typeLabels[member.member_type] ?? member.member_type}
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <MessageCircle className="h-5 w-5 text-amber-600" />
+              <h3 className="font-semibold text-gray-900">Case Notes</h3>
+            </div>
+
+            <div className="flex gap-2 mb-4">
+              <textarea
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                placeholder="Log a call, meeting, email, or any interaction with this member..."
+                rows={2}
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <button
+                onClick={handleAddNote}
+                disabled={saving}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors whitespace-nowrap disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            </div>
+
+            {loading ? (
+              <p className="text-sm text-gray-400">Loading notes…</p>
+            ) : notes.length === 0 ? (
+              <p className="text-sm text-gray-400">No notes yet for this member.</p>
+            ) : (
+              <div className="space-y-2">
+                {notes.map((n) => (
+                  <div key={n.id} className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {linkifyText(n.note)}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {n.author || "Staff"} · {new Date(n.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Private "note to myself" checklist - not tied to any member, just a
+// running list of reminders/to-dos for whoever is logged in.
+function PersonalReminders({ adminId }: { adminId: string }) {
+  const [notes, setNotes] = useState<PersonalNoteRow[]>([]);
+  const [newNote, setNewNote] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(false);
+
+  const loadNotes = useCallback(async () => {
+    try {
+      const data = await getMyPersonalNotes(adminId);
+      setNotes(data);
+    } catch (err) {
+      console.error("Failed to load personal reminders:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [adminId]);
+
+  useEffect(() => {
+    loadNotes();
+    const unsubscribe = subscribeToPersonalNotes(adminId, loadNotes);
+    return unsubscribe;
+  }, [adminId, loadNotes]);
+
+  const handleAdd = async () => {
+    if (!newNote.trim()) return;
+    try {
+      await addPersonalNote(adminId, newNote);
+      setNewNote("");
+      await loadNotes();
+    } catch (err) {
+      console.error("Failed to add reminder:", err);
+    }
+  };
+
+  const handleToggle = async (id: string, completed: boolean) => {
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, completed } : n)));
+    try {
+      await togglePersonalNote(id, completed);
+    } catch (err) {
+      console.error("Failed to update reminder:", err);
+      loadNotes();
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setNotes((prev) => prev.filter((n) => n.id !== id));
+    try {
+      await deletePersonalNote(id);
+    } catch (err) {
+      console.error("Failed to delete reminder:", err);
+      loadNotes();
+    }
+  };
+
+  const visibleNotes = notes.filter((n) => showCompleted || !n.completed);
+  const openCount = notes.filter((n) => !n.completed).length;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="h-5 w-5 text-amber-600" />
+          <h2 className="text-sm font-semibold text-gray-900">
+            My Reminders {openCount > 0 && `(${openCount})`}
+          </h2>
+        </div>
+        <button
+          onClick={() => setShowCompleted(!showCompleted)}
+          className="text-xs text-gray-400 hover:text-emerald-600"
+        >
+          {showCompleted ? "Hide completed" : "Show completed"}
+        </button>
+      </div>
+
+      <div className="flex gap-2 mb-3">
+        <input
+          type="text"
+          value={newNote}
+          onChange={(e) => setNewNote(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAdd();
+          }}
+          placeholder="Add a reminder for yourself (e.g. 'Follow up with Lisa next week')..."
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+        <button
+          onClick={handleAdd}
+          className="px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : visibleNotes.length === 0 ? (
+        <p className="text-sm text-gray-400">Nothing on your list right now.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {visibleNotes.map((n) => (
+            <div
+              key={n.id}
+              className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg group"
+            >
+              <button
+                onClick={() => handleToggle(n.id, !n.completed)}
+                className={`shrink-0 h-5 w-5 rounded-full border flex items-center justify-center transition-colors ${
+                  n.completed
+                    ? "bg-emerald-500 border-emerald-500"
+                    : "border-gray-300 hover:border-emerald-400"
+                }`}
+              >
+                {n.completed && <Check className="h-3 w-3 text-white" />}
+              </button>
+              <span
+                className={`flex-1 text-sm ${
+                  n.completed ? "text-gray-400 line-through" : "text-gray-700"
+                }`}
+              >
+                {n.note}
+              </span>
+              <button
+                onClick={() => handleDelete(n.id)}
+                className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function BusinessProfessionalServicesTab() {
+  const [members, setMembers] = useState<CrmMemberRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState("");
+  const [typeFilter, setTypeFilter] = useState("All");
+  const [selectedMember, setSelectedMember] = useState<CrmMemberRow | null>(null);
+  const [currentAuthorName, setCurrentAuthorName] = useState("Staff");
+  const [adminId, setAdminId] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const data = await getAllCrmMembers();
+      setMembers(data);
+    } catch (err) {
+      console.error("Failed to load CRM members:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const init = async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData.user) {
+        setAdminId(authData.user.id);
+        const { data: userRow } = await supabase
+          .from("users")
+          .select("name")
+          .eq("id", authData.user.id)
+          .maybeSingle();
+        if (userRow?.name) setCurrentAuthorName(userRow.name);
+      }
+    };
+    init();
+    loadData();
+  }, [loadData]);
+
+  const filtered = members.filter((m) => {
+    if (typeFilter !== "All" && m.member_type !== typeFilter) return false;
+    if (q && !m.name.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  });
+
+  const counts = {
+    total: members.length,
+    mentors: members.filter((m) => m.member_type === "mentor").length,
+    mentees: members.filter((m) =>
+      ["mentee", "entrepreneur"].includes(m.member_type),
+    ).length,
+    orgs: members.filter((m) =>
+      ["partner", "coalition"].includes(m.member_type),
+    ).length,
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 text-sm text-gray-400">Loading members…</div>
+    );
+  }
+
+  return (
+    <>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">
+          Business Professional Services
+        </h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Every CRM member in one place, with case notes for each
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <KPICard title="Total Members" value={counts.total} icon={Users} />
+        <KPICard
+          title="Mentees & Entrepreneurs"
+          value={counts.mentees}
+          icon={UserCheck}
+          variant="success"
+        />
+        <KPICard title="Mentors" value={counts.mentors} icon={Heart} />
+        <KPICard
+          title="Partners & Coalitions"
+          value={counts.orgs}
+          icon={Briefcase}
+        />
+      </div>
+
+      {adminId && <PersonalReminders adminId={adminId} />}
+
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900">All Members</h2>
+          <div className="flex gap-2 flex-wrap">
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              <option value="All">All Types</option>
+              <option value="mentee">Mentees</option>
+              <option value="entrepreneur">Entrepreneurs</option>
+              <option value="mentor">Mentors</option>
+              <option value="partner">Partners</option>
+              <option value="coalition">Coalitions</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Search members..."
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              className="w-full sm:w-60 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100">
+                {["Name", "Type", "Email", "Phone", "Status"].map((h) => (
+                  <th
+                    key={h}
+                    className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-sm text-gray-400">
+                    No members found.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((m, i) => (
+                  <tr
+                    key={`${m.member_type}-${m.id}`}
+                    onClick={() => setSelectedMember(m)}
+                    className="hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${avatarColors[i % avatarColors.length]}`}
+                        >
+                          {initials(m.name)}
+                        </div>
+                        <span className="font-medium text-gray-900 whitespace-nowrap">
+                          {m.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          typeBadge[m.member_type] ?? "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {typeLabels[m.member_type] ?? m.member_type}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
+                      {m.email || "—"}
+                    </td>
+                    <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
+                      {m.phone || "—"}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 capitalize">
+                        {m.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {selectedMember && (
+        <MemberDetailModal
+          member={selectedMember}
+          currentAuthorName={currentAuthorName}
+          onClose={() => setSelectedMember(null)}
+        />
+      )}
+    </>
+  );
+}

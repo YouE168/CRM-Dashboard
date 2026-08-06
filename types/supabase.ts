@@ -114,6 +114,68 @@ export type Database = {
         };
         Relationships: [];
       };
+      // Case-management notes for the "Business Professional Services" page -
+      // a note attached to any CRM member (mentee/entrepreneur/partner/
+      // coalition via participants.id, or mentor via mentors.id). member_id
+      // isn't a real foreign key since it can point into two different
+      // tables depending on member_type; member_name is denormalized so
+      // notes still display sensibly even if the member is later removed.
+      case_notes: {
+        Row: {
+          id: string;
+          member_type: string;
+          member_id: string;
+          member_name: string;
+          note: string;
+          author: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          member_type: string;
+          member_id: string;
+          member_name: string;
+          note: string;
+          author?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          member_type?: string;
+          member_id?: string;
+          member_name?: string;
+          note?: string;
+          author?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      // Private personal checklist/reminders for an admin/staff user -
+      // not tied to any participant, purely for their own to-do tracking.
+      admin_personal_notes: {
+        Row: {
+          id: string;
+          admin_id: string;
+          note: string;
+          completed: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          admin_id: string;
+          note: string;
+          completed?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          admin_id?: string;
+          note?: string;
+          completed?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       programs: {
         Row: {
           id: string;

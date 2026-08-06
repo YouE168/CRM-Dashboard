@@ -28,6 +28,7 @@ import { OverviewTab } from "@/components/dashboard/overview-tab";
 import AnalyticsTab from "@/components/dashboard/analytics-tab";
 import { ParticipantsTab } from "@/components/dashboard/participants-tab";
 import { MentorsTab } from "@/components/dashboard/mentors-tab";
+import { BusinessProfessionalServicesTab } from "@/components/dashboard/business-professional-services-tab";
 import { LeadershipTab } from "@/components/dashboard/leadership-tab";
 import { ResourcesTab } from "@/components/dashboard/resources-tab";
 import { ReportsTab } from "@/components/dashboard/reports-tab";
@@ -899,7 +900,13 @@ function AdminDashboardContent() {
     }
 
     if (isAdmin || isStaff) {
-      tabs.push("Leadership Roundtable", "Resources", "Reports", "Notes");
+      tabs.push(
+        "Business Professional Services",
+        "Leadership Roundtable",
+        "Resources",
+        "Reports",
+        "Notes",
+      );
     }
 
     return tabs;
@@ -1950,6 +1957,10 @@ function AdminDashboardContent() {
         )}
         {activeTab === "Participants" && <ParticipantsTab />}
         {activeTab === "Mentors" && <MentorsTab />}
+        {(isAdmin || isStaff) &&
+          activeTab === "Business Professional Services" && (
+            <BusinessProfessionalServicesTab />
+          )}
         {(isAdmin || isStaff) && activeTab === "Leadership Roundtable" && (
           <LeadershipTab
             profileName={profile.name}

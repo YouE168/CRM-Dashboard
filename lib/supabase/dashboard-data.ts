@@ -3011,3 +3011,213 @@ export async function sendStaffNotificationEmail(
     return false;
   }
 }
+
+// ---------------------------------------------------------------------
+// "Business Professional Services" page - a unified roster across every
+// CRM member type (mentee/entrepreneur/partner/coalition, which live in
+// the participants table, plus mentor, which lives in the separate
+// mentors table) so Jody/staff can see and take case-management notes on
+// anyone regardless of role, in one place. See case_notes and
+// admin_personal_notes in types/supabase.ts.
+// ---------------------------------------------------------------------
+
+export interface CrmMemberRow {
+  id: string;
+  member_type: string; // "mentee" | "entrepreneur" | "partner" | "coalition" | "mentor"
+  name: string;
+  email: string | null;
+  phone: string | null;
+  status: string;
+  detail: string | null; // program name for participants, specialty for mentors
+}
+
+export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
+  const [participantsRes, mentors] = await Promise.all([
+    supabase.from("participants").select(
+      `
+      id,
+      status,
+      program_name,
+      users:user_id ( id, name, email, primary_role ),
+      programs:program_id ( name )
+    `,
+    ),
+    getMentors(),
+  ]);
+  if (participantsRes.error) throw participantsRes.error;
+
+  const participantRows = (participantsRes.data ?? []) as any[];
+  const userIds = participantRows
+    .map((row) => row.users?.id)
+    .filter((id): id is string => Boolean(id));
+
+  // Phone lives on profiles, not users - same join pattern as
+  // getAllPartnersOverview's "organization" lookup.
+  const { data: profiles, error: profilesError } =
+    userIds.length > 0
+      ? await supabase.from("profiles").select("id, phone").in("id", userIds)
+      : { data: [] as { id: string; phone: string | null }[], error: null };
+  if (profilesError) throw profilesError;
+  const phoneByUserId = Object.fromEntries(
+    (profiles ?? []).map((p) => [p.id, p.phone]),
+  );
+
+  const participantMembers: CrmMemberRow[] = participantRows
+    .filter((row) =>
+      ["mentee", "entrepreneur", "partner", "coalition"].includes(
+        row.users?.primary_role,
+      ),
+    )
+    .map((row) => ({
+      id: row.id,
+      member_type: row.users.primary_role,
+      name: row.users?.name ?? "Unknown",
+      email: row.users?.email ?? null,
+      phone: row.users?.id ? (phoneByUserId[row.users.id] ?? null) : null,
+      status: row.status,
+      detail: row.programs?.name ?? row.program_name ?? null,
+    }));
+
+  const mentorMembers: CrmMemberRow[] = mentors.map((m) => ({
+    id: m.id,
+    member_type: "mentor",
+    name: m.name,
+    email: m.email,
+    phone: m.phone,
+    status: m.status,
+    detail: m.specialty,
+  }));
+
+  return [...participantMembers, ...mentorMembers].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+}
+
+export interface CaseNoteRow {
+  id: string;
+  member_type: string;
+  member_id: string;
+  member_name: string;
+  note: string;
+  author: string | null;
+  created_at: string;
+}
+
+export async function getCaseNotesForMember(
+  memberId: string,
+): Promise<CaseNoteRow[]> {
+  const { data, error } = await supabase
+    .from("case_notes")
+    .select("*")
+    .eq("member_id", memberId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function addCaseNote(
+  memberType: string,
+  memberId: string,
+  memberName: string,
+  note: string,
+  author: string,
+): Promise<void> {
+  const { error } = await supabase.from("case_notes").insert({
+    member_type: memberType,
+    member_id: memberId,
+    member_name: memberName,
+    note,
+    author,
+  });
+  if (error) throw error;
+}
+
+export function subscribeToCaseNotes(onChange: () => void) {
+  const channelName = `case-notes-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "case_notes" },
+      onChange,
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+// Personal reminder checklist - private to the admin/staff user viewing
+// it (RLS restricts rows to admin_id = auth.uid()), not shared with
+// anyone else and not tied to any participant. This is the "note to
+// herself as a reminder" piece - a simple manual checklist, not an
+// automated emailed reminder (that would need a scheduled job and is a
+// bigger separate build).
+export interface PersonalNoteRow {
+  id: string;
+  admin_id: string;
+  note: string;
+  completed: boolean;
+  created_at: string;
+}
+
+export async function getMyPersonalNotes(
+  adminId: string,
+): Promise<PersonalNoteRow[]> {
+  const { data, error } = await supabase
+    .from("admin_personal_notes")
+    .select("*")
+    .eq("admin_id", adminId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function addPersonalNote(
+  adminId: string,
+  note: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("admin_personal_notes")
+    .insert({ admin_id: adminId, note });
+  if (error) throw error;
+}
+
+export async function togglePersonalNote(
+  id: string,
+  completed: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from("admin_personal_notes")
+    .update({ completed })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deletePersonalNote(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("admin_personal_notes")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export function subscribeToPersonalNotes(adminId: string, onChange: () => void) {
+  const channelName = `personal-notes-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "admin_personal_notes",
+        filter: `admin_id=eq.${adminId}`,
+      },
+      onChange,
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
