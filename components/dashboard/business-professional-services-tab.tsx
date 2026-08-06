@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { KPICard } from "./kpi-card";
 import { linkifyText } from "@/lib/linkify";
 import {
   Users,
@@ -434,123 +433,170 @@ export function BusinessProfessionalServicesTab() {
   return (
     <>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-700 to-teal-700 bg-clip-text text-transparent">
           Business Professional Services
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          Every CRM member in one place, with case notes for each
+          Every CRM member and their case notes, in one place
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KPICard title="Total Members" value={counts.total} icon={Users} />
-        <KPICard
-          title="Mentees & Entrepreneurs"
-          value={counts.mentees}
-          icon={UserCheck}
-          variant="success"
-        />
-        <KPICard title="Mentors" value={counts.mentors} icon={Heart} />
-        <KPICard
-          title="Partners & Coalitions"
-          value={counts.orgs}
-          icon={Briefcase}
-        />
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-100 rounded-lg">
+              <Users className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">{counts.total}</p>
+              <p className="text-sm text-gray-500">Total Members</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <UserCheck className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">{counts.mentees}</p>
+              <p className="text-sm text-gray-500">Mentees & Entrepreneurs</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-rose-100 rounded-lg">
+              <Heart className="h-5 w-5 text-rose-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">{counts.mentors}</p>
+              <p className="text-sm text-gray-500">Mentors</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Briefcase className="h-5 w-5 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">{counts.orgs}</p>
+              <p className="text-sm text-gray-500">Partners & Coalitions</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {adminId && <PersonalReminders adminId={adminId} />}
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-900">All Members</h2>
-          <div className="flex gap-2 flex-wrap">
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            >
-              <option value="All">All Types</option>
-              <option value="mentee">Mentees</option>
-              <option value="entrepreneur">Entrepreneurs</option>
-              <option value="mentor">Mentors</option>
-              <option value="partner">Partners</option>
-              <option value="coalition">Coalitions</option>
-            </select>
-            <input
-              type="text"
-              placeholder="Search members..."
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="w-full sm:w-60 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            />
-          </div>
-        </div>
+      {/* Search + Filter */}
+      <div className="mb-6 flex flex-col sm:flex-row gap-3">
+        <input
+          type="text"
+          placeholder="Search members by name..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="px-4 py-2 border border-gray-200 rounded-xl text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        >
+          <option value="All">All Types</option>
+          <option value="mentee">Mentees</option>
+          <option value="entrepreneur">Entrepreneurs</option>
+          <option value="mentor">Mentors</option>
+          <option value="partner">Partners</option>
+          <option value="coalition">Coalitions</option>
+        </select>
+      </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-100">
-                {["Name", "Type", "Email", "Phone", "Status"].map((h) => (
-                  <th
-                    key={h}
-                    className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap"
+      {/* Members List */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-gray-900">All Members</h2>
+        {filtered.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center">
+            <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-400">No members found</p>
+          </div>
+        ) : (
+          filtered.map((m, idx) => (
+            <div
+              key={`${m.member_type}-${m.id}`}
+              className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all cursor-pointer"
+              onClick={() => setSelectedMember(m)}
+            >
+              <div className="flex items-start justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-semibold shrink-0 ${avatarColors[idx % avatarColors.length]}`}
                   >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-5 py-10 text-center text-sm text-gray-400">
-                    No members found.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((m, i) => (
-                  <tr
-                    key={`${m.member_type}-${m.id}`}
-                    onClick={() => setSelectedMember(m)}
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
-                  >
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${avatarColors[i % avatarColors.length]}`}
-                        >
-                          {initials(m.name)}
-                        </div>
-                        <span className="font-medium text-gray-900 whitespace-nowrap">
-                          {m.name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3">
+                    {initials(m.name)}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{m.name}</h3>
+                    <div className="flex items-center gap-2 mt-0.5">
                       <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                           typeBadge[m.member_type] ?? "bg-gray-100 text-gray-600"
                         }`}
                       >
                         {typeLabels[m.member_type] ?? m.member_type}
                       </span>
-                    </td>
-                    <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
-                      {m.email || "—"}
-                    </td>
-                    <td className="px-5 py-3 text-gray-500 whitespace-nowrap">
-                      {m.phone || "—"}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 capitalize">
-                        {m.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      {m.detail && (
+                        <span className="text-sm text-gray-500">{m.detail}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      {m.email && (
+                        <span className="text-xs text-emerald-600">{m.email}</span>
+                      )}
+                      {m.phone && (
+                        <span className="text-xs text-gray-400">{m.phone}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs px-2.5 py-1 bg-gray-100 text-gray-600 rounded-full capitalize">
+                    {m.status}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedMember(m);
+                    }}
+                    className="px-3 py-1.5 text-sm text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100"
+                  >
+                    View Details →
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Quick Tips */}
+      <div className="mt-8 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-6 border border-indigo-100">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-indigo-100 rounded-full">
+              <MessageCircle className="h-6 w-6 text-indigo-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">Quick Tips</h3>
+              <p className="text-sm text-gray-600">
+                Click on any member to log a call, email, or meeting
+              </p>
+            </div>
+          </div>
+          <div className="text-sm text-gray-500">
+            💡 Case notes help you pick up right where you left off
+          </div>
         </div>
       </div>
 
