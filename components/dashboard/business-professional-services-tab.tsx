@@ -416,6 +416,11 @@ function PersonalReminders({ adminId }: { adminId: string }) {
   const [newNote, setNewNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [showMeetingDetails, setShowMeetingDetails] = useState(false);
+  const [meetingDate, setMeetingDate] = useState("");
+  const [meetingTime, setMeetingTime] = useState("");
+  const [meetingLocation, setMeetingLocation] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
 
   const loadNotes = useCallback(async () => {
     try {
@@ -437,8 +442,18 @@ function PersonalReminders({ adminId }: { adminId: string }) {
   const handleAdd = async () => {
     if (!newNote.trim()) return;
     try {
-      await addPersonalNote(adminId, newNote);
+      await addPersonalNote(adminId, newNote, {
+        date: meetingDate,
+        time: meetingTime,
+        location: meetingLocation,
+        link: meetingLink,
+      });
       setNewNote("");
+      setMeetingDate("");
+      setMeetingTime("");
+      setMeetingLocation("");
+      setMeetingLink("");
+      setShowMeetingDetails(false);
       await loadNotes();
     } catch (err) {
       console.error("Failed to add reminder:", err);
@@ -485,7 +500,7 @@ function PersonalReminders({ adminId }: { adminId: string }) {
         </button>
       </div>
 
-      <div className="flex gap-2 mb-3">
+      <div className="flex gap-2 mb-2">
         <input
           type="text"
           value={newNote}
@@ -504,6 +519,61 @@ function PersonalReminders({ adminId }: { adminId: string }) {
         </button>
       </div>
 
+      <button
+        onClick={() => setShowMeetingDetails(!showMeetingDetails)}
+        className="flex items-center gap-1 text-xs text-gray-400 hover:text-emerald-600 mb-3"
+      >
+        {showMeetingDetails ? (
+          <ChevronUp className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5" />
+        )}
+        Add date, time, location, or link (optional)
+      </button>
+
+      {showMeetingDetails && (
+        <div className="grid grid-cols-2 gap-2 mb-4 bg-gray-50 p-3 rounded-xl">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Date</label>
+            <input
+              type="date"
+              value={meetingDate}
+              onChange={(e) => setMeetingDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Time</label>
+            <input
+              type="time"
+              value={meetingTime}
+              onChange={(e) => setMeetingTime(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Location</label>
+            <input
+              type="text"
+              value={meetingLocation}
+              onChange={(e) => setMeetingLocation(e.target.value)}
+              placeholder="e.g. RCP office"
+              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Link</label>
+            <input
+              type="text"
+              value={meetingLink}
+              onChange={(e) => setMeetingLink(e.target.value)}
+              placeholder="Zoom / meeting URL"
+              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-sm text-gray-400">Loading…</p>
       ) : visibleNotes.length === 0 ? (
@@ -513,11 +583,11 @@ function PersonalReminders({ adminId }: { adminId: string }) {
           {visibleNotes.map((n) => (
             <div
               key={n.id}
-              className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg group"
+              className="flex items-start gap-2 px-3 py-2 bg-gray-50 rounded-lg group"
             >
               <button
                 onClick={() => handleToggle(n.id, !n.completed)}
-                className={`shrink-0 h-5 w-5 rounded-full border flex items-center justify-center transition-colors ${
+                className={`shrink-0 mt-0.5 h-5 w-5 rounded-full border flex items-center justify-center transition-colors ${
                   n.completed
                     ? "bg-emerald-500 border-emerald-500"
                     : "border-gray-300 hover:border-emerald-400"
@@ -525,16 +595,54 @@ function PersonalReminders({ adminId }: { adminId: string }) {
               >
                 {n.completed && <Check className="h-3 w-3 text-white" />}
               </button>
-              <span
-                className={`flex-1 text-sm ${
-                  n.completed ? "text-gray-400 line-through" : "text-gray-700"
-                }`}
-              >
-                {n.note}
-              </span>
+              <div className="flex-1 min-w-0">
+                <span
+                  className={`text-sm ${
+                    n.completed ? "text-gray-400 line-through" : "text-gray-700"
+                  }`}
+                >
+                  {n.note}
+                </span>
+                {(n.meeting_date ||
+                  n.meeting_time ||
+                  n.meeting_location ||
+                  n.meeting_link) && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-emerald-700">
+                    {n.meeting_date && (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {new Date(n.meeting_date + "T00:00:00").toLocaleDateString()}
+                      </span>
+                    )}
+                    {n.meeting_time && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {n.meeting_time}
+                      </span>
+                    )}
+                    {n.meeting_location && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {n.meeting_location}
+                      </span>
+                    )}
+                    {n.meeting_link && (
+                      <a
+                        href={n.meeting_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 hover:underline"
+                      >
+                        <LinkIcon className="h-3 w-3" />
+                        Link
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => handleDelete(n.id)}
-                className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"
+                className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity shrink-0 mt-0.5"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>

@@ -170,6 +170,10 @@ export type Database = {
           admin_id: string;
           note: string;
           completed: boolean;
+          meeting_date: string | null;
+          meeting_time: string | null;
+          meeting_location: string | null;
+          meeting_link: string | null;
           created_at: string;
         };
         Insert: {
@@ -177,6 +181,10 @@ export type Database = {
           admin_id: string;
           note: string;
           completed?: boolean;
+          meeting_date?: string | null;
+          meeting_time?: string | null;
+          meeting_location?: string | null;
+          meeting_link?: string | null;
           created_at?: string;
         };
         Update: {
@@ -184,6 +192,10 @@ export type Database = {
           admin_id?: string;
           note?: string;
           completed?: boolean;
+          meeting_date?: string | null;
+          meeting_time?: string | null;
+          meeting_location?: string | null;
+          meeting_link?: string | null;
           created_at?: string;
         };
         Relationships: [];

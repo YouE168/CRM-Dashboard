@@ -3243,6 +3243,10 @@ export interface PersonalNoteRow {
   admin_id: string;
   note: string;
   completed: boolean;
+  meeting_date: string | null;
+  meeting_time: string | null;
+  meeting_location: string | null;
+  meeting_link: string | null;
   created_at: string;
 }
 
@@ -3261,10 +3265,21 @@ export async function getMyPersonalNotes(
 export async function addPersonalNote(
   adminId: string,
   note: string,
+  meetingDetails?: {
+    date?: string;
+    time?: string;
+    location?: string;
+    link?: string;
+  },
 ): Promise<void> {
-  const { error } = await supabase
-    .from("admin_personal_notes")
-    .insert({ admin_id: adminId, note });
+  const { error } = await supabase.from("admin_personal_notes").insert({
+    admin_id: adminId,
+    note,
+    meeting_date: meetingDetails?.date || null,
+    meeting_time: meetingDetails?.time || null,
+    meeting_location: meetingDetails?.location || null,
+    meeting_link: meetingDetails?.link || null,
+  });
   if (error) throw error;
 }
 
