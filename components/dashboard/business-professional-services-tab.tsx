@@ -28,6 +28,7 @@ import {
   getCaseNotesForMember,
   addCaseNote,
   subscribeToCaseNotes,
+  getUpcomingCaseNotes,
   getMyPersonalNotes,
   addPersonalNote,
   togglePersonalNote,
@@ -199,12 +200,37 @@ function MemberDetailModal({
                 {member.status}
               </span>
             </div>
-            <div>
-              <p className="text-xs text-gray-400">Type</p>
-              <p className="text-sm font-medium">
-                {typeLabels[member.member_type] ?? member.member_type}
-              </p>
-            </div>
+            {member.member_type === "mentor" ? (
+              <>
+                <div>
+                  <p className="text-xs text-gray-400">Specialty</p>
+                  <p className="text-sm font-medium">{member.detail || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Mentees</p>
+                  <p className="text-sm font-medium">{member.menteeCount ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Entrepreneurs</p>
+                  <p className="text-sm font-medium">
+                    {member.entrepreneurCount ?? 0}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="text-xs text-gray-400">Program</p>
+                  <p className="text-sm font-medium">{member.detail || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Assigned Mentor</p>
+                  <p className="text-sm font-medium">
+                    {member.mentor || "Not assigned"}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
 
           <div>
@@ -482,6 +508,7 @@ function PersonalReminders({ adminId }: { adminId: string }) {
 
 export function BusinessProfessionalServicesTab() {
   const [members, setMembers] = useState<CrmMemberRow[]>([]);
+  const [upcoming, setUpcoming] = useState<CaseNoteRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -491,8 +518,12 @@ export function BusinessProfessionalServicesTab() {
 
   const loadData = useCallback(async () => {
     try {
-      const data = await getAllCrmMembers();
-      setMembers(data);
+      const [membersData, upcomingData] = await Promise.all([
+        getAllCrmMembers(),
+        getUpcomingCaseNotes(),
+      ]);
+      setMembers(membersData);
+      setUpcoming(upcomingData);
     } catch (err) {
       console.error("Failed to load CRM members:", err);
     } finally {
@@ -517,6 +548,11 @@ export function BusinessProfessionalServicesTab() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const unsubscribe = subscribeToCaseNotes(loadData);
+    return unsubscribe;
+  }, [loadData]);
+
   const filtered = members.filter((m) => {
     if (typeFilter !== "All" && m.member_type !== typeFilter) return false;
     if (q && !m.name.toLowerCase().includes(q.toLowerCase())) return false;
@@ -532,6 +568,19 @@ export function BusinessProfessionalServicesTab() {
     orgs: members.filter((m) =>
       ["partner", "coalition"].includes(m.member_type),
     ).length,
+  };
+
+  // Note per Jody: every non-mentor member counts as one of "her
+  // mentees" for the purposes of this card - mentors are the only role
+  // excluded.
+  const activeMentees = members.filter(
+    (m) => m.member_type !== "mentor" && m.status === "active",
+  );
+
+  const scrollToAllMembers = () => {
+    document
+      .getElementById("bps-all-members")
+      ?.scrollIntoView({ behavior: "smooth" });
   };
 
   if (loading) {
@@ -599,6 +648,128 @@ export function BusinessProfessionalServicesTab() {
         </div>
       </div>
 
+      {/* Your Mentees + Upcoming Sessions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div
+          onClick={scrollToAllMembers}
+          className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer"
+        >
+          <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-white rounded-t-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-emerald-600" />
+                <h3 className="font-semibold text-gray-900">Your Mentees</h3>
+              </div>
+              <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
+                {activeMentees.length} active
+              </span>
+            </div>
+          </div>
+          <div className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-2xl font-bold text-gray-900">
+                  {activeMentees.length}
+                </p>
+                <p className="text-sm text-gray-500">Active Mentees</p>
+                <p className="text-xs text-emerald-600 mt-1">View all →</p>
+              </div>
+              {activeMentees.length > 0 && (
+                <div className="flex -space-x-2">
+                  {activeMentees.slice(0, 3).map((m, idx) => {
+                    const colors = [
+                      { bg: "bg-emerald-100", text: "text-emerald-700" },
+                      { bg: "bg-blue-100", text: "text-blue-700" },
+                      { bg: "bg-purple-100", text: "text-purple-700" },
+                    ][idx % 3];
+                    return (
+                      <div
+                        key={`${m.member_type}-${m.id}`}
+                        className={`w-8 h-8 rounded-full ${colors.bg} flex items-center justify-center text-xs font-bold ${colors.text} ring-2 ring-white`}
+                      >
+                        {initials(m.name)}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 rounded-t-xl">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-emerald-600" />
+              <h3 className="font-semibold text-gray-900">Upcoming Sessions</h3>
+            </div>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {upcoming.length === 0 ? (
+              <div className="p-6 text-center text-sm text-gray-400">
+                No upcoming sessions logged yet.
+              </div>
+            ) : (
+              upcoming.map((note, idx) => {
+                const colors = [
+                  { bg: "bg-emerald-100", text: "text-emerald-600" },
+                  { bg: "bg-purple-100", text: "text-purple-600" },
+                ][idx % 2];
+
+                const sessionDate = new Date(note.meeting_date + "T00:00:00");
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const tomorrow = new Date(today);
+                tomorrow.setDate(today.getDate() + 1);
+                let whenLabel = sessionDate.toLocaleDateString();
+                if (sessionDate.getTime() === today.getTime()) {
+                  whenLabel = "Today";
+                } else if (sessionDate.getTime() === tomorrow.getTime()) {
+                  whenLabel = "Tomorrow";
+                }
+                if (note.meeting_time) whenLabel += ` at ${note.meeting_time}`;
+
+                const matchingMember = members.find(
+                  (m) => m.id === note.member_id && m.member_type === note.member_type,
+                );
+
+                return (
+                  <div className="p-4" key={note.id}>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-full ${colors.bg} flex items-center justify-center`}
+                      >
+                        <span className={`text-sm font-bold ${colors.text}`}>
+                          {initials(note.member_name)}
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-800">
+                          {note.member_name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {whenLabel}
+                          {note.meeting_location ? ` - ${note.meeting_location}` : ""}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() =>
+                          matchingMember && setSelectedMember(matchingMember)
+                        }
+                        disabled={!matchingMember}
+                        className="text-xs text-emerald-600 hover:text-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                      >
+                        Log Session →
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
       {adminId && <PersonalReminders adminId={adminId} />}
 
       {/* Search + Filter */}
@@ -625,7 +796,7 @@ export function BusinessProfessionalServicesTab() {
       </div>
 
       {/* Members List */}
-      <div className="space-y-4">
+      <div id="bps-all-members" className="space-y-4 scroll-mt-6">
         <h2 className="text-lg font-semibold text-gray-900">All Members</h2>
         {filtered.length === 0 ? (
           <div className="bg-white rounded-xl p-8 text-center">

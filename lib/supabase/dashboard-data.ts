@@ -3029,6 +3029,9 @@ export interface CrmMemberRow {
   phone: string | null;
   status: string;
   detail: string | null; // program name for participants, specialty for mentors
+  mentor: string | null; // assigned mentor's name - participants only
+  menteeCount: number | null; // mentors only
+  entrepreneurCount: number | null; // mentors only
 }
 
 export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
@@ -3038,6 +3041,7 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
       id,
       status,
       program_name,
+      mentor,
       users:user_id ( id, name, email, primary_role ),
       programs:program_id ( name )
     `,
@@ -3076,17 +3080,30 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
       phone: row.users?.id ? (phoneByUserId[row.users.id] ?? null) : null,
       status: row.status,
       detail: row.programs?.name ?? row.program_name ?? null,
+      mentor: row.mentor || null,
+      menteeCount: null,
+      entrepreneurCount: null,
     }));
 
-  const mentorMembers: CrmMemberRow[] = mentors.map((m) => ({
-    id: m.id,
-    member_type: "mentor",
-    name: m.name,
-    email: m.email,
-    phone: m.phone,
-    status: m.status,
-    detail: m.specialty,
-  }));
+  // Mentee/entrepreneur counts come from real participants.mentor
+  // assignments (matched by name, same as everywhere else mentor
+  // matching happens in this app) - not a stored count anywhere.
+  const mentorMembers: CrmMemberRow[] = mentors.map((m) => {
+    const assigned = participantMembers.filter((p) => p.mentor === m.name);
+    return {
+      id: m.id,
+      member_type: "mentor",
+      name: m.name,
+      email: m.email,
+      phone: m.phone,
+      status: m.status,
+      detail: m.specialty,
+      mentor: null,
+      menteeCount: assigned.filter((p) => p.member_type === "mentee").length,
+      entrepreneurCount: assigned.filter((p) => p.member_type === "entrepreneur")
+        .length,
+    };
+  });
 
   return [...participantMembers, ...mentorMembers].sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -3119,6 +3136,23 @@ export async function getCaseNotesForMember(
     .select("*")
     .eq("member_id", memberId)
     .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+// Case notes with a meeting_date today or later, across every member -
+// powers the "Upcoming Sessions" card on the Business Professional
+// Services page.
+export async function getUpcomingCaseNotes(
+  limit: number = 5,
+): Promise<CaseNoteRow[]> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from("case_notes")
+    .select("*")
+    .gte("meeting_date", today)
+    .order("meeting_date", { ascending: true })
+    .limit(limit);
   if (error) throw error;
   return data;
 }
