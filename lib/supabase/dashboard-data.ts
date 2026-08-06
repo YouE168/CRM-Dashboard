@@ -3213,8 +3213,19 @@ export async function addCaseNote(
 }
 
 export async function deleteCaseNote(id: string): Promise<void> {
-  const { error } = await supabase.from("case_notes").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("case_notes")
+    .delete()
+    .eq("id", id)
+    .select("id");
   if (error) throw error;
+  // A row-level security policy can silently block a delete (0 rows
+  // affected, no error) instead of throwing, so check explicitly.
+  if (!data || data.length === 0) {
+    throw new Error(
+      "Delete was blocked by a database permission. Run the case_notes delete policy SQL, then try again.",
+    );
+  }
 }
 
 export function subscribeToCaseNotes(onChange: () => void) {

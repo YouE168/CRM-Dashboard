@@ -40,6 +40,7 @@ import {
   type PersonalNoteRow,
 } from "@/lib/supabase/dashboard-data";
 import { supabase } from "@/lib/supabase/client";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 
 const typeLabels: Record<string, string> = {
   mentee: "Mentee",
@@ -91,6 +92,8 @@ function MemberDetailModal({
   const [meetingTime, setMeetingTime] = useState("");
   const [meetingLocation, setMeetingLocation] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadNotes = useCallback(async () => {
     try {
@@ -141,14 +144,22 @@ function MemberDetailModal({
     }
   };
 
-  const handleDeleteNote = async (id: string) => {
-    if (!confirm("Delete this note? This can't be undone.")) return;
+  const handleDeleteNote = (id: string) => {
+    setPendingDeleteId(id);
+  };
+
+  const confirmDeleteNote = async () => {
+    if (!pendingDeleteId) return;
+    setDeleting(true);
     try {
-      await deleteCaseNote(id);
+      await deleteCaseNote(pendingDeleteId);
       await loadNotes();
+      setPendingDeleteId(null);
     } catch (err) {
       console.error("Failed to delete case note:", err);
       alert("Couldn't delete that note. Please try again.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -386,16 +397,17 @@ function MemberDetailModal({
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">
                       {linkifyText(n.note)}
                     </p>
-                    <div className="flex items-center justify-between mt-1">
+                    <div className="flex items-center justify-between mt-1.5">
                       <p className="text-xs text-gray-400">
                         {n.author || "Staff"} · {new Date(n.created_at).toLocaleString()}
                       </p>
                       <button
                         onClick={() => handleDeleteNote(n.id)}
-                        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
                         title="Delete note"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
+                        <span className="text-xs font-medium">Delete</span>
                       </button>
                     </div>
                   </div>
@@ -404,6 +416,17 @@ function MemberDetailModal({
             )}
           </div>
         </div>
+
+        <ConfirmationModal
+          isOpen={pendingDeleteId !== null}
+          title="Delete note"
+          message="Delete this note? This can't be undone."
+          confirmText={deleting ? "Deleting…" : "Delete"}
+          cancelText="Cancel"
+          type="danger"
+          onConfirm={confirmDeleteNote}
+          onCancel={() => setPendingDeleteId(null)}
+        />
       </div>
     </div>
   );
@@ -642,7 +665,8 @@ function PersonalReminders({ adminId }: { adminId: string }) {
               </div>
               <button
                 onClick={() => handleDelete(n.id)}
-                className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity shrink-0 mt-0.5"
+                title="Delete reminder"
+                className="p-1.5 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all shrink-0 mt-0.5"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
