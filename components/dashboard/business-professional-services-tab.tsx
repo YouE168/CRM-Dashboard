@@ -220,14 +220,29 @@ function MemberDetailModal({
             ) : (
               <>
                 <div>
-                  <p className="text-xs text-gray-400">Program</p>
-                  <p className="text-sm font-medium">{member.detail || "—"}</p>
-                </div>
-                <div>
                   <p className="text-xs text-gray-400">Assigned Mentor</p>
                   <p className="text-sm font-medium">
                     {member.mentor || "Not assigned"}
                   </p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-400 mb-1">Programs</p>
+                  {member.programs.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {member.programs.map((p) => (
+                        <span
+                          key={p}
+                          className="inline-block px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium"
+                        >
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">
+                      No approved programs yet
+                    </p>
+                  )}
                 </div>
               </>
             )}
@@ -250,9 +265,10 @@ function MemberDetailModal({
               <button
                 onClick={handleAddNote}
                 disabled={saving}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors whitespace-nowrap disabled:opacity-50"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors whitespace-nowrap disabled:opacity-50 flex items-center gap-1.5 self-start"
               >
                 <Send className="h-4 w-4" />
+                {saving ? "Saving…" : "Save"}
               </button>
             </div>
 
@@ -751,6 +767,18 @@ export function BusinessProfessionalServicesTab() {
                           {whenLabel}
                           {note.meeting_location ? ` - ${note.meeting_location}` : ""}
                         </p>
+                        {note.meeting_link && (
+                          <a
+                            href={note.meeting_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-0.5"
+                          >
+                            <LinkIcon className="h-3 w-3" />
+                            Join link
+                          </a>
+                        )}
                       </div>
                       <button
                         onClick={() =>
@@ -827,9 +855,15 @@ export function BusinessProfessionalServicesTab() {
                       >
                         {typeLabels[m.member_type] ?? m.member_type}
                       </span>
-                      {m.detail && (
-                        <span className="text-sm text-gray-500">{m.detail}</span>
-                      )}
+                      {m.member_type === "mentor"
+                        ? m.detail && (
+                            <span className="text-sm text-gray-500">{m.detail}</span>
+                          )
+                        : m.programs.length > 0 && (
+                            <span className="text-sm text-gray-500">
+                              {m.programs.join(", ")}
+                            </span>
+                          )}
                     </div>
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
                       {m.email && (

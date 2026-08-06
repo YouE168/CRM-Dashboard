@@ -72,9 +72,9 @@ const USER_ROLES = [
     id: "coalition",
     label: "Coalition Leader",
     icon: Users,
-    description: "Lead LHEATs and Leadership Roundtable initiatives",
+    description: "Lead Coalitions and Leadership Roundtable initiatives",
     programs: [
-      "LHEATs",
+      "Coalitions",
       "Coalition Leadership Roundtable",
       "Rural Connect Magazine",
     ],

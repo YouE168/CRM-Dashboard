@@ -3032,10 +3032,11 @@ export interface CrmMemberRow {
   mentor: string | null; // assigned mentor's name - participants only
   menteeCount: number | null; // mentors only
   entrepreneurCount: number | null; // mentors only
+  programs: string[]; // every program this member is approved for - participants only
 }
 
 export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
-  const [participantsRes, mentors] = await Promise.all([
+  const [participantsRes, enrollmentsRes, catalogRes, mentors] = await Promise.all([
     supabase.from("participants").select(
       `
       id,
@@ -3046,9 +3047,17 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
       programs:program_id ( name )
     `,
     ),
+    // Real approved-program list per user (same source as the admin
+    // Program Access tab and Mentor Matching) - a member can be approved
+    // for more than one program, which the single program_id/program_name
+    // columns on participants can't represent.
+    supabase.from("user_programs").select("user_id, program_id, approved"),
+    supabase.from("programs").select("id, name"),
     getMentors(),
   ]);
   if (participantsRes.error) throw participantsRes.error;
+  if (enrollmentsRes.error) throw enrollmentsRes.error;
+  if (catalogRes.error) throw catalogRes.error;
 
   const participantRows = (participantsRes.data ?? []) as any[];
   const userIds = participantRows
@@ -3065,6 +3074,19 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
   const phoneByUserId = Object.fromEntries(
     (profiles ?? []).map((p) => [p.id, p.phone]),
   );
+
+  const programNameById = Object.fromEntries(
+    (catalogRes.data ?? []).map((p) => [p.id, p.name]),
+  );
+  const approvedProgramsByUserId = (enrollmentsRes.data ?? []).reduce<
+    Record<string, string[]>
+  >((acc, e) => {
+    if (!e.approved) return acc;
+    const name = programNameById[e.program_id];
+    if (!name) return acc;
+    (acc[e.user_id] ||= []).push(name);
+    return acc;
+  }, {});
 
   const participantMembers: CrmMemberRow[] = participantRows
     .filter((row) =>
@@ -3083,6 +3105,7 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
       mentor: row.mentor || null,
       menteeCount: null,
       entrepreneurCount: null,
+      programs: row.users?.id ? approvedProgramsByUserId[row.users.id] || [] : [],
     }));
 
   // Mentee/entrepreneur counts come from real participants.mentor
@@ -3102,6 +3125,7 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
       menteeCount: assigned.filter((p) => p.member_type === "mentee").length,
       entrepreneurCount: assigned.filter((p) => p.member_type === "entrepreneur")
         .length,
+      programs: [],
     };
   });
 
