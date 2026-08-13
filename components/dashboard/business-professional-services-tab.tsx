@@ -24,6 +24,7 @@ import {
   ChevronUp,
   History,
   NotebookPen,
+  UserPlus,
 } from "lucide-react";
 import {
   getAllCrmMembers,
@@ -373,12 +374,12 @@ function MemberDetailModal({
 
             <button
               onClick={() => setShowMeetingDetails(!showMeetingDetails)}
-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-emerald-600 mb-3"
+              className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-emerald-600 mb-3"
             >
               {showMeetingDetails ? (
-                <ChevronUp className="h-3.5 w-3.5" />
+                <ChevronUp className="h-4 w-4" />
               ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
+                <ChevronDown className="h-4 w-4" />
               )}
               Add date, time, location, or link (optional)
             </button>
@@ -589,12 +590,12 @@ function PersonalReminders({ adminId }: { adminId: string }) {
 
       <button
         onClick={() => setShowMeetingDetails(!showMeetingDetails)}
-        className="flex items-center gap-1 text-xs text-gray-400 hover:text-emerald-600 mb-3"
+        className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-emerald-600 mb-3"
       >
         {showMeetingDetails ? (
-          <ChevronUp className="h-3.5 w-3.5" />
+          <ChevronUp className="h-4 w-4" />
         ) : (
-          <ChevronDown className="h-3.5 w-3.5" />
+          <ChevronDown className="h-4 w-4" />
         )}
         Add date, time, location, or link (optional)
       </button>
@@ -860,6 +861,158 @@ function MyNotepad({ adminId }: { adminId: string }) {
   );
 }
 
+// Lets an admin/staff user add a brand-new person straight to the CRM
+// instead of waiting for them to sign up themselves - creates a real
+// login (invite email to set a password), same as approving an access
+// request. On success, the caller refreshes the roster and opens the
+// new member's detail modal so a first case note can be logged right
+// away.
+function AddMemberModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (id: string, memberType: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [memberType, setMemberType] = useState("mentee");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        setError("Your session expired. Please log in again.");
+        setSaving(false);
+        return;
+      }
+
+      const res = await fetch("/api/admin/add-member", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim() || null,
+          memberType,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        setError(result.error || "Couldn't add this member. Please try again.");
+        setSaving(false);
+        return;
+      }
+      onCreated(result.member.id, result.member.member_type);
+    } catch (err) {
+      console.error("Failed to add member:", err);
+      setError("Couldn't add this member. Please try again.");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white p-5 border-b border-gray-100 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <UserPlus className="h-5 w-5 text-emerald-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Add New Member</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <p className="text-sm text-gray-500">
+            This creates a real account and emails them a link to set their
+            password - same as approving an access request.
+          </p>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Full Name *</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Email *</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Phone</label>
+            <input
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Optional"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Member Type *</label>
+            <select
+              value={memberType}
+              onChange={(e) => setMemberType(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              <option value="mentee">Mentee</option>
+              <option value="entrepreneur">Entrepreneur</option>
+              <option value="partner">Partner</option>
+              <option value="coalition">Coalition</option>
+              <option value="mentor">Mentor</option>
+            </select>
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving || !name.trim() || !email.trim()}
+              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? "Adding…" : "Add Member"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function BusinessProfessionalServicesTab() {
   const [members, setMembers] = useState<CrmMemberRow[]>([]);
   const [upcoming, setUpcoming] = useState<CaseNoteRow[]>([]);
@@ -870,6 +1023,7 @@ export function BusinessProfessionalServicesTab() {
   const [currentAuthorName, setCurrentAuthorName] = useState("Staff");
   const [adminId, setAdminId] = useState<string | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -1204,7 +1358,16 @@ export function BusinessProfessionalServicesTab() {
 
       {/* Members List */}
       <div id="bps-all-members" className="space-y-4 scroll-mt-6">
-        <h2 className="text-lg font-semibold text-gray-900">All Members</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">All Members</h2>
+          <button
+            onClick={() => setShowAddMember(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors font-medium"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add New Member
+          </button>
+        </div>
         {filtered.length === 0 ? (
           <div className="bg-white rounded-xl p-8 text-center">
             <Users className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -1299,6 +1462,25 @@ export function BusinessProfessionalServicesTab() {
           member={selectedMember}
           currentAuthorName={currentAuthorName}
           onClose={() => setSelectedMember(null)}
+        />
+      )}
+
+      {showAddMember && (
+        <AddMemberModal
+          onClose={() => setShowAddMember(false)}
+          onCreated={async (id, memberType) => {
+            setShowAddMember(false);
+            try {
+              const data = await getAllCrmMembers();
+              setMembers(data);
+              const created = data.find(
+                (m) => m.id === id && m.member_type === memberType,
+              );
+              if (created) setSelectedMember(created);
+            } catch (err) {
+              console.error("Failed to refresh members after add:", err);
+            }
+          }}
         />
       )}
     </>
