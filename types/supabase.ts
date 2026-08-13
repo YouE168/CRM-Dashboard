@@ -204,6 +204,7 @@ export type Database = {
         Row: {
           id: string;
           admin_id: string;
+          subject: string | null;
           content: string;
           created_at: string;
           updated_at: string;
@@ -211,6 +212,7 @@ export type Database = {
         Insert: {
           id?: string;
           admin_id: string;
+          subject?: string | null;
           content?: string;
           created_at?: string;
           updated_at?: string;
@@ -218,6 +220,7 @@ export type Database = {
         Update: {
           id?: string;
           admin_id?: string;
+          subject?: string | null;
           content?: string;
           created_at?: string;
           updated_at?: string;

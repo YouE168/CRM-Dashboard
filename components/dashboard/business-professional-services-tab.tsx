@@ -730,13 +730,18 @@ function PersonalReminders({ adminId }: { adminId: string }) {
 // rendered as a clickable link via linkifyText, so a pasted meeting/doc
 // link can be opened directly from the note instead of being copy-pasted
 // elsewhere. Private via RLS, same as the reminder checklist above.
+const NOTEPAD_PREVIEW_COUNT = 3;
+
 function MyNotepad({ adminId }: { adminId: string }) {
   const [entries, setEntries] = useState<NotepadRow[]>([]);
+  const [newSubject, setNewSubject] = useState("");
   const [newContent, setNewContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [showAllNotes, setShowAllNotes] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -756,10 +761,11 @@ function MyNotepad({ adminId }: { adminId: string }) {
   }, [adminId, load]);
 
   const handleAdd = async () => {
-    if (!newContent.trim()) return;
+    if (!newSubject.trim() || !newContent.trim()) return;
     setSaving(true);
     try {
-      await addNotepadEntry(adminId, newContent);
+      await addNotepadEntry(adminId, newSubject, newContent);
+      setNewSubject("");
       setNewContent("");
       await load();
     } catch (err) {
@@ -785,6 +791,38 @@ function MyNotepad({ adminId }: { adminId: string }) {
     }
   };
 
+  const renderNoteEntry = (n: NotepadRow) => (
+    <div
+      key={n.id}
+      className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
+    >
+      <p className="text-sm font-semibold text-gray-900">
+        {n.subject || "(No subject)"}
+      </p>
+      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-0.5">
+        {linkifyText(n.content)}
+      </p>
+      <div className="flex items-center justify-between mt-1.5">
+        <p className="text-xs text-gray-400">
+          {new Date(n.created_at).toLocaleString()}
+        </p>
+        <button
+          onClick={() => setPendingDeleteId(n.id)}
+          className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
+          title="Delete note"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Delete</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  const previewEntries = entries.slice(0, NOTEPAD_PREVIEW_COUNT);
+  const filteredEntries = entries.filter((n) =>
+    (n.subject || "(No subject)").toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
       <div className="flex items-center justify-between mb-3">
@@ -794,25 +832,44 @@ function MyNotepad({ adminId }: { adminId: string }) {
             My Notepad {entries.length > 0 && `(${entries.length})`}
           </h2>
         </div>
-        <span className="text-xs text-gray-400">Private to you</span>
+        <div className="flex items-center gap-3">
+          {entries.length > NOTEPAD_PREVIEW_COUNT && (
+            <button
+              onClick={() => setShowAllNotes(true)}
+              className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+            >
+              View all →
+            </button>
+          )}
+          <span className="text-xs text-gray-400">Private to you</span>
+        </div>
       </div>
 
-      <div className="flex gap-2 mb-4">
-        <textarea
-          value={newContent}
-          onChange={(e) => setNewContent(e.target.value)}
-          placeholder="Jot down anything you want to remember - paste a link and it'll be clickable once saved..."
-          rows={3}
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-y"
+      <div className="mb-4">
+        <input
+          type="text"
+          value={newSubject}
+          onChange={(e) => setNewSubject(e.target.value)}
+          placeholder="Subject"
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-400 mb-2"
         />
-        <button
-          onClick={handleAdd}
-          disabled={saving || !newContent.trim()}
-          className="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 self-start whitespace-nowrap"
-        >
-          <Plus className="h-4 w-4" />
-          {saving ? "Saving…" : "Save Note"}
-        </button>
+        <div className="flex gap-2">
+          <textarea
+            value={newContent}
+            onChange={(e) => setNewContent(e.target.value)}
+            placeholder="Jot down anything you want to remember - paste a link and it'll be clickable once saved..."
+            rows={3}
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-y"
+          />
+          <button
+            onClick={handleAdd}
+            disabled={saving || !newSubject.trim() || !newContent.trim()}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 self-start whitespace-nowrap"
+          >
+            <Plus className="h-4 w-4" />
+            {saving ? "Saving…" : "Save Note"}
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -820,30 +877,56 @@ function MyNotepad({ adminId }: { adminId: string }) {
       ) : entries.length === 0 ? (
         <p className="text-sm text-gray-400">No notes yet.</p>
       ) : (
-        <div className="space-y-2">
-          {entries.map((n) => (
-            <div
-              key={n.id}
-              className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
-            >
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                {linkifyText(n.content)}
-              </p>
-              <div className="flex items-center justify-between mt-1.5">
-                <p className="text-xs text-gray-400">
-                  {new Date(n.created_at).toLocaleString()}
-                </p>
-                <button
-                  onClick={() => setPendingDeleteId(n.id)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
-                  title="Delete note"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  <span className="text-xs font-medium">Delete</span>
-                </button>
+        <div className="space-y-2">{previewEntries.map(renderNoteEntry)}</div>
+      )}
+
+      {showAllNotes && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => {
+              setShowAllNotes(false);
+              setSearchQuery("");
+            }}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 rounded-t-2xl flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <NotebookPen className="h-5 w-5 text-amber-600" />
+                <h3 className="font-semibold text-gray-900">
+                  All Notes ({entries.length})
+                </h3>
               </div>
+              <button
+                onClick={() => {
+                  setShowAllNotes(false);
+                  setSearchQuery("");
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-          ))}
+            <div className="p-4 border-b border-gray-100">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by subject…"
+                autoFocus
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
+            <div className="p-4 overflow-y-auto space-y-2">
+              {filteredEntries.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">
+                  No notes match "{searchQuery}".
+                </p>
+              ) : (
+                filteredEntries.map(renderNoteEntry)
+              )}
+            </div>
+          </div>
         </div>
       )}
 

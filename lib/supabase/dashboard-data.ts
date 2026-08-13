@@ -3341,6 +3341,7 @@ export function subscribeToPersonalNotes(adminId: string, onChange: () => void) 
 export interface NotepadRow {
   id: string;
   admin_id: string;
+  subject: string | null;
   content: string;
   created_at: string;
   updated_at: string;
@@ -3360,11 +3361,12 @@ export async function getMyNotepadEntries(
 
 export async function addNotepadEntry(
   adminId: string,
+  subject: string,
   content: string,
 ): Promise<void> {
   const { error } = await supabase
     .from("admin_notepad")
-    .insert({ admin_id: adminId, content });
+    .insert({ admin_id: adminId, subject, content });
   if (error) throw error;
 }
 
