@@ -1091,6 +1091,30 @@ export async function sendAdminNoteRow(
     sent_by: sentBy,
   });
   if (error) throw error;
+
+  // Broadcast note - email everyone currently in that role, matching who
+  // the in-app notification bell shows this to. Best-effort: a failed
+  // lookup or send here should never make the note itself fail to save.
+  try {
+    const { data: recipients } = await supabase
+      .from("users")
+      .select("email")
+      .eq("primary_role", recipientType);
+    await Promise.allSettled(
+      (recipients ?? [])
+        .filter((u) => u.email)
+        .map((u) =>
+          sendStaffNotificationEmail(
+            subject || "New note from Rural Community Partners",
+            message,
+            "admin_note",
+            u.email as string,
+          ),
+        ),
+    );
+  } catch (err) {
+    console.error("Failed to email admin note recipients:", err);
+  }
 }
 
 export function subscribeToAdminNotes(onChange: () => void) {
@@ -1181,6 +1205,30 @@ export async function sendDirectMessage(
     message,
   });
   if (error) throw error;
+
+  // Only email when admin is the one sending - that's the direction the
+  // in-app notification bell surfaces (a coalition/partner/mentor's own
+  // reply doesn't need to email them back). Best-effort, never blocks
+  // the message itself from sending.
+  if (senderRole === "admin") {
+    try {
+      const { data: recipient } = await supabase
+        .from("users")
+        .select("email")
+        .eq("id", userId)
+        .maybeSingle();
+      if (recipient?.email) {
+        await sendStaffNotificationEmail(
+          `Message from ${senderName}`,
+          message,
+          "direct_message",
+          recipient.email,
+        );
+      }
+    } catch (err) {
+      console.error("Failed to email direct message recipient:", err);
+    }
+  }
 }
 
 export function subscribeToDirectMessages(onChange: () => void) {
@@ -2253,6 +2301,33 @@ export async function addMenteeNote(
     author,
   });
   if (error) throw error;
+
+  // Best-effort email to the mentee/entrepreneur this note is for -
+  // never blocks the note itself from saving.
+  try {
+    const { data: participant } = await supabase
+      .from("participants")
+      .select("user_id")
+      .eq("id", participantId)
+      .maybeSingle();
+    if (participant?.user_id) {
+      const { data: recipient } = await supabase
+        .from("users")
+        .select("email")
+        .eq("id", participant.user_id)
+        .maybeSingle();
+      if (recipient?.email) {
+        await sendStaffNotificationEmail(
+          `Note from ${author || "your mentor"}`,
+          note,
+          "mentor_note",
+          recipient.email,
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Failed to email mentee note recipient:", err);
+  }
 }
 
 // Notes across a set of mentees at once - used by the mentor's own "Notes
