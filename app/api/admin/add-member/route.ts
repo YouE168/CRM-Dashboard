@@ -47,13 +47,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { name, email, phone, memberType } = await request.json();
+    const { name, email, phone, memberType, programs } = await request.json();
     if (!name || !email || !memberType) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
     if (!VALID_TYPES.includes(memberType)) {
       return NextResponse.json({ error: "Invalid member type" }, { status: 400 });
     }
+    const selectedPrograms: string[] = Array.isArray(programs) ? programs : [];
 
     const siteUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
     const { data: linkData, error: linkError } =
@@ -132,11 +133,13 @@ export async function POST(request: Request) {
       }
       newMemberId = mentorRow.id;
     } else {
-      const { data: defaultProgram } = await supabaseAdmin
+      const { data: catalog } = await supabaseAdmin
         .from("programs")
-        .select("id, name")
-        .eq("name", "Business Professional Services")
-        .maybeSingle();
+        .select("id, name");
+      const catalogRows = catalog ?? [];
+      const defaultProgram = catalogRows.find(
+        (p) => p.name === "Business Professional Services",
+      );
 
       const isOrgAccount = memberType === "partner" || memberType === "coalition";
       const orgProgramName =
@@ -161,13 +164,25 @@ export async function POST(request: Request) {
       }
       newMemberId = participantRow.id;
 
-      if (defaultProgram) {
-        await supabaseAdmin.from("user_programs").insert({
-          user_id: linkData.user.id,
-          program_id: defaultProgram.id,
-          approved: true,
-          progress: 0,
-        });
+      // Grant access (approved: true) to exactly the programs Jody picked
+      // on the Add New Member form, rather than a hardcoded default -
+      // matched against the real catalog by exact name.
+      const matchedProgramIds = new Set<string>();
+      for (const programName of selectedPrograms) {
+        const match = catalogRows.find(
+          (p) => p.name.toLowerCase() === String(programName).toLowerCase(),
+        );
+        if (match) matchedProgramIds.add(match.id);
+      }
+      if (matchedProgramIds.size > 0) {
+        await supabaseAdmin.from("user_programs").insert(
+          Array.from(matchedProgramIds).map((program_id) => ({
+            user_id: linkData.user.id,
+            program_id,
+            approved: true,
+            progress: 0,
+          })),
+        );
       }
     }
 

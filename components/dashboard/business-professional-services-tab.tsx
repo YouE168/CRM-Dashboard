@@ -49,6 +49,7 @@ import {
 } from "@/lib/supabase/dashboard-data";
 import { supabase } from "@/lib/supabase/client";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
+import { getProgramsForRole, getDefaultProgramsForRole } from "@/lib/role-programs";
 
 const typeLabels: Record<string, string> = {
   mentee: "Mentee",
@@ -961,8 +962,24 @@ function AddMemberModal({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [memberType, setMemberType] = useState("mentee");
+  const [selectedPrograms, setSelectedPrograms] = useState<string[]>(
+    getDefaultProgramsForRole("mentee"),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const handleMemberTypeChange = (value: string) => {
+    setMemberType(value);
+    setSelectedPrograms(getDefaultProgramsForRole(value));
+  };
+
+  const toggleProgram = (programName: string) => {
+    setSelectedPrograms((prev) =>
+      prev.includes(programName)
+        ? prev.filter((p) => p !== programName)
+        : [...prev, programName],
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -989,6 +1006,7 @@ function AddMemberModal({
           email: email.trim(),
           phone: phone.trim() || null,
           memberType,
+          programs: memberType === "mentor" ? [] : selectedPrograms,
         }),
       });
       const result = await res.json();
@@ -996,6 +1014,11 @@ function AddMemberModal({
         setError(result.error || "Couldn't add this member. Please try again.");
         setSaving(false);
         return;
+      }
+      if (!result.emailSent) {
+        alert(
+          `${name} was added, but the invite email couldn't be sent. They'll need a password-reset link to log in - try "Forgot password" on the login page with ${email}.`,
+        );
       }
       onCreated(result.member.id, result.member.member_type);
     } catch (err) {
@@ -1061,7 +1084,7 @@ function AddMemberModal({
             <label className="block text-xs text-gray-500 mb-1">Member Type *</label>
             <select
               value={memberType}
-              onChange={(e) => setMemberType(e.target.value)}
+              onChange={(e) => handleMemberTypeChange(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
               <option value="mentee">Mentee</option>
@@ -1071,6 +1094,35 @@ function AddMemberModal({
               <option value="mentor">Mentor</option>
             </select>
           </div>
+
+          {memberType === "mentor" ? (
+            <p className="text-xs text-gray-400">
+              Mentors are staff, not program clients, so they don't have
+              program access to choose.
+            </p>
+          ) : (
+            <div>
+              <label className="block text-xs text-gray-500 mb-2">
+                Programs for this {typeLabels[memberType] ?? memberType}
+              </label>
+              <div className="space-y-1.5 border border-gray-200 rounded-lg p-3">
+                {getProgramsForRole(memberType).map((programName) => (
+                  <label
+                    key={programName}
+                    className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedPrograms.includes(programName)}
+                      onChange={() => toggleProgram(programName)}
+                      className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-400"
+                    />
+                    {programName}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
