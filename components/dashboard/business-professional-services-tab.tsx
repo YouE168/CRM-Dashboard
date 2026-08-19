@@ -743,6 +743,7 @@ function MyNotepad({ adminId }: { adminId: string }) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [showAllNotes, setShowAllNotes] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewingNote, setViewingNote] = useState<NotepadRow | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -795,12 +796,13 @@ function MyNotepad({ adminId }: { adminId: string }) {
   const renderNoteEntry = (n: NotepadRow) => (
     <div
       key={n.id}
-      className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
+      onClick={() => setViewingNote(n)}
+      className="group bg-gray-50 p-3 rounded-lg border border-gray-100 cursor-pointer hover:border-emerald-200 hover:bg-emerald-50/40 transition-colors"
     >
       <p className="text-sm font-semibold text-gray-900">
         {n.subject || "(No subject)"}
       </p>
-      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-0.5">
+      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-0.5 line-clamp-3">
         {linkifyText(n.content)}
       </p>
       <div className="flex items-center justify-between mt-1.5">
@@ -808,7 +810,10 @@ function MyNotepad({ adminId }: { adminId: string }) {
           {new Date(n.created_at).toLocaleString()}
         </p>
         <button
-          onClick={() => setPendingDeleteId(n.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPendingDeleteId(n.id);
+          }}
           className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
           title="Delete note"
         >
@@ -926,6 +931,50 @@ function MyNotepad({ adminId }: { adminId: string }) {
               ) : (
                 filteredEntries.map(renderNoteEntry)
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingNote && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setViewingNote(null)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {viewingNote.subject || "(No subject)"}
+                </h3>
+                <p className="text-xs text-gray-400 mt-1">
+                  {new Date(viewingNote.created_at).toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => setViewingNote(null)}
+                className="text-gray-400 hover:text-gray-600 shrink-0"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto">
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                {linkifyText(viewingNote.content)}
+              </p>
+            </div>
+            <div className="p-4 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => {
+                  setPendingDeleteId(viewingNote.id);
+                  setViewingNote(null);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
             </div>
           </div>
         </div>
