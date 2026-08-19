@@ -25,6 +25,7 @@ import {
   History,
   NotebookPen,
   UserPlus,
+  Bell,
 } from "lucide-react";
 import {
   getAllCrmMembers,
@@ -1230,9 +1231,37 @@ function AddMemberModal({
   );
 }
 
+// "Upcoming Sessions" shows two different kinds of things side by side:
+// scheduled case_notes (tied to a member) and My Reminders entries that
+// have a date attached (private to the admin, not tied to a member).
+// Merged and sorted together by date/time so Jody sees everything
+// coming up in one place.
+type UpcomingEntry =
+  | {
+      kind: "session";
+      id: string;
+      date: string;
+      time: string | null;
+      location: string | null;
+      link: string | null;
+      sortKey: string;
+      session: CaseNoteRow;
+    }
+  | {
+      kind: "reminder";
+      id: string;
+      date: string;
+      time: string | null;
+      location: string | null;
+      link: string | null;
+      sortKey: string;
+      reminder: PersonalNoteRow;
+    };
+
 export function BusinessProfessionalServicesTab() {
   const [members, setMembers] = useState<CrmMemberRow[]>([]);
   const [upcoming, setUpcoming] = useState<CaseNoteRow[]>([]);
+  const [personalReminders, setPersonalReminders] = useState<PersonalNoteRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -1279,6 +1308,21 @@ export function BusinessProfessionalServicesTab() {
     return unsubscribe;
   }, [loadData]);
 
+  useEffect(() => {
+    if (!adminId) return;
+    const loadReminders = async () => {
+      try {
+        const data = await getMyPersonalNotes(adminId);
+        setPersonalReminders(data);
+      } catch (err) {
+        console.error("Failed to load personal reminders:", err);
+      }
+    };
+    loadReminders();
+    const unsubscribe = subscribeToPersonalNotes(adminId, loadReminders);
+    return unsubscribe;
+  }, [adminId]);
+
   const filtered = members.filter((m) => {
     if (typeFilter !== "All" && m.member_type !== typeFilter) return false;
     if (q && !m.name.toLowerCase().includes(q.toLowerCase())) return false;
@@ -1309,13 +1353,39 @@ export function BusinessProfessionalServicesTab() {
       ?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const renderSessionRow = (note: CaseNoteRow, idx: number) => {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const upcomingEntries: UpcomingEntry[] = [
+    ...upcoming.map((n) => ({
+      kind: "session" as const,
+      id: `session-${n.id}`,
+      date: n.meeting_date as string,
+      time: n.meeting_time,
+      location: n.meeting_location,
+      link: n.meeting_link,
+      sortKey: `${n.meeting_date}T${n.meeting_time || "00:00"}`,
+      session: n,
+    })),
+    ...personalReminders
+      .filter((n) => n.meeting_date && n.meeting_date >= todayStr && !n.completed)
+      .map((n) => ({
+        kind: "reminder" as const,
+        id: `reminder-${n.id}`,
+        date: n.meeting_date as string,
+        time: n.meeting_time,
+        location: n.meeting_location,
+        link: n.meeting_link,
+        sortKey: `${n.meeting_date}T${n.meeting_time || "00:00"}`,
+        reminder: n,
+      })),
+  ].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+  const renderUpcomingEntry = (entry: UpcomingEntry, idx: number) => {
     const colors = [
       { bg: "bg-emerald-100", text: "text-emerald-600" },
       { bg: "bg-purple-100", text: "text-purple-600" },
     ][idx % 2];
 
-    const sessionDate = new Date(note.meeting_date + "T00:00:00");
+    const sessionDate = new Date(entry.date + "T00:00:00");
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -1326,14 +1396,50 @@ export function BusinessProfessionalServicesTab() {
     } else if (sessionDate.getTime() === tomorrow.getTime()) {
       whenLabel = "Tomorrow";
     }
-    if (note.meeting_time) whenLabel += ` at ${note.meeting_time}`;
+    if (entry.time) whenLabel += ` at ${entry.time}`;
 
+    if (entry.kind === "reminder") {
+      const note = entry.reminder;
+      return (
+        <div className="p-4" key={entry.id}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+              <Bell className="h-4 w-4 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-gray-800">{note.note}</p>
+              <p className="text-xs text-gray-500">
+                {whenLabel}
+                {entry.location ? ` - ${entry.location}` : ""}
+              </p>
+              {entry.link && (
+                <a
+                  href={entry.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-0.5"
+                >
+                  <LinkIcon className="h-3 w-3" />
+                  Join link
+                </a>
+              )}
+            </div>
+            <span className="text-xs text-amber-600 whitespace-nowrap">
+              My Reminder
+            </span>
+          </div>
+        </div>
+      );
+    }
+
+    const note = entry.session;
     const matchingMember = members.find(
       (m) => m.id === note.member_id && m.member_type === note.member_type,
     );
 
     return (
-      <div className="p-4" key={note.id}>
+      <div className="p-4" key={entry.id}>
         <div className="flex items-center gap-3">
           <div
             className={`w-10 h-10 rounded-full ${colors.bg} flex items-center justify-center`}
@@ -1346,11 +1452,11 @@ export function BusinessProfessionalServicesTab() {
             <p className="font-medium text-gray-800">{note.member_name}</p>
             <p className="text-xs text-gray-500">
               {whenLabel}
-              {note.meeting_location ? ` - ${note.meeting_location}` : ""}
+              {entry.location ? ` - ${entry.location}` : ""}
             </p>
-            {note.meeting_link && (
+            {entry.link && (
               <a
-                href={note.meeting_link}
+                href={entry.link}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
@@ -1498,7 +1604,7 @@ export function BusinessProfessionalServicesTab() {
               <Calendar className="h-5 w-5 text-emerald-600" />
               <h3 className="font-semibold text-gray-900">Upcoming Sessions</h3>
             </div>
-            {upcoming.length > 3 && (
+            {upcomingEntries.length > 3 && (
               <button
                 onClick={() => setShowAllSessions(true)}
                 className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
@@ -1508,12 +1614,14 @@ export function BusinessProfessionalServicesTab() {
             )}
           </div>
           <div className="divide-y divide-gray-100">
-            {upcoming.length === 0 ? (
+            {upcomingEntries.length === 0 ? (
               <div className="p-6 text-center text-sm text-gray-400">
-                No upcoming sessions logged yet.
+                No upcoming sessions or reminders logged yet.
               </div>
             ) : (
-              upcoming.slice(0, 3).map((note, idx) => renderSessionRow(note, idx))
+              upcomingEntries
+                .slice(0, 3)
+                .map((entry, idx) => renderUpcomingEntry(entry, idx))
             )}
           </div>
         </div>
@@ -1530,7 +1638,7 @@ export function BusinessProfessionalServicesTab() {
               <div className="flex items-center gap-2">
                 <Calendar className="h-5 w-5 text-emerald-600" />
                 <h3 className="font-semibold text-gray-900">
-                  All Upcoming Sessions ({upcoming.length})
+                  All Upcoming ({upcomingEntries.length})
                 </h3>
               </div>
               <button
@@ -1541,7 +1649,7 @@ export function BusinessProfessionalServicesTab() {
               </button>
             </div>
             <div className="divide-y divide-gray-100 overflow-y-auto">
-              {upcoming.map((note, idx) => renderSessionRow(note, idx))}
+              {upcomingEntries.map((entry, idx) => renderUpcomingEntry(entry, idx))}
             </div>
           </div>
         </div>
