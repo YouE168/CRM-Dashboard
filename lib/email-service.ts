@@ -338,6 +338,88 @@ Rural Community Partners
   });
 }
 
+// Helper: Send a "reminder coming up tomorrow" email for a My Reminders
+// entry that has a date set - triggered by the daily cron job at
+// app/api/cron/reminder-notifications/route.ts, not by anything
+// client-side, so it goes out even if nobody has the app open.
+export async function sendReminderDueEmail(emailData: {
+  to: string;
+  name: string;
+  note: string;
+  meetingDate: string;
+  meetingTime?: string | null;
+  meetingLocation?: string | null;
+  meetingLink?: string | null;
+}) {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const whenLabel = new Date(emailData.meetingDate + "T00:00:00").toLocaleDateString(
+    "en-US",
+    { weekday: "long", month: "long", day: "numeric" },
+  );
+
+  const subject = `⏰ Reminder for tomorrow: ${emailData.note.slice(0, 60)}`;
+
+  const detailsHtml = `
+    ${emailData.meetingTime ? `<p style="margin: 4px 0;"><strong>Time:</strong> ${emailData.meetingTime}</p>` : ""}
+    ${emailData.meetingLocation ? `<p style="margin: 4px 0;"><strong>Location:</strong> ${emailData.meetingLocation}</p>` : ""}
+    ${emailData.meetingLink ? `<p style="margin: 4px 0;"><strong>Link:</strong> <a href="${emailData.meetingLink}">${emailData.meetingLink}</a></p>` : ""}
+  `;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background-color: #059669; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; padding: 30px 20px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff;">🏠 Rural Community Partners</h1>
+            <p style="margin: 5px 0 0; color: #ffffff;">You have a reminder coming up tomorrow</p>
+          </div>
+          <div style="padding: 30px; background: #f9fafb; border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb;">
+            <h2>Hi ${emailData.name}!</h2>
+            <p style="font-size: 13px; color: #6b7280; margin-bottom: 4px;">${whenLabel}</p>
+            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 12px 0;">
+              <p style="margin: 0; font-size: 15px; white-space: pre-wrap;">${emailData.note}</p>
+              ${detailsHtml.trim() ? `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #4b5563;">${detailsHtml}</div>` : ""}
+            </div>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${baseUrl}/admin/business-professional-services" style="display: inline-block; background-color: #059669; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">
+                Open My Reminders
+              </a>
+            </div>
+          </div>
+          <div style="text-align: center; padding: 20px; font-size: 12px; color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <p style="margin: 0; font-weight: 600;">Rural Community Partners</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const text = `
+Hi ${emailData.name},
+
+You have a reminder coming up tomorrow (${whenLabel}):
+
+${emailData.note}
+${emailData.meetingTime ? `Time: ${emailData.meetingTime}\n` : ""}${emailData.meetingLocation ? `Location: ${emailData.meetingLocation}\n` : ""}${emailData.meetingLink ? `Link: ${emailData.meetingLink}\n` : ""}
+Open My Reminders: ${baseUrl}/admin/business-professional-services
+
+---
+Rural Community Partners
+  `;
+
+  return await sendEmail({
+    to: emailData.to,
+    subject,
+    body: text,
+    html,
+    from:
+      process.env.EMAIL_FROM ||
+      "Jody at Rural Community Partners <jody@ruralcommunitypartners.org>",
+    replyTo: "jody@hbcat.org",
+  });
+}
+
 // Helper: Send a branded "reset your password" email using a real Supabase
 // recovery link (generated with admin.generateLink({ type: "recovery" }),
 // NOT auth.resetPasswordForEmail() - that call sends Supabase's own

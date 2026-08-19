@@ -174,6 +174,7 @@ export type Database = {
           meeting_time: string | null;
           meeting_location: string | null;
           meeting_link: string | null;
+          reminder_sent: boolean;
           created_at: string;
         };
         Insert: {
@@ -185,6 +186,7 @@ export type Database = {
           meeting_time?: string | null;
           meeting_location?: string | null;
           meeting_link?: string | null;
+          reminder_sent?: boolean;
           created_at?: string;
         };
         Update: {
@@ -196,6 +198,7 @@ export type Database = {
           meeting_time?: string | null;
           meeting_location?: string | null;
           meeting_link?: string | null;
+          reminder_sent?: boolean;
           created_at?: string;
         };
         Relationships: [];
