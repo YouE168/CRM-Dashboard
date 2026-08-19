@@ -583,9 +583,11 @@ function PersonalReminders({ adminId }: { adminId: string }) {
         />
         <button
           onClick={handleAdd}
-          className="px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+          disabled={!newNote.trim()}
+          className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
         >
           <Plus className="h-4 w-4" />
+          Add
         </button>
       </div>
 
@@ -602,44 +604,59 @@ function PersonalReminders({ adminId }: { adminId: string }) {
       </button>
 
       {showMeetingDetails && (
-        <div className="grid grid-cols-2 gap-2 mb-4 bg-gray-50 p-3 rounded-xl">
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Date</label>
-            <input
-              type="date"
-              value={meetingDate}
-              onChange={(e) => setMeetingDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            />
+        <div className="mb-4 bg-gray-50 p-3 rounded-xl">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Date</label>
+              <input
+                type="date"
+                value={meetingDate}
+                onChange={(e) => setMeetingDate(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Time</label>
+              <input
+                type="time"
+                value={meetingTime}
+                onChange={(e) => setMeetingTime(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">
+                Location <span className="text-gray-300">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={meetingLocation}
+                onChange={(e) => setMeetingLocation(e.target.value)}
+                placeholder="e.g. RCP office"
+                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">
+                Link <span className="text-gray-300">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={meetingLink}
+                onChange={(e) => setMeetingLink(e.target.value)}
+                placeholder="Zoom / meeting URL"
+                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Time</label>
-            <input
-              type="time"
-              value={meetingTime}
-              onChange={(e) => setMeetingTime(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Location</label>
-            <input
-              type="text"
-              value={meetingLocation}
-              onChange={(e) => setMeetingLocation(e.target.value)}
-              placeholder="e.g. RCP office"
-              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">Link</label>
-            <input
-              type="text"
-              value={meetingLink}
-              onChange={(e) => setMeetingLink(e.target.value)}
-              placeholder="Zoom / meeting URL"
-              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            />
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={handleAdd}
+              disabled={!newNote.trim()}
+              className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Done
+            </button>
           </div>
         </div>
       )}
