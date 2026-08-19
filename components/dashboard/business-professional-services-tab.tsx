@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { linkifyText } from "@/lib/linkify";
 import {
   Users,
@@ -491,6 +491,8 @@ function PersonalReminders({ adminId }: { adminId: string }) {
   const [meetingTime, setMeetingTime] = useState("");
   const [meetingLocation, setMeetingLocation] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
+  const [noteError, setNoteError] = useState("");
+  const noteInputRef = useRef<HTMLInputElement>(null);
 
   const loadNotes = useCallback(async () => {
     try {
@@ -510,7 +512,12 @@ function PersonalReminders({ adminId }: { adminId: string }) {
   }, [adminId, loadNotes]);
 
   const handleAdd = async () => {
-    if (!newNote.trim()) return;
+    if (!newNote.trim()) {
+      setNoteError("Type a reminder above first.");
+      noteInputRef.current?.focus();
+      return;
+    }
+    setNoteError("");
     try {
       await addPersonalNote(adminId, newNote, {
         date: meetingDate,
@@ -527,6 +534,7 @@ function PersonalReminders({ adminId }: { adminId: string }) {
       await loadNotes();
     } catch (err) {
       console.error("Failed to add reminder:", err);
+      setNoteError("Couldn't save that reminder. Please try again.");
     }
   };
 
@@ -570,26 +578,34 @@ function PersonalReminders({ adminId }: { adminId: string }) {
         </button>
       </div>
 
-      <div className="flex gap-2 mb-2">
+      <div className="flex gap-2 mb-1">
         <input
+          ref={noteInputRef}
           type="text"
           value={newNote}
-          onChange={(e) => setNewNote(e.target.value)}
+          onChange={(e) => {
+            setNewNote(e.target.value);
+            if (noteError) setNoteError("");
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") handleAdd();
           }}
           placeholder="Add a reminder for yourself (e.g. 'Follow up with Lisa next week')..."
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          className={`flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
+            noteError
+              ? "border-red-300 focus:ring-red-400"
+              : "border-gray-200 focus:ring-emerald-400"
+          }`}
         />
         <button
           onClick={handleAdd}
-          disabled={!newNote.trim()}
-          className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors whitespace-nowrap"
         >
           <Plus className="h-4 w-4" />
           Add
         </button>
       </div>
+      {noteError && <p className="text-xs text-red-600 mb-2">{noteError}</p>}
 
       <button
         onClick={() => setShowMeetingDetails(!showMeetingDetails)}
@@ -649,11 +665,11 @@ function PersonalReminders({ adminId }: { adminId: string }) {
               />
             </div>
           </div>
-          <div className="flex justify-end mt-3">
+          <div className="flex items-center justify-end gap-3 mt-3">
+            {noteError && <p className="text-xs text-red-600">{noteError}</p>}
             <button
               onClick={handleAdd}
-              disabled={!newNote.trim()}
-              className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
             >
               Done
             </button>
