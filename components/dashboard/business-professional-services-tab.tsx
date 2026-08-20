@@ -2288,6 +2288,25 @@ export function BusinessProfessionalServicesTab() {
   const [selectedBusiness, setSelectedBusiness] = useState<BusinessWithDetails | null>(null);
   const [showAddBusiness, setShowAddBusiness] = useState(false);
   const [businessQ, setBusinessQ] = useState("");
+  const [pendingDeleteReminderId, setPendingDeleteReminderId] = useState<string | null>(null);
+  const [deletingReminder, setDeletingReminder] = useState(false);
+
+  const confirmDeleteReminder = async () => {
+    if (!pendingDeleteReminderId) return;
+    setDeletingReminder(true);
+    try {
+      await deletePersonalNote(pendingDeleteReminderId);
+      setPersonalReminders((prev) =>
+        prev.filter((n) => n.id !== pendingDeleteReminderId),
+      );
+      setPendingDeleteReminderId(null);
+    } catch (err) {
+      console.error("Failed to delete reminder:", err);
+      alert("Couldn't delete that reminder. Please try again.");
+    } finally {
+      setDeletingReminder(false);
+    }
+  };
 
   const loadBusinesses = useCallback(async () => {
     try {
@@ -2470,9 +2489,18 @@ export function BusinessProfessionalServicesTab() {
                 </a>
               )}
             </div>
-            <span className="text-xs text-amber-600 whitespace-nowrap">
-              My Reminder
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-amber-600 whitespace-nowrap">
+                My Reminder
+              </span>
+              <button
+                onClick={() => setPendingDeleteReminderId(note.id)}
+                className="p-1 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                title="Delete reminder"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -2930,6 +2958,17 @@ export function BusinessProfessionalServicesTab() {
           }}
         />
       )}
+
+      <ConfirmationModal
+        isOpen={pendingDeleteReminderId !== null}
+        title="Delete reminder"
+        message="Delete this reminder? This can't be undone."
+        confirmText={deletingReminder ? "Deleting…" : "Delete"}
+        cancelText="Cancel"
+        type="danger"
+        onConfirm={confirmDeleteReminder}
+        onCancel={() => setPendingDeleteReminderId(null)}
+      />
     </>
   );
 }

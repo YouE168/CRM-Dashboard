@@ -3611,11 +3611,15 @@ export async function togglePersonalNote(
 }
 
 export async function deletePersonalNote(id: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("admin_personal_notes")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error("Delete was blocked by a database permission. Please try again.");
+  }
 }
 
 export function subscribeToPersonalNotes(adminId: string, onChange: () => void) {
