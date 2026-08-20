@@ -1,7 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Eye,
@@ -121,7 +121,21 @@ const saveSignup = (formData: any) => {
   return true;
 };
 
+// useSearchParams() requires a Suspense boundary during Next.js's build
+// export/prerender step, or the build fails outright (confirmed by a
+// real Vercel build error: "Error occurred prerendering page /signup").
+// export const dynamic = "force-dynamic" above only affects runtime
+// rendering, not this build-time requirement - so the actual page logic
+// lives in SignupPageInner, and this default export just wraps it.
 export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupPageInner />
+    </Suspense>
+  );
+}
+
+function SignupPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [currentStep, setCurrentStep] = useState(0);
