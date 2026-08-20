@@ -2610,7 +2610,7 @@ export function BusinessProfessionalServicesTab() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-100 rounded-lg">
@@ -2652,6 +2652,17 @@ export function BusinessProfessionalServicesTab() {
             <div>
               <p className="text-2xl font-bold text-gray-900">{counts.orgs}</p>
               <p className="text-sm text-gray-500">Partners & Coalitions</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-teal-100 rounded-lg">
+              <Briefcase className="h-5 w-5 text-teal-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">{businesses.length}</p>
+              <p className="text-sm text-gray-500">Businesses</p>
             </div>
           </div>
         </div>
