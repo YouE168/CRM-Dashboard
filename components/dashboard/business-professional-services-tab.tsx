@@ -655,11 +655,13 @@ function AddBusinessModal({
 function BusinessDetailModal({
   business,
   currentAuthorName,
+  adminId,
   onClose,
   onChanged,
 }: {
   business: BusinessWithDetails;
   currentAuthorName: string;
+  adminId: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -770,7 +772,7 @@ function BusinessDetailModal({
       return;
     }
     try {
-      await addBusinessReferral(business.id, program.id, program.name, currentAuthorName, {
+      await addBusinessReferral(business.id, program.id, program.name, adminId, {
         followUpDate: referralFollowUp || undefined,
         notes: referralNotes || undefined,
       });
@@ -2692,10 +2694,11 @@ export function BusinessProfessionalServicesTab() {
         />
       )}
 
-      {selectedBusiness && (
+      {selectedBusiness && adminId && (
         <BusinessDetailModal
           business={selectedBusiness}
           currentAuthorName={currentAuthorName}
+          adminId={adminId}
           onClose={() => setSelectedBusiness(null)}
           onChanged={loadBusinesses}
         />
