@@ -3357,6 +3357,8 @@ export interface BusinessContactRow {
   email: string | null;
   phone: string | null;
   role_title: string | null;
+  invited_at: string | null;
+  user_id: string | null;
   created_at: string;
 }
 
@@ -3463,6 +3465,31 @@ export async function addBusinessContact(
 
 export async function deleteBusinessContact(id: string): Promise<void> {
   const { error } = await supabase.from("business_contacts").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Marks that a "create your account" link was sent to this contact -
+// purely informational (lets Jody see who's already been invited so
+// she doesn't send it twice by accident). Does not grant any access.
+export async function markBusinessContactInvited(contactId: string): Promise<void> {
+  const { error } = await supabase
+    .from("business_contacts")
+    .update({ invited_at: new Date().toISOString() })
+    .eq("id", contactId);
+  if (error) throw error;
+}
+
+// Called from the shortened business-invite signup form once the
+// contact actually finishes creating their real account, so Jody can
+// see this lead converted into a real member and who they became.
+export async function linkBusinessContactToUser(
+  contactId: string,
+  userId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("business_contacts")
+    .update({ user_id: userId })
+    .eq("id", contactId);
   if (error) throw error;
 }
 

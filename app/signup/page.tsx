@@ -1,8 +1,8 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Eye,
   EyeOff,
@@ -25,6 +25,7 @@ import {
   isSupabaseConfigured,
   isClient,
 } from "@/lib/supabase/client";
+import { linkBusinessContactToUser } from "@/lib/supabase/dashboard-data";
 import { COUNTIES } from "@/lib/analytics-constants";
 
 // Define the Role type
@@ -122,11 +123,22 @@ const saveSignup = (formData: any) => {
 
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [currentStep, setCurrentStep] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Business-invite mode: someone clicked a "Send Invite" link from a
+  // business contact record (Business Professional Services > Businesses
+  // tab). The role is already decided by whoever sent the invite, so we
+  // skip "Select Roles" and "Program Interests" entirely and jump
+  // straight from Personal Info -> Organization Info -> Review. See
+  // components/dashboard/business-professional-services-tab.tsx's
+  // handleSendInvite for how this link gets built.
+  const [isBusinessInvite, setIsBusinessInvite] = useState(false);
+  const [inviteContactId, setInviteContactId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -148,6 +160,35 @@ export default function SignupPage() {
     hearAbout: "",
     goals: "",
   });
+
+  useEffect(() => {
+    const inviteRoleId = searchParams.get("inviteRole");
+    if (!inviteRoleId) return;
+    const role = USER_ROLES.find((r) => r.id === inviteRoleId);
+    if (!role) return;
+
+    const prefillEmail = searchParams.get("email") || "";
+    const prefillName = searchParams.get("name") || "";
+    const prefillBusiness = searchParams.get("business") || "";
+    const contactId = searchParams.get("contactId");
+    const [firstName, ...rest] = prefillName.trim().split(/\s+/);
+
+    setFormData((prev) => ({
+      ...prev,
+      email: prefillEmail,
+      firstName: firstName || "",
+      lastName: rest.join(" "),
+      organization: prefillBusiness,
+      selectedRoles: [{ id: role.id, label: role.label, programs: role.programs }],
+      primaryRole: role.id,
+      selectedPrograms: role.programs,
+    }));
+    setInviteContactId(contactId);
+    setIsBusinessInvite(true);
+    setCurrentStep(1);
+    // Only ever needs to run once, off the URL this page loaded with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -239,12 +280,22 @@ export default function SignupPage() {
 
   const nextStep = () => {
     if (validateStep()) {
-      setCurrentStep((prev) => prev + 1);
+      // Business-invite mode skips "Program Interests" (step 3) - jump
+      // straight from Organization Info (2) to Review (4).
+      if (isBusinessInvite && currentStep === 2) {
+        setCurrentStep(4);
+      } else {
+        setCurrentStep((prev) => prev + 1);
+      }
     }
   };
 
   const prevStep = () => {
-    setCurrentStep((prev) => prev - 1);
+    if (isBusinessInvite && currentStep === 4) {
+      setCurrentStep(2);
+    } else {
+      setCurrentStep((prev) => prev - 1);
+    }
     setError("");
   };
 
@@ -437,6 +488,18 @@ export default function SignupPage() {
                 participantError,
               );
             }
+          }
+        }
+
+        // 3c. If this signup came from a business contact's "Send
+        // Invite" link, link that contact back to the real account they
+        // just created, so Jody can see the lead converted. Best-effort -
+        // should never block the account itself from finishing.
+        if (isBusinessInvite && inviteContactId) {
+          try {
+            await linkBusinessContactToUser(inviteContactId, userData.id);
+          } catch (linkError) {
+            console.error("Failed to link business contact to new user:", linkError);
           }
         }
 
@@ -951,27 +1014,32 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4">
       <div className="max-w-2xl mx-auto">
-        {/* Progress Steps */}
+        {/* Progress Steps - business-invite mode only shows Personal
+            Info, Organization Info, and Review (Select Roles and
+            Program Interests are skipped since the role's already
+            decided by whoever sent the invite), renumbered 1-2-3. */}
         <div className="mb-8">
           <div className="flex justify-between">
-            {STEPS.map((step, index) => (
-              <div key={step} className="flex-1 text-center">
-                <div
-                  className={`w-8 h-8 mx-auto rounded-full flex items-center justify-center text-sm font-medium ${
-                    index <= currentStep
-                      ? "bg-emerald-600 text-white"
-                      : "bg-gray-200 text-gray-500"
-                  }`}
-                >
-                  {index + 1}
+            {(isBusinessInvite ? [1, 2, 4] : [0, 1, 2, 3, 4]).map(
+              (index, position) => (
+                <div key={STEPS[index]} className="flex-1 text-center">
+                  <div
+                    className={`w-8 h-8 mx-auto rounded-full flex items-center justify-center text-sm font-medium ${
+                      index <= currentStep
+                        ? "bg-emerald-600 text-white"
+                        : "bg-gray-200 text-gray-500"
+                    }`}
+                  >
+                    {position + 1}
+                  </div>
+                  <p
+                    className={`text-xs mt-2 ${index <= currentStep ? "text-emerald-600 font-medium" : "text-gray-400"}`}
+                  >
+                    {STEPS[index]}
+                  </p>
                 </div>
-                <p
-                  className={`text-xs mt-2 ${index <= currentStep ? "text-emerald-600 font-medium" : "text-gray-400"}`}
-                >
-                  {step}
-                </p>
-              </div>
-            ))}
+              ),
+            )}
           </div>
         </div>
 
@@ -984,10 +1052,14 @@ export default function SignupPage() {
               className="h-16 mx-auto mb-4"
             />
             <h1 className="text-2xl font-bold text-gray-900">
-              Join Rural Community Partners
+              {isBusinessInvite
+                ? "Create Your Account"
+                : "Join Rural Community Partners"}
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Complete the form to get started
+              {isBusinessInvite
+                ? "You've been invited to Rural Community Partners - just a few details to get you set up."
+                : "Complete the form to get started"}
             </p>
           </div>
 
@@ -1012,7 +1084,7 @@ export default function SignupPage() {
               {renderStepContent()}
 
               <div className="flex justify-between gap-3 mt-8 pt-4 border-t">
-                {currentStep > 0 && (
+                {currentStep > (isBusinessInvite ? 1 : 0) && (
                   <button
                     type="button"
                     onClick={prevStep}

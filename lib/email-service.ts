@@ -338,6 +338,75 @@ Rural Community Partners
   });
 }
 
+// Sent when Jody clicks "Send Invite" next to a business contact (in
+// the Businesses tab) - a plain link to a shortened, pre-filled version
+// of the public signup form (/signup?inviteRole=...), NOT a Supabase
+// Auth invite link like sendAccessInviteEmail above. The contact fills
+// in their own name/password themselves; this email is just the door.
+export async function sendBusinessSignupInviteEmail(emailData: {
+  to: string;
+  name: string;
+  businessName: string;
+  actionLink: string;
+}) {
+  const subject = `${emailData.businessName ? `${emailData.businessName} - ` : ""}You're invited to Rural Community Partners`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background-color: #059669; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; padding: 30px 20px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff;">🏠 Rural Community Partners</h1>
+            <p style="margin: 5px 0 0; color: #ffffff;">You're invited to create an account</p>
+          </div>
+          <div style="padding: 30px; background: #f9fafb; border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb;">
+            <h2>Hello ${emailData.name}! 👋</h2>
+            <p>Jody Love has invited ${emailData.businessName ? `<strong>${emailData.businessName}</strong>` : "you"} to create a free Rural Community Partners account so you can track your programs, referrals, and meetings all in one place.</p>
+            <p>Click below to get started - it only takes a couple of minutes:</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${emailData.actionLink}" style="display: inline-block; background-color: #059669; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; padding: 14px 35px; text-decoration: none; border-radius: 8px; font-weight: bold;">
+                Create Your Account
+              </a>
+            </div>
+            <p style="font-size: 13px; color: #6b7280;">Or copy this link into your browser:</p>
+            <div style="background: #f3f4f6; padding: 12px; border-radius: 6px; word-break: break-all; font-size: 13px; font-family: monospace; border: 1px solid #e5e7eb;">${emailData.actionLink}</div>
+          </div>
+          <div style="text-align: center; padding: 20px; font-size: 12px; color: #6b7280; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+            <p style="margin: 0; font-weight: 600;">Rural Community Partners</p>
+            <p style="margin: 5px 0 0; color: #9ca3af;">Questions? Just reply to this email.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const text = `
+Hello ${emailData.name},
+
+Jody Love has invited ${emailData.businessName || "you"} to create a free Rural Community Partners account.
+
+Create your account here:
+${emailData.actionLink}
+
+Questions? Just reply to this email.
+
+---
+Rural Community Partners
+  `;
+
+  return await sendEmail({
+    to: emailData.to,
+    subject,
+    body: text,
+    html,
+    from:
+      process.env.EMAIL_FROM ||
+      "Jody at Rural Community Partners <jody@ruralcommunitypartners.org>",
+    replyTo: "jody@hbcat.org",
+  });
+}
+
 // Helper: Send a "reminder coming up tomorrow" email for a My Reminders
 // entry that has a date set - triggered by the daily cron job at
 // app/api/cron/reminder-notifications/route.ts, not by anything

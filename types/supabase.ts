@@ -204,6 +204,8 @@ export type Database = {
           email: string | null;
           phone: string | null;
           role_title: string | null;
+          invited_at: string | null;
+          user_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -213,6 +215,8 @@ export type Database = {
           email?: string | null;
           phone?: string | null;
           role_title?: string | null;
+          invited_at?: string | null;
+          user_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -222,6 +226,8 @@ export type Database = {
           email?: string | null;
           phone?: string | null;
           role_title?: string | null;
+          invited_at?: string | null;
+          user_id?: string | null;
           created_at?: string;
         };
         Relationships: [];

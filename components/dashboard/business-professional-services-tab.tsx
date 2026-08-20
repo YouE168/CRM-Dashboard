@@ -49,6 +49,7 @@ import {
   deleteBusiness,
   addBusinessContact,
   deleteBusinessContact,
+  markBusinessContactInvited,
   addBusinessReferral,
   updateBusinessReferral,
   deleteBusinessReferral,
@@ -65,7 +66,7 @@ import {
 } from "@/lib/supabase/dashboard-data";
 import { supabase } from "@/lib/supabase/client";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
-import { getProgramsForRole, getDefaultProgramsForRole } from "@/lib/role-programs";
+import { getProgramsForRole, getDefaultProgramsForRole, ROLE_PROGRAM_OPTIONS } from "@/lib/role-programs";
 
 const typeLabels: Record<string, string> = {
   mentee: "Mentee",
@@ -732,6 +733,8 @@ function BusinessDetailModal({
   const [contactPhone, setContactPhone] = useState("");
   const [contactRole, setContactRole] = useState("");
   const [pendingDeleteContactId, setPendingDeleteContactId] = useState<string | null>(null);
+  const [inviteRoleByContact, setInviteRoleByContact] = useState<Record<string, string>>({});
+  const [sendingInviteId, setSendingInviteId] = useState<string | null>(null);
 
   const [showAddReferral, setShowAddReferral] = useState(false);
   const [referralProgramId, setReferralProgramId] = useState("");
@@ -845,6 +848,59 @@ function BusinessDetailModal({
     } catch (err) {
       console.error("Failed to delete contact:", err);
       alert("Couldn't delete that contact. Please try again.");
+    }
+  };
+
+  const handleSendInvite = async (contact: BusinessContactRow) => {
+    if (!contact.email) {
+      alert("This contact doesn't have an email on file.");
+      return;
+    }
+    const role = inviteRoleByContact[contact.id];
+    if (!role) {
+      alert("Pick an account type first.");
+      return;
+    }
+    setSendingInviteId(contact.id);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Not signed in");
+
+      const params = new URLSearchParams({
+        inviteRole: role,
+        email: contact.email,
+        name: contact.name,
+        business: business.name,
+        contactId: contact.id,
+      });
+      const actionLink = `${window.location.origin}/signup?${params.toString()}`;
+
+      const res = await fetch("/api/business/send-signup-invite", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          to: contact.email,
+          name: contact.name,
+          businessName: business.name,
+          actionLink,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || "Failed to send invite");
+      }
+      await markBusinessContactInvited(contact.id);
+      await refreshBusinessData();
+      onChanged();
+    } catch (err) {
+      console.error("Failed to send signup invite:", err);
+      alert("Couldn't send that invite. Please try again.");
+    } finally {
+      setSendingInviteId(null);
     }
   };
 
@@ -1085,27 +1141,77 @@ function BusinessDetailModal({
                 {contacts.map((c) => (
                   <div
                     key={c.id}
-                    className="group flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100"
+                    className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
                   >
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">
-                        {c.name}
-                        {c.role_title ? ` · ${c.role_title}` : ""}
-                      </p>
-                      <div className="flex items-center gap-3 mt-0.5">
-                        {c.email && (
-                          <span className="text-xs text-emerald-600">{c.email}</span>
-                        )}
-                        {c.phone && <span className="text-xs text-gray-400">{c.phone}</span>}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">
+                          {c.name}
+                          {c.role_title ? ` · ${c.role_title}` : ""}
+                        </p>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          {c.email && (
+                            <span className="text-xs text-emerald-600">{c.email}</span>
+                          )}
+                          {c.phone && (
+                            <span className="text-xs text-gray-400">{c.phone}</span>
+                          )}
+                        </div>
                       </div>
+                      <button
+                        onClick={() => setPendingDeleteContactId(c.id)}
+                        className="p-1.5 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
+                        title="Remove contact"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => setPendingDeleteContactId(c.id)}
-                      className="p-1.5 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
-                      title="Remove contact"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    {c.email && (
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200 flex-wrap">
+                        {c.user_id ? (
+                          <span className="text-xs text-emerald-600 flex items-center gap-1">
+                            <UserCheck className="h-3 w-3" />
+                            Account created
+                          </span>
+                        ) : (
+                          <>
+                            <select
+                              value={inviteRoleByContact[c.id] || ""}
+                              onChange={(e) =>
+                                setInviteRoleByContact((prev) => ({
+                                  ...prev,
+                                  [c.id]: e.target.value,
+                                }))
+                              }
+                              className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                            >
+                              <option value="">Account type…</option>
+                              {ROLE_PROGRAM_OPTIONS.map((r) => (
+                                <option key={r.id} value={r.id}>
+                                  {r.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => handleSendInvite(c)}
+                              disabled={sendingInviteId === c.id}
+                              className="text-xs text-emerald-600 hover:text-emerald-700 font-medium disabled:opacity-50"
+                            >
+                              {sendingInviteId === c.id
+                                ? "Sending…"
+                                : c.invited_at
+                                  ? "Resend Invite"
+                                  : "Send Invite"}
+                            </button>
+                            {c.invited_at && (
+                              <span className="text-xs text-gray-400">
+                                Invited {new Date(c.invited_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
