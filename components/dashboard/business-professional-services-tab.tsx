@@ -45,6 +45,7 @@ import {
   subscribeToNotepad,
   getAllBusinesses,
   addBusiness,
+  deleteBusiness,
   addBusinessContact,
   deleteBusinessContact,
   addBusinessReferral,
@@ -693,6 +694,19 @@ function BusinessDetailModal({
   const [meetingLink, setMeetingLink] = useState("");
   const [pendingDeleteNoteId, setPendingDeleteNoteId] = useState<string | null>(null);
   const [deletingNote, setDeletingNote] = useState(false);
+  const [pendingDeleteBusiness, setPendingDeleteBusiness] = useState(false);
+  const [deletingBusiness, setDeletingBusiness] = useState(false);
+
+  // Keep contacts/referrals in sync with the latest business prop - the
+  // parent re-fetches and passes a fresh object whenever the list
+  // changes (including when this same modal is closed and reopened
+  // later), but useState's initial value only applies on first mount,
+  // so without this a reopened modal could show stale contacts/
+  // referrals from whenever it was first opened.
+  useEffect(() => {
+    setContacts(business.contacts);
+    setReferrals(business.referrals);
+  }, [business]);
 
   const refreshBusinessData = useCallback(async () => {
     try {
@@ -706,6 +720,21 @@ function BusinessDetailModal({
       console.error("Failed to refresh business:", err);
     }
   }, [business.id]);
+
+  const confirmDeleteBusiness = async () => {
+    setDeletingBusiness(true);
+    try {
+      await deleteBusiness(business.id);
+      setPendingDeleteBusiness(false);
+      onClose();
+      onChanged();
+    } catch (err) {
+      console.error("Failed to delete business:", err);
+      alert("Couldn't delete that business. Please try again.");
+    } finally {
+      setDeletingBusiness(false);
+    }
+  };
 
   const loadNotes = useCallback(async () => {
     try {
@@ -923,9 +952,18 @@ function BusinessDetailModal({
               <p className="text-xs text-gray-400 mt-1">{business.industry}</p>
             )}
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPendingDeleteBusiness(true)}
+              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+              title="Delete business"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="p-5 space-y-6">
@@ -1278,6 +1316,16 @@ function BusinessDetailModal({
           type="danger"
           onConfirm={confirmDeleteReferral}
           onCancel={() => setPendingDeleteReferralId(null)}
+        />
+        <ConfirmationModal
+          isOpen={pendingDeleteBusiness}
+          title="Delete business"
+          message={`Delete ${business.name}? This removes all of its contacts, referrals, and meeting notes. This can't be undone.`}
+          confirmText={deletingBusiness ? "Deleting…" : "Delete"}
+          cancelText="Cancel"
+          type="danger"
+          onConfirm={confirmDeleteBusiness}
+          onCancel={() => setPendingDeleteBusiness(false)}
         />
       </div>
     </div>
