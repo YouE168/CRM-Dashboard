@@ -132,6 +132,7 @@ export type Database = {
           meeting_time: string | null;
           meeting_location: string | null;
           meeting_link: string | null;
+          reminder_sent: boolean;
           created_at: string;
         };
         Insert: {
@@ -145,6 +146,7 @@ export type Database = {
           meeting_time?: string | null;
           meeting_location?: string | null;
           meeting_link?: string | null;
+          reminder_sent?: boolean;
           created_at?: string;
         };
         Update: {
@@ -158,7 +160,114 @@ export type Database = {
           meeting_time?: string | null;
           meeting_location?: string | null;
           meeting_link?: string | null;
+          reminder_sent?: boolean;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      // Lead/client tracking for a business (not a login account) -
+      // Jody adds a business, connects one or more contacts to it, and
+      // logs program referrals with status + dates. Meeting notes for a
+      // business live in case_notes (member_type = 'business').
+      businesses: {
+        Row: {
+          id: string;
+          name: string;
+          industry: string | null;
+          status: string;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          industry?: string | null;
+          status?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          industry?: string | null;
+          status?: string;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      business_contacts: {
+        Row: {
+          id: string;
+          business_id: string;
+          name: string;
+          email: string | null;
+          phone: string | null;
+          role_title: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          business_id: string;
+          name: string;
+          email?: string | null;
+          phone?: string | null;
+          role_title?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          business_id?: string;
+          name?: string;
+          email?: string | null;
+          phone?: string | null;
+          role_title?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      business_referrals: {
+        Row: {
+          id: string;
+          business_id: string;
+          program_id: string | null;
+          program_name: string;
+          status: string;
+          referred_date: string;
+          follow_up_date: string | null;
+          follow_up_reminder_sent: boolean;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          business_id: string;
+          program_id?: string | null;
+          program_name: string;
+          status?: string;
+          referred_date?: string;
+          follow_up_date?: string | null;
+          follow_up_reminder_sent?: boolean;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          business_id?: string;
+          program_id?: string | null;
+          program_name?: string;
+          status?: string;
+          referred_date?: string;
+          follow_up_date?: string | null;
+          follow_up_reminder_sent?: boolean;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };

@@ -85,7 +85,109 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, sent, checked: dueReminders.length });
+    // Business meeting notes (case_notes with member_type = 'business')
+    // and business referral follow-up dates due tomorrow - both are
+    // admin/staff-only concepts (no individual "owner" like My
+    // Reminders has), so these go out to everyone with an admin/staff
+    // account, same as the admin_notes broadcast pattern elsewhere.
+    let businessSent = 0;
+    let followUpSent = 0;
+
+    const { data: staffUsers, error: staffError } = await supabaseAdmin
+      .from("users")
+      .select("id, name, email")
+      .in("primary_role", ["admin", "staff"]);
+    if (staffError) {
+      console.error("reminder-notifications: failed to load staff users:", staffError);
+    }
+    const staffRecipients = (staffUsers ?? []).filter((u) => u.email);
+
+    if (staffRecipients.length > 0) {
+      const { data: dueBusinessNotes, error: businessNotesError } = await supabaseAdmin
+        .from("case_notes")
+        .select("*")
+        .eq("member_type", "business")
+        .eq("meeting_date", tomorrowDate)
+        .eq("reminder_sent", false);
+
+      if (businessNotesError) {
+        console.error(
+          "reminder-notifications: failed to load business meeting notes:",
+          businessNotesError,
+        );
+      } else {
+        for (const note of dueBusinessNotes ?? []) {
+          const results = await Promise.allSettled(
+            staffRecipients.map((u) =>
+              sendReminderDueEmail({
+                to: u.email as string,
+                name: u.name || "there",
+                note: `Meeting with ${note.member_name}: ${note.note}`,
+                meetingDate: note.meeting_date as string,
+                meetingTime: note.meeting_time,
+                meetingLocation: note.meeting_location,
+                meetingLink: note.meeting_link,
+              }),
+            ),
+          );
+          const anySent = results.some((r) => r.status === "fulfilled" && r.value);
+          if (anySent) {
+            businessSent += 1;
+            await supabaseAdmin
+              .from("case_notes")
+              .update({ reminder_sent: true })
+              .eq("id", note.id);
+          }
+        }
+      }
+
+      const { data: dueFollowUps, error: followUpError } = await supabaseAdmin
+        .from("business_referrals")
+        .select("*, businesses(name)")
+        .eq("follow_up_date", tomorrowDate)
+        .eq("follow_up_reminder_sent", false);
+
+      if (followUpError) {
+        console.error(
+          "reminder-notifications: failed to load referral follow-ups:",
+          followUpError,
+        );
+      } else {
+        for (const referral of dueFollowUps ?? []) {
+          const businessName =
+            (referral as any).businesses?.name || "a business";
+          const results = await Promise.allSettled(
+            staffRecipients.map((u) =>
+              sendReminderDueEmail({
+                to: u.email as string,
+                name: u.name || "there",
+                note: `Follow up with ${businessName} on their ${referral.program_name} referral (currently: ${referral.status.replace("_", " ")})${referral.notes ? `\n\n${referral.notes}` : ""}`,
+                meetingDate: referral.follow_up_date as string,
+                meetingTime: null,
+                meetingLocation: null,
+                meetingLink: null,
+              }),
+            ),
+          );
+          const anySent = results.some((r) => r.status === "fulfilled" && r.value);
+          if (anySent) {
+            followUpSent += 1;
+            await supabaseAdmin
+              .from("business_referrals")
+              .update({ follow_up_reminder_sent: true })
+              .eq("id", referral.id);
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      sent,
+      checked: dueReminders.length,
+      businessSent,
+      followUpSent,
+    });
   } catch (err: any) {
     console.error("reminder-notifications error:", err);
     return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });

@@ -3318,6 +3318,193 @@ export function subscribeToCaseNotes(onChange: () => void) {
   };
 }
 
+// ---------------------------------------------------------------------
+// BUSINESSES - lead/client tracking for a business (not a CRM login
+// account), with one or more contacts connected to it and a running
+// list of program referrals with status + dates. Meeting notes for a
+// business reuse case_notes (member_type = 'business', member_id =
+// businesses.id) so they show up in the same "Upcoming Sessions" feed
+// and Session History pattern every other member type already uses.
+// ---------------------------------------------------------------------
+
+export type ReferralStatus =
+  | "referred"
+  | "applied"
+  | "enrolled"
+  | "completed"
+  | "not_selected";
+
+export interface BusinessContactRow {
+  id: string;
+  business_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  role_title: string | null;
+  created_at: string;
+}
+
+export interface BusinessReferralRow {
+  id: string;
+  business_id: string;
+  program_id: string | null;
+  program_name: string;
+  status: string;
+  referred_date: string;
+  follow_up_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BusinessRow {
+  id: string;
+  name: string;
+  industry: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface BusinessWithDetails extends BusinessRow {
+  contacts: BusinessContactRow[];
+  referrals: BusinessReferralRow[];
+}
+
+export async function getAllBusinesses(): Promise<BusinessWithDetails[]> {
+  const [businessesRes, contactsRes, referralsRes] = await Promise.all([
+    supabase.from("businesses").select("*").order("name"),
+    supabase.from("business_contacts").select("*").order("created_at"),
+    supabase.from("business_referrals").select("*").order("created_at", { ascending: false }),
+  ]);
+  if (businessesRes.error) throw businessesRes.error;
+  if (contactsRes.error) throw contactsRes.error;
+  if (referralsRes.error) throw referralsRes.error;
+
+  const contactsByBusiness: Record<string, BusinessContactRow[]> = {};
+  for (const c of contactsRes.data ?? []) {
+    (contactsByBusiness[c.business_id] ||= []).push(c);
+  }
+  const referralsByBusiness: Record<string, BusinessReferralRow[]> = {};
+  for (const r of referralsRes.data ?? []) {
+    (referralsByBusiness[r.business_id] ||= []).push(r);
+  }
+
+  return (businessesRes.data ?? []).map((b) => ({
+    ...b,
+    contacts: contactsByBusiness[b.id] ?? [],
+    referrals: referralsByBusiness[b.id] ?? [],
+  }));
+}
+
+export async function addBusiness(
+  name: string,
+  industry: string | null,
+  createdBy: string,
+  contacts: { name: string; email?: string; phone?: string; role_title?: string }[] = [],
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("businesses")
+    .insert({ name, industry: industry || null, created_by: createdBy })
+    .select("id")
+    .single();
+  if (error) throw error;
+
+  const validContacts = contacts.filter((c) => c.name.trim());
+  if (validContacts.length > 0) {
+    const { error: contactsError } = await supabase.from("business_contacts").insert(
+      validContacts.map((c) => ({
+        business_id: data.id,
+        name: c.name,
+        email: c.email || null,
+        phone: c.phone || null,
+        role_title: c.role_title || null,
+      })),
+    );
+    if (contactsError) throw contactsError;
+  }
+
+  return data.id;
+}
+
+export async function deleteBusiness(id: string): Promise<void> {
+  const { error } = await supabase.from("businesses").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function addBusinessContact(
+  businessId: string,
+  contact: { name: string; email?: string; phone?: string; role_title?: string },
+): Promise<void> {
+  const { error } = await supabase.from("business_contacts").insert({
+    business_id: businessId,
+    name: contact.name,
+    email: contact.email || null,
+    phone: contact.phone || null,
+    role_title: contact.role_title || null,
+  });
+  if (error) throw error;
+}
+
+export async function deleteBusinessContact(id: string): Promise<void> {
+  const { error } = await supabase.from("business_contacts").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function addBusinessReferral(
+  businessId: string,
+  programId: string | null,
+  programName: string,
+  createdBy: string,
+  opts?: { status?: string; referredDate?: string; followUpDate?: string; notes?: string },
+): Promise<void> {
+  const { error } = await supabase.from("business_referrals").insert({
+    business_id: businessId,
+    program_id: programId,
+    program_name: programName,
+    status: opts?.status || "referred",
+    referred_date: opts?.referredDate || new Date().toISOString().slice(0, 10),
+    follow_up_date: opts?.followUpDate || null,
+    notes: opts?.notes || null,
+    created_by: createdBy,
+  });
+  if (error) throw error;
+}
+
+export async function updateBusinessReferral(
+  id: string,
+  fields: { status?: string; followUpDate?: string | null; notes?: string },
+): Promise<void> {
+  const update: {
+    updated_at: string;
+    status?: string;
+    follow_up_date?: string | null;
+    notes?: string;
+  } = { updated_at: new Date().toISOString() };
+  if (fields.status !== undefined) update.status = fields.status;
+  if (fields.followUpDate !== undefined) update.follow_up_date = fields.followUpDate || null;
+  if (fields.notes !== undefined) update.notes = fields.notes;
+  const { error } = await supabase.from("business_referrals").update(update).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteBusinessReferral(id: string): Promise<void> {
+  const { error } = await supabase.from("business_referrals").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export function subscribeToBusinesses(onChange: () => void) {
+  const channelName = `businesses-${Math.random().toString(36).slice(2)}`;
+  const channel = supabase
+    .channel(channelName)
+    .on("postgres_changes", { event: "*", schema: "public", table: "businesses" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "business_contacts" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "business_referrals" }, onChange)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 // Personal reminder checklist - private to the admin/staff user viewing
 // it (RLS restricts rows to admin_id = auth.uid()), not shared with
 // anyone else and not tied to any participant. This is the "note to

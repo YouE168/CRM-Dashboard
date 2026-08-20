@@ -43,10 +43,23 @@ import {
   addNotepadEntry,
   deleteNotepadEntry,
   subscribeToNotepad,
+  getAllBusinesses,
+  addBusiness,
+  addBusinessContact,
+  deleteBusinessContact,
+  addBusinessReferral,
+  updateBusinessReferral,
+  deleteBusinessReferral,
+  subscribeToBusinesses,
+  getAllPrograms,
   type CrmMemberRow,
   type CaseNoteRow,
   type PersonalNoteRow,
   type NotepadRow,
+  type BusinessWithDetails,
+  type BusinessContactRow,
+  type BusinessReferralRow,
+  type ProgramRow,
 } from "@/lib/supabase/dashboard-data";
 import { supabase } from "@/lib/supabase/client";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
@@ -474,6 +487,795 @@ function MemberDetailModal({
           type="danger"
           onConfirm={confirmDeleteNote}
           onCancel={() => setPendingDeleteId(null)}
+        />
+      </div>
+    </div>
+  );
+}
+
+const REFERRAL_STATUSES: { value: string; label: string; color: string }[] = [
+  { value: "referred", label: "Referred", color: "bg-gray-100 text-gray-700" },
+  { value: "applied", label: "Applied", color: "bg-blue-100 text-blue-700" },
+  { value: "enrolled", label: "Enrolled", color: "bg-purple-100 text-purple-700" },
+  { value: "completed", label: "Completed", color: "bg-emerald-100 text-emerald-700" },
+  { value: "not_selected", label: "Not Selected", color: "bg-red-100 text-red-700" },
+];
+
+// Add a business as a lead/client (no login account) with one or more
+// contacts attached - the "Greg and Betti Jo's business" example Jody
+// asked for.
+function AddBusinessModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (id: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [contacts, setContacts] = useState([{ name: "", email: "", phone: "" }]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const updateContact = (idx: number, field: "name" | "email" | "phone", value: string) => {
+    setContacts((prev) => prev.map((c, i) => (i === idx ? { ...c, [field]: value } : c)));
+  };
+  const addContactRow = () =>
+    setContacts((prev) => [...prev, { name: "", email: "", phone: "" }]);
+  const removeContactRow = (idx: number) =>
+    setContacts((prev) => prev.filter((_, i) => i !== idx));
+
+  const handleSubmit = async () => {
+    if (!name.trim()) {
+      setError("Business name is required.");
+      return;
+    }
+    setError("");
+    setSaving(true);
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const createdBy = authData.user?.id;
+      if (!createdBy) throw new Error("Not signed in");
+      const id = await addBusiness(name, industry || null, createdBy, contacts);
+      onCreated(id);
+    } catch (err) {
+      console.error("Failed to add business:", err);
+      setError("Couldn't save that business. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white p-5 border-b border-gray-100 flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-gray-900">Add Business</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Business Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Walters Woodworks"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Industry (optional)</label>
+            <input
+              type="text"
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
+              placeholder="e.g. Retail"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-2">
+              Contacts (people connected to this business)
+            </label>
+            <div className="space-y-2">
+              {contacts.map((c, idx) => (
+                <div key={idx} className="grid grid-cols-3 gap-2 bg-gray-50 p-2 rounded-lg">
+                  <input
+                    type="text"
+                    value={c.name}
+                    onChange={(e) => updateContact(idx, "name", e.target.value)}
+                    placeholder="Name"
+                    className="border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                  <input
+                    type="email"
+                    value={c.email}
+                    onChange={(e) => updateContact(idx, "email", e.target.value)}
+                    placeholder="Email"
+                    className="border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={c.phone}
+                      onChange={(e) => updateContact(idx, "phone", e.target.value)}
+                      placeholder="Phone"
+                      className="flex-1 border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                    {contacts.length > 1 && (
+                      <button
+                        onClick={() => removeContactRow(idx)}
+                        className="text-gray-300 hover:text-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={addContactRow}
+              className="mt-2 text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add another contact
+            </button>
+          </div>
+        </div>
+        <div className="sticky bottom-0 bg-white p-5 border-t border-gray-100 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Create Business"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Contacts, referrals (program + status + dates), and meeting notes for
+// one business - meeting notes reuse case_notes (member_type =
+// "business") so they share the exact same composer/history pattern as
+// MemberDetailModal above, and automatically feed the "Upcoming
+// Sessions" card too.
+function BusinessDetailModal({
+  business,
+  currentAuthorName,
+  onClose,
+  onChanged,
+}: {
+  business: BusinessWithDetails;
+  currentAuthorName: string;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [programs, setPrograms] = useState<ProgramRow[]>([]);
+  const [contacts, setContacts] = useState<BusinessContactRow[]>(business.contacts);
+  const [referrals, setReferrals] = useState<BusinessReferralRow[]>(business.referrals);
+  const [notes, setNotes] = useState<CaseNoteRow[]>([]);
+  const [loadingNotes, setLoadingNotes] = useState(true);
+
+  const [showAddContact, setShowAddContact] = useState(false);
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactRole, setContactRole] = useState("");
+  const [pendingDeleteContactId, setPendingDeleteContactId] = useState<string | null>(null);
+
+  const [showAddReferral, setShowAddReferral] = useState(false);
+  const [referralProgramId, setReferralProgramId] = useState("");
+  const [referralFollowUp, setReferralFollowUp] = useState("");
+  const [referralNotes, setReferralNotes] = useState("");
+  const [pendingDeleteReferralId, setPendingDeleteReferralId] = useState<string | null>(null);
+
+  const [newNote, setNewNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [showMeetingDetails, setShowMeetingDetails] = useState(false);
+  const [meetingDate, setMeetingDate] = useState("");
+  const [meetingTime, setMeetingTime] = useState("");
+  const [meetingLocation, setMeetingLocation] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
+  const [pendingDeleteNoteId, setPendingDeleteNoteId] = useState<string | null>(null);
+  const [deletingNote, setDeletingNote] = useState(false);
+
+  const refreshBusinessData = useCallback(async () => {
+    try {
+      const all = await getAllBusinesses();
+      const fresh = all.find((b) => b.id === business.id);
+      if (fresh) {
+        setContacts(fresh.contacts);
+        setReferrals(fresh.referrals);
+      }
+    } catch (err) {
+      console.error("Failed to refresh business:", err);
+    }
+  }, [business.id]);
+
+  const loadNotes = useCallback(async () => {
+    try {
+      const data = await getCaseNotesForMember(business.id);
+      setNotes(data);
+    } catch (err) {
+      console.error("Failed to load business notes:", err);
+    } finally {
+      setLoadingNotes(false);
+    }
+  }, [business.id]);
+
+  useEffect(() => {
+    loadNotes();
+    const unsubscribe = subscribeToCaseNotes(loadNotes);
+    return unsubscribe;
+  }, [loadNotes]);
+
+  useEffect(() => {
+    getAllPrograms()
+      .then(setPrograms)
+      .catch((err) => console.error("Failed to load programs:", err));
+  }, []);
+
+  const handleAddContact = async () => {
+    if (!contactName.trim()) return;
+    try {
+      await addBusinessContact(business.id, {
+        name: contactName,
+        email: contactEmail,
+        phone: contactPhone,
+        role_title: contactRole,
+      });
+      setContactName("");
+      setContactEmail("");
+      setContactPhone("");
+      setContactRole("");
+      setShowAddContact(false);
+      await refreshBusinessData();
+      onChanged();
+    } catch (err) {
+      console.error("Failed to add contact:", err);
+      alert("Couldn't add that contact. Please try again.");
+    }
+  };
+
+  const confirmDeleteContact = async () => {
+    if (!pendingDeleteContactId) return;
+    try {
+      await deleteBusinessContact(pendingDeleteContactId);
+      setPendingDeleteContactId(null);
+      await refreshBusinessData();
+      onChanged();
+    } catch (err) {
+      console.error("Failed to delete contact:", err);
+      alert("Couldn't delete that contact. Please try again.");
+    }
+  };
+
+  const handleAddReferral = async () => {
+    const program = programs.find((p) => p.id === referralProgramId);
+    if (!program) {
+      alert("Pick a program first.");
+      return;
+    }
+    try {
+      await addBusinessReferral(business.id, program.id, program.name, currentAuthorName, {
+        followUpDate: referralFollowUp || undefined,
+        notes: referralNotes || undefined,
+      });
+      setReferralProgramId("");
+      setReferralFollowUp("");
+      setReferralNotes("");
+      setShowAddReferral(false);
+      await refreshBusinessData();
+      onChanged();
+    } catch (err) {
+      console.error("Failed to add referral:", err);
+      alert("Couldn't add that referral. Please try again.");
+    }
+  };
+
+  const handleStatusChange = async (id: string, status: string) => {
+    try {
+      await updateBusinessReferral(id, { status });
+      await refreshBusinessData();
+      onChanged();
+    } catch (err) {
+      console.error("Failed to update referral status:", err);
+      alert("Couldn't update that referral. Please try again.");
+    }
+  };
+
+  const confirmDeleteReferral = async () => {
+    if (!pendingDeleteReferralId) return;
+    try {
+      await deleteBusinessReferral(pendingDeleteReferralId);
+      setPendingDeleteReferralId(null);
+      await refreshBusinessData();
+      onChanged();
+    } catch (err) {
+      console.error("Failed to delete referral:", err);
+      alert("Couldn't delete that referral. Please try again.");
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!newNote.trim()) return;
+    setSaving(true);
+    try {
+      await addCaseNote("business", business.id, business.name, newNote, currentAuthorName, {
+        date: meetingDate,
+        time: meetingTime,
+        location: meetingLocation,
+        link: meetingLink,
+      });
+      setNewNote("");
+      setMeetingDate("");
+      setMeetingTime("");
+      setMeetingLocation("");
+      setMeetingLink("");
+      setShowMeetingDetails(false);
+      await loadNotes();
+    } catch (err) {
+      console.error("Failed to save business note:", err);
+      alert("Couldn't save that note. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDeleteNote = async () => {
+    if (!pendingDeleteNoteId) return;
+    setDeletingNote(true);
+    try {
+      await deleteCaseNote(pendingDeleteNoteId);
+      await loadNotes();
+      setPendingDeleteNoteId(null);
+    } catch (err) {
+      console.error("Failed to delete business note:", err);
+      alert("Couldn't delete that note. Please try again.");
+    } finally {
+      setDeletingNote(false);
+    }
+  };
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const upcomingNotes = notes.filter(
+    (n) => n.meeting_date && new Date(n.meeting_date + "T00:00:00") >= todayStart,
+  );
+  const historyNotes = notes.filter(
+    (n) => !n.meeting_date || new Date(n.meeting_date + "T00:00:00") < todayStart,
+  );
+
+  const renderNoteCard = (n: CaseNoteRow) => (
+    <div key={n.id} className="group bg-gray-50 p-3 rounded-lg border border-gray-100">
+      {(n.meeting_date || n.meeting_time || n.meeting_location || n.meeting_link) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs text-emerald-700">
+          {n.meeting_date && (
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {new Date(n.meeting_date + "T00:00:00").toLocaleDateString()}
+            </span>
+          )}
+          {n.meeting_time && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {n.meeting_time}
+            </span>
+          )}
+          {n.meeting_location && (
+            <span className="flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {n.meeting_location}
+            </span>
+          )}
+          {n.meeting_link && (
+            <a
+              href={n.meeting_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 hover:underline"
+            >
+              <LinkIcon className="h-3 w-3" />
+              Meeting link
+            </a>
+          )}
+        </div>
+      )}
+      <p className="text-sm text-gray-700 whitespace-pre-wrap">{linkifyText(n.note)}</p>
+      <div className="flex items-center justify-between mt-1.5">
+        <p className="text-xs text-gray-400">
+          {n.author || "Staff"} · {new Date(n.created_at).toLocaleString()}
+        </p>
+        <button
+          onClick={() => setPendingDeleteNoteId(n.id)}
+          className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
+          title="Delete note"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          <span className="text-xs font-medium">Delete</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white p-5 border-b border-gray-100 flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">{business.name}</h2>
+            {business.industry && (
+              <p className="text-xs text-gray-400 mt-1">{business.industry}</p>
+            )}
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-6">
+          {/* Contacts */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-emerald-600" />
+                <h3 className="font-semibold text-gray-900">Contacts</h3>
+              </div>
+              <button
+                onClick={() => setShowAddContact(!showAddContact)}
+                className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Contact
+              </button>
+            </div>
+
+            {showAddContact && (
+              <div className="grid grid-cols-2 gap-2 mb-3 bg-gray-50 p-3 rounded-xl">
+                <input
+                  type="text"
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  placeholder="Name"
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+                <input
+                  type="text"
+                  value={contactRole}
+                  onChange={(e) => setContactRole(e.target.value)}
+                  placeholder="Role (e.g. Owner)"
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+                <input
+                  type="email"
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  placeholder="Email"
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+                <input
+                  type="text"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="Phone"
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+                <div className="col-span-2 flex justify-end">
+                  <button
+                    onClick={handleAddContact}
+                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700"
+                  >
+                    Save Contact
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {contacts.length === 0 ? (
+              <p className="text-sm text-gray-400">No contacts yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {contacts.map((c) => (
+                  <div
+                    key={c.id}
+                    className="group flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-100"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">
+                        {c.name}
+                        {c.role_title ? ` · ${c.role_title}` : ""}
+                      </p>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        {c.email && (
+                          <span className="text-xs text-emerald-600">{c.email}</span>
+                        )}
+                        {c.phone && <span className="text-xs text-gray-400">{c.phone}</span>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setPendingDeleteContactId(c.id)}
+                      className="p-1.5 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
+                      title="Remove contact"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Referrals */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-purple-600" />
+                <h3 className="font-semibold text-gray-900">Program Referrals</h3>
+              </div>
+              <button
+                onClick={() => setShowAddReferral(!showAddReferral)}
+                className="text-xs text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Referral
+              </button>
+            </div>
+
+            {showAddReferral && (
+              <div className="space-y-2 mb-3 bg-gray-50 p-3 rounded-xl">
+                <select
+                  value={referralProgramId}
+                  onChange={(e) => setReferralProgramId(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+                >
+                  <option value="">Select a program…</option>
+                  {programs.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">
+                    Follow-up date (optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={referralFollowUp}
+                    onChange={(e) => setReferralFollowUp(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <textarea
+                  value={referralNotes}
+                  onChange={(e) => setReferralNotes(e.target.value)}
+                  placeholder="Notes (optional)"
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleAddReferral}
+                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700"
+                  >
+                    Save Referral
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {referrals.length === 0 ? (
+              <p className="text-sm text-gray-400">No referrals logged yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {referrals.map((r) => {
+                  const statusMeta =
+                    REFERRAL_STATUSES.find((s) => s.value === r.status) ?? REFERRAL_STATUSES[0];
+                  return (
+                    <div
+                      key={r.id}
+                      className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
+                    >
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div>
+                          <p className="font-medium text-gray-800 text-sm">{r.program_name}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            Referred{" "}
+                            {new Date(r.referred_date + "T00:00:00").toLocaleDateString()}
+                            {r.follow_up_date && (
+                              <>
+                                {" "}
+                                · Follow up{" "}
+                                {new Date(r.follow_up_date + "T00:00:00").toLocaleDateString()}
+                              </>
+                            )}
+                          </p>
+                          {r.notes && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {linkifyText(r.notes)}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={r.status}
+                            onChange={(e) => handleStatusChange(r.id, e.target.value)}
+                            className={`text-xs font-medium rounded-full px-2 py-1 border-0 focus:outline-none focus:ring-2 focus:ring-emerald-400 ${statusMeta.color}`}
+                          >
+                            {REFERRAL_STATUSES.map((s) => (
+                              <option key={s.value} value={s.value}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={() => setPendingDeleteReferralId(r.id)}
+                            className="p-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
+                            title="Delete referral"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Meeting notes - shared case_notes pattern */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <MessageCircle className="h-5 w-5 text-amber-600" />
+              <h3 className="font-semibold text-gray-900">Meeting Notes</h3>
+            </div>
+
+            <div className="flex gap-2 mb-2">
+              <textarea
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                placeholder="Log a call, meeting, goals, homework, or progress..."
+                rows={2}
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <button
+                onClick={handleAddNote}
+                disabled={saving}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors whitespace-nowrap disabled:opacity-50 flex items-center gap-1.5 self-start"
+              >
+                <Send className="h-4 w-4" />
+                {saving ? "Saving…" : "Save"}
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowMeetingDetails(!showMeetingDetails)}
+              className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-emerald-600 mb-3"
+            >
+              {showMeetingDetails ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+              Add date, time, location, or link (optional)
+            </button>
+
+            {showMeetingDetails && (
+              <div className="grid grid-cols-2 gap-2 mb-4 bg-gray-50 p-3 rounded-xl">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={meetingDate}
+                    onChange={(e) => setMeetingDate(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Time</label>
+                  <input
+                    type="time"
+                    value={meetingTime}
+                    onChange={(e) => setMeetingTime(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={meetingLocation}
+                    onChange={(e) => setMeetingLocation(e.target.value)}
+                    placeholder="e.g. RCP office"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Link</label>
+                  <input
+                    type="text"
+                    value={meetingLink}
+                    onChange={(e) => setMeetingLink(e.target.value)}
+                    placeholder="Zoom / meeting URL"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+              </div>
+            )}
+
+            {loadingNotes ? (
+              <p className="text-sm text-gray-400">Loading notes…</p>
+            ) : notes.length === 0 ? (
+              <p className="text-sm text-gray-400">No notes yet for this business.</p>
+            ) : (
+              <>
+                {upcomingNotes.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">
+                      Upcoming
+                    </p>
+                    <div className="space-y-2">{upcomingNotes.map((n) => renderNoteCard(n))}</div>
+                  </div>
+                )}
+                <div className="flex items-center gap-1.5 mb-2">
+                  <History className="h-3.5 w-3.5 text-gray-400" />
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    History
+                  </p>
+                </div>
+                {historyNotes.length === 0 ? (
+                  <p className="text-sm text-gray-400">No past notes logged yet.</p>
+                ) : (
+                  <div className="space-y-2">{historyNotes.map((n) => renderNoteCard(n))}</div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        <ConfirmationModal
+          isOpen={pendingDeleteNoteId !== null}
+          title="Delete note"
+          message="Delete this note? This can't be undone."
+          confirmText={deletingNote ? "Deleting…" : "Delete"}
+          cancelText="Cancel"
+          type="danger"
+          onConfirm={confirmDeleteNote}
+          onCancel={() => setPendingDeleteNoteId(null)}
+        />
+        <ConfirmationModal
+          isOpen={pendingDeleteContactId !== null}
+          title="Remove contact"
+          message="Remove this contact from the business? This can't be undone."
+          confirmText="Remove"
+          cancelText="Cancel"
+          type="danger"
+          onConfirm={confirmDeleteContact}
+          onCancel={() => setPendingDeleteContactId(null)}
+        />
+        <ConfirmationModal
+          isOpen={pendingDeleteReferralId !== null}
+          title="Delete referral"
+          message="Delete this referral? This can't be undone."
+          confirmText="Delete"
+          cancelText="Cancel"
+          type="danger"
+          onConfirm={confirmDeleteReferral}
+          onCancel={() => setPendingDeleteReferralId(null)}
         />
       </div>
     </div>
@@ -1270,6 +2072,39 @@ export function BusinessProfessionalServicesTab() {
   const [adminId, setAdminId] = useState<string | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [rosterTab, setRosterTab] = useState<"members" | "businesses">("members");
+  const [businesses, setBusinesses] = useState<BusinessWithDetails[]>([]);
+  const [businessesLoading, setBusinessesLoading] = useState(true);
+  const [selectedBusiness, setSelectedBusiness] = useState<BusinessWithDetails | null>(null);
+  const [showAddBusiness, setShowAddBusiness] = useState(false);
+  const [businessQ, setBusinessQ] = useState("");
+
+  const loadBusinesses = useCallback(async () => {
+    try {
+      const data = await getAllBusinesses();
+      setBusinesses(data);
+    } catch (err) {
+      console.error("Failed to load businesses:", err);
+    } finally {
+      setBusinessesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBusinesses();
+    const unsubscribe = subscribeToBusinesses(loadBusinesses);
+    return unsubscribe;
+  }, [loadBusinesses]);
+
+  // Keep the open business detail modal in sync with the live list -
+  // e.g. after adding a referral, the modal's own local state already
+  // updates itself, but this also keeps it correct if the change came
+  // from realtime (another tab/device).
+  useEffect(() => {
+    if (!selectedBusiness) return;
+    const fresh = businesses.find((b) => b.id === selectedBusiness.id);
+    if (fresh && fresh !== selectedBusiness) setSelectedBusiness(fresh);
+  }, [businesses, selectedBusiness]);
 
   const loadData = useCallback(async () => {
     try {
@@ -1434,9 +2269,16 @@ export function BusinessProfessionalServicesTab() {
     }
 
     const note = entry.session;
-    const matchingMember = members.find(
-      (m) => m.id === note.member_id && m.member_type === note.member_type,
-    );
+    const isBusiness = note.member_type === "business";
+    const matchingMember = isBusiness
+      ? undefined
+      : members.find(
+          (m) => m.id === note.member_id && m.member_type === note.member_type,
+        );
+    const matchingBusiness = isBusiness
+      ? businesses.find((b) => b.id === note.member_id)
+      : undefined;
+    const canOpen = isBusiness ? Boolean(matchingBusiness) : Boolean(matchingMember);
 
     return (
       <div className="p-4" key={entry.id}>
@@ -1469,12 +2311,14 @@ export function BusinessProfessionalServicesTab() {
           </div>
           <button
             onClick={() => {
-              if (matchingMember) {
-                setShowAllSessions(false);
+              setShowAllSessions(false);
+              if (isBusiness && matchingBusiness) {
+                setSelectedBusiness(matchingBusiness);
+              } else if (matchingMember) {
                 setSelectedMember(matchingMember);
               }
             }}
-            disabled={!matchingMember}
+            disabled={!canOpen}
             className="text-xs text-emerald-600 hover:text-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
           >
             Log Session →
@@ -1658,6 +2502,43 @@ export function BusinessProfessionalServicesTab() {
       {adminId && <PersonalReminders adminId={adminId} />}
       {adminId && <MyNotepad adminId={adminId} />}
 
+      {/* Members / Businesses tab toggle */}
+      <div className="mb-6 flex items-center gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setRosterTab("members")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            rosterTab === "members"
+              ? "bg-white text-emerald-700 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Members
+        </button>
+        <button
+          onClick={() => setRosterTab("businesses")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            rosterTab === "businesses"
+              ? "bg-white text-emerald-700 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Businesses
+        </button>
+      </div>
+
+      {rosterTab === "businesses" && (
+        <BusinessesSection
+          businesses={businesses}
+          loading={businessesLoading}
+          q={businessQ}
+          setQ={setBusinessQ}
+          onSelect={setSelectedBusiness}
+          onAdd={() => setShowAddBusiness(true)}
+        />
+      )}
+
+      {rosterTab === "members" && (
+        <>
       {/* Search + Filter */}
       <div className="mb-6 flex flex-col sm:flex-row gap-3">
         <input
@@ -1781,6 +2662,8 @@ export function BusinessProfessionalServicesTab() {
           </div>
         </div>
       </div>
+        </>
+      )}
 
       {selectedMember && (
         <MemberDetailModal
@@ -1808,6 +2691,181 @@ export function BusinessProfessionalServicesTab() {
           }}
         />
       )}
+
+      {selectedBusiness && (
+        <BusinessDetailModal
+          business={selectedBusiness}
+          currentAuthorName={currentAuthorName}
+          onClose={() => setSelectedBusiness(null)}
+          onChanged={loadBusinesses}
+        />
+      )}
+
+      {showAddBusiness && (
+        <AddBusinessModal
+          onClose={() => setShowAddBusiness(false)}
+          onCreated={async (id) => {
+            setShowAddBusiness(false);
+            await loadBusinesses();
+            try {
+              const data = await getAllBusinesses();
+              setBusinesses(data);
+              const created = data.find((b) => b.id === id);
+              if (created) setSelectedBusiness(created);
+            } catch (err) {
+              console.error("Failed to refresh businesses after add:", err);
+            }
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// Businesses/leads list with a monthly referral summary - the roster
+// half of the "Businesses" tab, mirrors the layout of the Members list
+// (search + list + detail-on-click) but for businesses/contacts/
+// referrals instead of CRM member accounts.
+function BusinessesSection({
+  businesses,
+  loading,
+  q,
+  setQ,
+  onSelect,
+  onAdd,
+}: {
+  businesses: BusinessWithDetails[];
+  loading: boolean;
+  q: string;
+  setQ: (v: string) => void;
+  onSelect: (b: BusinessWithDetails) => void;
+  onAdd: () => void;
+}) {
+  const filtered = businesses.filter(
+    (b) => !q || b.name.toLowerCase().includes(q.toLowerCase()),
+  );
+
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthEnd = nextMonth.toISOString().slice(0, 10);
+
+  const allReferrals = businesses.flatMap((b) => b.referrals);
+  const referralsThisMonth = allReferrals.filter(
+    (r) => r.referred_date >= monthStart && r.referred_date < monthEnd,
+  );
+  const statusCounts = REFERRAL_STATUSES.map((s) => ({
+    ...s,
+    count: allReferrals.filter((r) => r.status === s.value).length,
+  }));
+
+  if (loading) {
+    return <div className="p-6 text-sm text-gray-400">Loading businesses…</div>;
+  }
+
+  return (
+    <>
+      {/* Monthly referral summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-6">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 col-span-2 sm:col-span-1">
+          <p className="text-2xl font-bold text-gray-900">{referralsThisMonth.length}</p>
+          <p className="text-xs text-gray-500">Referrals this month</p>
+        </div>
+        {statusCounts.map((s) => (
+          <div key={s.value} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <p className="text-2xl font-bold text-gray-900">{s.count}</p>
+            <p className="text-xs text-gray-500">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mb-6">
+        <input
+          type="text"
+          placeholder="Search businesses by name..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">All Businesses</h2>
+          <button
+            onClick={onAdd}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors font-medium"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add Business
+          </button>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center">
+            <Briefcase className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-400">
+              {businesses.length === 0
+                ? "No businesses added yet"
+                : "No businesses found"}
+            </p>
+          </div>
+        ) : (
+          filtered.map((b, idx) => {
+            const activeReferrals = b.referrals.filter(
+              (r) => r.status !== "completed" && r.status !== "not_selected",
+            );
+            return (
+              <div
+                key={b.id}
+                className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all cursor-pointer"
+                onClick={() => onSelect(b)}
+              >
+                <div className="flex items-start justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-semibold shrink-0 ${avatarColors[idx % avatarColors.length]}`}
+                    >
+                      {initials(b.name)}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{b.name}</h3>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        {b.industry && (
+                          <span className="text-sm text-gray-500">{b.industry}</span>
+                        )}
+                        <span className="text-xs text-gray-400">
+                          {b.contacts.length} contact{b.contacts.length === 1 ? "" : "s"}
+                        </span>
+                        {activeReferrals.length > 0 && (
+                          <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                            {activeReferrals.length} active referral
+                            {activeReferrals.length === 1 ? "" : "s"}
+                          </span>
+                        )}
+                      </div>
+                      {b.contacts.length > 0 && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          {b.contacts.map((c) => c.name).join(", ")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect(b);
+                    }}
+                    className="px-3 py-1.5 text-sm text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100"
+                  >
+                    View Details →
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
     </>
   );
 }
