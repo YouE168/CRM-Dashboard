@@ -3209,6 +3209,22 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
   );
 }
 
+// Deactivate/reactivate a member from the roster - deliberately NOT a
+// hard delete. Members are real login accounts (unlike businesses), so
+// removing one for real would mean wiping their Supabase Auth login,
+// program access, and case note history. This just flips their
+// participants/mentors.status so they drop off the active roster and
+// can be restored anytime; nothing else about the account is touched.
+export async function setCrmMemberStatus(
+  memberType: string,
+  memberId: string,
+  status: string,
+): Promise<void> {
+  const table = memberType === "mentor" ? "mentors" : "participants";
+  const { error } = await supabase.from(table).update({ status }).eq("id", memberId);
+  if (error) throw error;
+}
+
 export interface CaseNoteRow {
   id: string;
   member_type: string;

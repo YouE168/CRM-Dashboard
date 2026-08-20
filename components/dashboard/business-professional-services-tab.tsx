@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import {
   getAllCrmMembers,
+  setCrmMemberStatus,
   getCaseNotesForMember,
   addCaseNote,
   deleteCaseNote,
@@ -102,10 +103,12 @@ function MemberDetailModal({
   member,
   currentAuthorName,
   onClose,
+  onChanged,
 }: {
   member: CrmMemberRow;
   currentAuthorName: string;
   onClose: () => void;
+  onChanged: () => void;
 }) {
   const [notes, setNotes] = useState<CaseNoteRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,6 +117,9 @@ function MemberDetailModal({
   const [showMeetingDetails, setShowMeetingDetails] = useState(false);
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingTime, setMeetingTime] = useState("");
+  const [pendingStatusChange, setPendingStatusChange] = useState(false);
+  const [statusChanging, setStatusChanging] = useState(false);
+  const isActive = member.status?.toLowerCase() !== "inactive";
   const [meetingLocation, setMeetingLocation] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -184,6 +190,21 @@ function MemberDetailModal({
       alert("Couldn't delete that note. Please try again.");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const confirmStatusChange = async () => {
+    setStatusChanging(true);
+    try {
+      await setCrmMemberStatus(member.member_type, member.id, isActive ? "inactive" : "active");
+      setPendingStatusChange(false);
+      onClose();
+      onChanged();
+    } catch (err) {
+      console.error("Failed to change member status:", err);
+      alert("Couldn't update that member. Please try again.");
+    } finally {
+      setStatusChanging(false);
     }
   };
 
@@ -275,9 +296,26 @@ function MemberDetailModal({
               )}
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPendingStatusChange(true)}
+              className={`p-2 rounded-xl transition-colors ${
+                isActive
+                  ? "text-gray-400 hover:text-red-600 hover:bg-red-50"
+                  : "text-gray-400 hover:text-emerald-600 hover:bg-emerald-50"
+              }`}
+              title={isActive ? "Deactivate member" : "Reactivate member"}
+            >
+              {isActive ? (
+                <Trash2 className="h-4 w-4" />
+              ) : (
+                <UserCheck className="h-4 w-4" />
+              )}
+            </button>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="p-5 space-y-6">
@@ -488,6 +526,22 @@ function MemberDetailModal({
           type="danger"
           onConfirm={confirmDeleteNote}
           onCancel={() => setPendingDeleteId(null)}
+        />
+        <ConfirmationModal
+          isOpen={pendingStatusChange}
+          title={isActive ? "Deactivate member" : "Reactivate member"}
+          message={
+            isActive
+              ? `Deactivate ${member.name}? They'll be marked inactive and dropped from the active roster. Their login, programs, and case note history stay intact, and you can reactivate them anytime.`
+              : `Reactivate ${member.name}? They'll show as active again.`
+          }
+          confirmText={
+            statusChanging ? "Saving…" : isActive ? "Deactivate" : "Reactivate"
+          }
+          cancelText="Cancel"
+          type={isActive ? "danger" : "info"}
+          onConfirm={confirmStatusChange}
+          onCancel={() => setPendingStatusChange(false)}
         />
       </div>
     </div>
@@ -2720,6 +2774,7 @@ export function BusinessProfessionalServicesTab() {
           member={selectedMember}
           currentAuthorName={currentAuthorName}
           onClose={() => setSelectedMember(null)}
+          onChanged={loadData}
         />
       )}
 
