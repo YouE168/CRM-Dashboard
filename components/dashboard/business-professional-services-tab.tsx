@@ -2290,6 +2290,23 @@ export function BusinessProfessionalServicesTab() {
   const [businessQ, setBusinessQ] = useState("");
   const [pendingDeleteReminderId, setPendingDeleteReminderId] = useState<string | null>(null);
   const [deletingReminder, setDeletingReminder] = useState(false);
+  const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
+  const [deletingSession, setDeletingSession] = useState(false);
+
+  const confirmDeleteSession = async () => {
+    if (!pendingDeleteSessionId) return;
+    setDeletingSession(true);
+    try {
+      await deleteCaseNote(pendingDeleteSessionId);
+      setUpcoming((prev) => prev.filter((n) => n.id !== pendingDeleteSessionId));
+      setPendingDeleteSessionId(null);
+    } catch (err) {
+      console.error("Failed to delete session:", err);
+      alert("Couldn't delete that session. Please try again.");
+    } finally {
+      setDeletingSession(false);
+    }
+  };
 
   const confirmDeleteReminder = async () => {
     if (!pendingDeleteReminderId) return;
@@ -2547,20 +2564,29 @@ export function BusinessProfessionalServicesTab() {
               </a>
             )}
           </div>
-          <button
-            onClick={() => {
-              setShowAllSessions(false);
-              if (isBusiness && matchingBusiness) {
-                setSelectedBusiness(matchingBusiness);
-              } else if (matchingMember) {
-                setSelectedMember(matchingMember);
-              }
-            }}
-            disabled={!canOpen}
-            className="text-xs text-emerald-600 hover:text-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-          >
-            Log Session →
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setShowAllSessions(false);
+                if (isBusiness && matchingBusiness) {
+                  setSelectedBusiness(matchingBusiness);
+                } else if (matchingMember) {
+                  setSelectedMember(matchingMember);
+                }
+              }}
+              disabled={!canOpen}
+              className="text-xs text-emerald-600 hover:text-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              Log Session →
+            </button>
+            <button
+              onClick={() => setPendingDeleteSessionId(note.id)}
+              className="p-1 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+              title="Delete session"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -2968,6 +2994,16 @@ export function BusinessProfessionalServicesTab() {
         type="danger"
         onConfirm={confirmDeleteReminder}
         onCancel={() => setPendingDeleteReminderId(null)}
+      />
+      <ConfirmationModal
+        isOpen={pendingDeleteSessionId !== null}
+        title="Delete session"
+        message="Delete this session note? This can't be undone."
+        confirmText={deletingSession ? "Deleting…" : "Delete"}
+        cancelText="Cancel"
+        type="danger"
+        onConfirm={confirmDeleteSession}
+        onCancel={() => setPendingDeleteSessionId(null)}
       />
     </>
   );
