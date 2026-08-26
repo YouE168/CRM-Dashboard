@@ -529,11 +529,13 @@ function AdminDashboardContent() {
 
       setIsAuthenticated(true);
 
-      // Load signups count
-      const savedSignups = JSON.parse(
-        localStorage.getItem("programSignups") || "[]",
-      );
-      setSignupsCount(savedSignups.length);
+      // Load real signups count from Supabase (replaces the old
+      // localStorage("programSignups") read, which was always empty since
+      // nothing in the real signup flow wrote to it).
+      const { count: realSignupsCount } = await supabase
+        .from("users")
+        .select("id", { count: "exact", head: true });
+      setSignupsCount(realSignupsCount ?? 0);
     };
 
     loadAuthAndProfile();

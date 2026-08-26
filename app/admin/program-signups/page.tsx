@@ -14,27 +14,27 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { getAllSignups, type SignupRecord } from "@/lib/supabase/dashboard-data";
 
-interface SignupRequest {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  role: string;
-  roleLabel: string;
-  organization: string;
-  position: string;
-  selectedPrograms: string[];
-  goals: string;
-  hearAbout?: string;
-  submittedAt: string;
-  status: string;
+const ROLE_LABELS: Record<string, string> = {
+  mentee: "Mentee / Program Participant",
+  entrepreneur: "Entrepreneur / Business Owner",
+  mentor: "Mentor / Business Advisor",
+  coalition: "Coalition Leader",
+  partner: "Partner Organization",
+  admin: "Admin",
+  staff: "Staff",
+  program_manager: "Program Manager",
+};
+
+function roleLabelFor(role: string): string {
+  return ROLE_LABELS[role] || role || "Unknown";
 }
 
 export default function ProgramSignupsPage() {
   const router = useRouter();
-  const [signups, setSignups] = useState<SignupRequest[]>([]);
-  const [selectedSignup, setSelectedSignup] = useState<SignupRequest | null>(
+  const [signups, setSignups] = useState<SignupRecord[]>([]);
+  const [selectedSignup, setSelectedSignup] = useState<SignupRecord | null>(
     null,
   );
   const [isAdmin, setIsAdmin] = useState(false);
@@ -71,11 +71,13 @@ export default function ProgramSignupsPage() {
 
       setIsAdmin(true);
 
-      // Load all signups
-      const savedSignups = JSON.parse(
-        localStorage.getItem("programSignups") || "[]",
-      );
-      setSignups(savedSignups);
+      // Load all real signups from Supabase (users + profiles + user_programs)
+      try {
+        const real = await getAllSignups();
+        if (!cancelled) setSignups(real);
+      } catch (err) {
+        console.error("Failed to load signups:", err);
+      }
     };
 
     checkAuth();
@@ -96,13 +98,13 @@ export default function ProgramSignupsPage() {
       "Submitted Date",
     ];
     const csvData = filteredSignups.map((s) => [
-      `${s.firstName} ${s.lastName}`,
+      s.name,
       s.email,
       s.phone || "",
-      s.roleLabel,
+      roleLabelFor(s.primaryRole),
       s.organization || "",
-      s.selectedPrograms.join("; "),
-      new Date(s.submittedAt).toLocaleDateString(),
+      s.programNames.join("; "),
+      new Date(s.createdAt).toLocaleDateString(),
     ]);
     const csvContent = [headers, ...csvData]
       .map((row) => row.join(","))
@@ -120,9 +122,7 @@ export default function ProgramSignupsPage() {
   const filteredSignups = signups.filter((signup) => {
     const matchesSearch =
       searchTerm === "" ||
-      `${signup.firstName} ${signup.lastName}`
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
+      signup.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       signup.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       signup.organization?.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -130,17 +130,17 @@ export default function ProgramSignupsPage() {
 
     if (dateFilter === "today") {
       const today = new Date().toDateString();
-      return new Date(signup.submittedAt).toDateString() === today;
+      return new Date(signup.createdAt).toDateString() === today;
     }
     if (dateFilter === "week") {
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
-      return new Date(signup.submittedAt) >= weekAgo;
+      return new Date(signup.createdAt) >= weekAgo;
     }
     if (dateFilter === "month") {
       const monthAgo = new Date();
       monthAgo.setMonth(monthAgo.getMonth() - 1);
-      return new Date(signup.submittedAt) >= monthAgo;
+      return new Date(signup.createdAt) >= monthAgo;
     }
     return true;
   });
@@ -196,7 +196,7 @@ export default function ProgramSignupsPage() {
               {
                 signups.filter(
                   (s) =>
-                    new Date(s.submittedAt).getMonth() ===
+                    new Date(s.createdAt).getMonth() ===
                     new Date().getMonth(),
                 ).length
               }
@@ -205,7 +205,7 @@ export default function ProgramSignupsPage() {
           <div className="bg-gradient-to-r from-purple-500 to-pink-600 rounded-2xl p-5 text-white">
             <p className="text-sm opacity-90">Unique Programs</p>
             <p className="text-3xl font-bold">
-              {new Set(signups.flatMap((s) => s.selectedPrograms)).size}
+              {new Set(signups.flatMap((s) => s.programNames)).size}
             </p>
           </div>
         </div>
@@ -254,9 +254,9 @@ export default function ProgramSignupsPage() {
               </p>
             </div>
           ) : (
-            filteredSignups.map((signup, idx) => (
+            filteredSignups.map((signup) => (
               <div
-                key={idx}
+                key={signup.id}
                 className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all"
               >
                 <div className="flex items-start justify-between flex-wrap gap-4">
@@ -264,13 +264,13 @@ export default function ProgramSignupsPage() {
                     {/* Name and Role */}
                     <div className="flex items-center gap-3 mb-3 flex-wrap">
                       <h3 className="font-semibold text-gray-900 text-lg">
-                        {signup.firstName} {signup.lastName}
+                        {signup.name}
                       </h3>
                       <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">
-                        {signup.roleLabel}
+                        {roleLabelFor(signup.primaryRole)}
                       </span>
                       <span className="text-xs text-gray-400">
-                        {new Date(signup.submittedAt).toLocaleDateString()}
+                        {new Date(signup.createdAt).toLocaleDateString()}
                       </span>
                     </div>
 
@@ -289,15 +289,14 @@ export default function ProgramSignupsPage() {
                       {signup.organization && (
                         <div className="flex items-center gap-2 text-gray-600">
                           <Building className="h-3.5 w-3.5" />
-                          {signup.organization}{" "}
-                          {signup.position && `(${signup.position})`}
+                          {signup.organization}
                         </div>
                       )}
                     </div>
 
                     {/* Programs */}
                     <div className="flex flex-wrap gap-1.5 mb-3">
-                      {signup.selectedPrograms.map((program) => (
+                      {signup.programNames.map((program) => (
                         <span
                           key={program}
                           className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded-full"
@@ -306,15 +305,6 @@ export default function ProgramSignupsPage() {
                         </span>
                       ))}
                     </div>
-
-                    {/* Goals Preview */}
-                    {signup.goals && (
-                      <p className="text-xs text-gray-500 line-clamp-2">
-                        <span className="font-medium">Goals:</span>{" "}
-                        {signup.goals.substring(0, 150)}
-                        {signup.goals.length > 150 ? "..." : ""}
-                      </p>
-                    )}
                   </div>
 
                   {/* View Details Button */}
@@ -338,8 +328,7 @@ export default function ProgramSignupsPage() {
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
             <div className="sticky top-0 bg-white p-5 border-b border-gray-100 flex justify-between items-center">
               <h2 className="text-xl font-semibold text-gray-900">
-                Application Details: {selectedSignup.firstName}{" "}
-                {selectedSignup.lastName}
+                Application Details: {selectedSignup.name}
               </h2>
               <button
                 onClick={() => setSelectedSignup(null)}
@@ -360,13 +349,13 @@ export default function ProgramSignupsPage() {
                 <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl">
                   <div>
                     <p className="text-xs text-gray-400">Full Name</p>
-                    <p className="font-medium">
-                      {selectedSignup.firstName} {selectedSignup.lastName}
-                    </p>
+                    <p className="font-medium">{selectedSignup.name}</p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-400">Role</p>
-                    <p className="font-medium">{selectedSignup.roleLabel}</p>
+                    <p className="font-medium">
+                      {roleLabelFor(selectedSignup.primaryRole)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-400">Email</p>
@@ -384,7 +373,7 @@ export default function ProgramSignupsPage() {
               </div>
 
               {/* Organization Information */}
-              {(selectedSignup.organization || selectedSignup.position) && (
+              {selectedSignup.organization && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                     <div className="p-1 bg-emerald-100 rounded-full">
@@ -393,20 +382,12 @@ export default function ProgramSignupsPage() {
                     Organization Information
                   </h3>
                   <div className="bg-gray-50 p-4 rounded-xl space-y-2">
-                    {selectedSignup.organization && (
-                      <div>
-                        <p className="text-xs text-gray-400">Organization</p>
-                        <p className="font-medium">
-                          {selectedSignup.organization}
-                        </p>
-                      </div>
-                    )}
-                    {selectedSignup.position && (
-                      <div>
-                        <p className="text-xs text-gray-400">Position</p>
-                        <p className="font-medium">{selectedSignup.position}</p>
-                      </div>
-                    )}
+                    <div>
+                      <p className="text-xs text-gray-400">Organization</p>
+                      <p className="font-medium">
+                        {selectedSignup.organization}
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -417,49 +398,31 @@ export default function ProgramSignupsPage() {
                   <div className="p-1 bg-emerald-100 rounded-full">
                     <Target className="h-3 w-3 text-emerald-600" />
                   </div>
-                  Program Interests
+                  Programs
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {selectedSignup.selectedPrograms.map((program) => (
-                    <span
-                      key={program}
-                      className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm"
-                    >
-                      {program}
-                    </span>
-                  ))}
+                  {selectedSignup.programNames.length === 0 ? (
+                    <p className="text-sm text-gray-400">
+                      No programs on record
+                    </p>
+                  ) : (
+                    selectedSignup.programNames.map((program) => (
+                      <span
+                        key={program}
+                        className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-sm"
+                      >
+                        {program}
+                      </span>
+                    ))
+                  )}
                 </div>
               </div>
-
-              {/* Goals */}
-              {selectedSignup.goals && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
-                    Goals & Expectations
-                  </h3>
-                  <p className="text-gray-600 bg-gray-50 p-4 rounded-xl">
-                    {selectedSignup.goals}
-                  </p>
-                </div>
-              )}
-
-              {/* How they heard */}
-              {selectedSignup.hearAbout && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
-                    How they heard about us
-                  </h3>
-                  <p className="text-gray-600 bg-gray-50 p-4 rounded-xl">
-                    {selectedSignup.hearAbout}
-                  </p>
-                </div>
-              )}
 
               {/* Submission Info */}
               <div className="border-t pt-4">
                 <p className="text-xs text-gray-400">
-                  Submitted:{" "}
-                  {new Date(selectedSignup.submittedAt).toLocaleString()}
+                  Account created:{" "}
+                  {new Date(selectedSignup.createdAt).toLocaleString()}
                 </p>
               </div>
             </div>

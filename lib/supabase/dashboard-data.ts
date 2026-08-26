@@ -2709,6 +2709,67 @@ export async function getProgramAccessParticipants(): Promise<
   }));
 }
 
+export interface SignupRecord {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  organization: string;
+  primaryRole: string;
+  status: string;
+  createdAt: string;
+  programNames: string[];
+}
+
+// Real signup list for the admin "Program Signups" page - joins users
+// (role/status/created_at) with profiles (phone/organization) and
+// user_programs->programs (every program they were enrolled in at
+// signup, approved or not). Replaces the old
+// localStorage("programSignups") read, which nothing in the real signup
+// flow (app/signup/page.tsx) ever wrote to, so this page always showed
+// empty in production. Note: "goals" and "hearAbout" from the signup
+// form have no home in the schema and are not captured anywhere yet.
+export async function getAllSignups(): Promise<SignupRecord[]> {
+  const [
+    { data: users, error: usersError },
+    { data: profiles, error: profilesError },
+    { data: enrollments, error: enrollError },
+    { data: programs, error: programError },
+  ] = await Promise.all([
+    supabase
+      .from("users")
+      .select("id, email, name, primary_role, status, created_at")
+      .order("created_at", { ascending: false }),
+    supabase.from("profiles").select("id, phone, organization"),
+    supabase.from("user_programs").select("user_id, program_id"),
+    supabase.from("programs").select("id, name"),
+  ]);
+  if (usersError) throw usersError;
+  if (profilesError) throw profilesError;
+  if (enrollError) throw enrollError;
+  if (programError) throw programError;
+
+  const profileById = Object.fromEntries((profiles || []).map((p) => [p.id, p]));
+  const programNameById = Object.fromEntries(
+    (programs || []).map((p) => [p.id, p.name]),
+  );
+
+  return (users || []).map((u) => ({
+    id: u.id,
+    name: u.name || u.email || "",
+    email: u.email || "",
+    phone: profileById[u.id]?.phone || "",
+    organization: profileById[u.id]?.organization || "",
+    primaryRole: u.primary_role || "",
+    status: u.status || "active",
+    createdAt: u.created_at,
+    programNames: (enrollments || [])
+      .filter((e) => e.user_id === u.id)
+      .map((e) => programNameById[e.program_id])
+      .filter((name): name is string => !!name),
+  }));
+}
+
 // Approve/revoke a user's access to a specific program by name. Looks up
 // the program's id, then upserts the user_programs row (in case the user
 // signed up before this program existed and never got an enrollment row).
@@ -2959,6 +3020,110 @@ export async function addProgramResource(resource: {
 export async function deleteProgramResource(id: string): Promise<void> {
   const { error } = await supabase
     .from("program_resources")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------
+// Program sessions - Jody's scheduled sessions per program, shown in the
+// admin Program Management "Sessions" tab. Previously only saved to
+// localStorage("entrepreneur_programs_data"), which loadPrograms() always
+// overwrote with fresh real data on the next page load - so any session
+// added/edited here silently vanished. Mirrors the program_resources
+// pattern above.
+// ---------------------------------------------------------------------
+export interface ProgramSessionRow {
+  id: string;
+  program_id: string;
+  title: string;
+  session_date: string | null;
+  session_time: string | null;
+  mentor: string | null;
+  link: string | null;
+  location: string | null;
+  description: string | null;
+}
+
+export async function getProgramSessions(
+  programId: string,
+): Promise<ProgramSessionRow[]> {
+  const { data, error } = await supabase
+    .from("program_sessions")
+    .select(
+      "id, program_id, title, session_date, session_time, mentor, link, location, description",
+    )
+    .eq("program_id", programId)
+    .order("created_at");
+  if (error) throw error;
+  return data;
+}
+
+// Bulk variant used when loading every program at once, so the admin
+// Program Management page doesn't need one query per program.
+export async function getAllProgramSessions(): Promise<ProgramSessionRow[]> {
+  const { data, error } = await supabase
+    .from("program_sessions")
+    .select(
+      "id, program_id, title, session_date, session_time, mentor, link, location, description",
+    )
+    .order("created_at");
+  if (error) throw error;
+  return data;
+}
+
+export async function addProgramSession(session: {
+  program_id: string;
+  title: string;
+  session_date?: string;
+  session_time?: string;
+  mentor?: string;
+  link?: string;
+  location?: string;
+  description?: string;
+}): Promise<ProgramSessionRow> {
+  const { data, error } = await supabase
+    .from("program_sessions")
+    .insert({
+      program_id: session.program_id,
+      title: session.title,
+      session_date: session.session_date || null,
+      session_time: session.session_time || null,
+      mentor: session.mentor || null,
+      link: session.link || null,
+      location: session.location || null,
+      description: session.description || null,
+    })
+    .select(
+      "id, program_id, title, session_date, session_time, mentor, link, location, description",
+    )
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateProgramSession(
+  id: string,
+  updates: Partial<{
+    title: string;
+    session_date: string | null;
+    session_time: string | null;
+    mentor: string | null;
+    link: string | null;
+    location: string | null;
+    description: string | null;
+  }>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("program_sessions")
+    .update(updates)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteProgramSession(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("program_sessions")
     .delete()
     .eq("id", id);
   if (error) throw error;

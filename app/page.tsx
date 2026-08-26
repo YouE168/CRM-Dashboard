@@ -12,7 +12,6 @@ import {
   getNotesForParticipants,
   addMenteeNote,
   subscribeToMenteeData,
-  sendMentorEmailNotification,
   getGoalsForParticipant,
   getProgramsForUser,
   type UserProgramRow,
@@ -5973,9 +5972,15 @@ export default function DashboardPage() {
 
   // Checks the real mentee_sessions data (same source as the Upcoming
   // Sessions card) for anything happening today or tomorrow, and fires an
-  // in-app toast + optional browser notification once per session. Reads
-  // profileRef instead of `profile` directly since this can be called from
-  // callbacks created once at mount, before the real profile has loaded.
+  // in-app toast if the mentor happens to have the page open. This is
+  // just a live convenience on top of the real reminder: the actual
+  // "day-before" email now goes out server-side from
+  // app/api/cron/reminder-notifications/route.ts regardless of whether
+  // the mentor is logged in, so it no longer sends its own email here
+  // (that used to mean a mentor who wasn't online around the right time
+  // never got reminded at all). Reads profileRef instead of `profile`
+  // directly since this can be called from callbacks created once at
+  // mount, before the real profile has loaded.
   const checkForUpcomingSessions = async () => {
     const currentProfile = profileRef.current;
     if (!currentProfile?.email || currentProfile.primaryRole !== "mentor") {
@@ -6026,18 +6031,11 @@ export default function DashboardPage() {
 
         showToast(`⏰ Reminder: ${message}`, "info");
 
-        // Real email attempt, gated by the Email notifications toggle -
-        // no-ops instantly if it's off. Also logs to the real email_logs
-        // table (visible in admin > Email Logs) regardless of whether
-        // Resend is configured yet.
-        sendMentorEmailNotification(
-          currentProfile.email,
-          `Upcoming Mentoring Session ${whenLabel === "today" ? "Today" : "Tomorrow"}`,
-          `You have a mentoring session ${message}.`,
-          "mentor_alert",
-        ).catch((err) =>
-          console.error("Failed to send session reminder email:", err),
-        );
+        // No email sent from here anymore - the day-before email for this
+        // same session now goes out reliably from the server-side cron
+        // (app/api/cron/reminder-notifications/route.ts) regardless of
+        // whether the mentor has the app open. Sending one here too would
+        // just double up on today's/tomorrow's session.
 
         sentReminders.push(reminderKey);
         updated = true;

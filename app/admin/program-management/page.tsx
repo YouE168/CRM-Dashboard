@@ -22,6 +22,11 @@ import {
   addProgramResource,
   deleteProgramResource,
   type ProgramResourceRow,
+  getProgramSessions,
+  addProgramSession,
+  updateProgramSession,
+  deleteProgramSession,
+  type ProgramSessionRow,
 } from "@/lib/supabase/dashboard-data";
 import { PartnersTab } from "@/components/dashboard/partners-tab";
 import { CoalitionsTab } from "@/components/dashboard/coalitions-tab";
@@ -279,6 +284,9 @@ export default function ProgramManagementPage() {
   const [programResourcesAdmin, setProgramResourcesAdmin] = useState<
     ProgramResourceRow[]
   >([]);
+  const [programSessionsAdmin, setProgramSessionsAdmin] = useState<
+    ProgramSessionRow[]
+  >([]);
   // Tracking is per (program, participant) - budget/grants/outcomes differ
   // for each entrepreneur, so Jody picks a participant from a dropdown
   // before entering their numbers. programTrackingByParticipant holds every
@@ -313,6 +321,7 @@ export default function ProgramManagementPage() {
   useEffect(() => {
     if (!selectedProgram) {
       setProgramResourcesAdmin([]);
+      setProgramSessionsAdmin([]);
       setProgramTrackingByParticipant({});
       setTrackingParticipantId(null);
       setTrackingForm({});
@@ -324,10 +333,12 @@ export default function ProgramManagementPage() {
     Promise.all([
       getProgramTrackingForProgram(selectedProgram.id).catch(() => ({})),
       getProgramResources(selectedProgram.id).catch(() => []),
-    ]).then(([tracking, resources]) => {
+      getProgramSessions(selectedProgram.id).catch(() => []),
+    ]).then(([tracking, resources, sessions]) => {
       if (cancelled) return;
       setProgramTrackingByParticipant(tracking);
       setProgramResourcesAdmin(resources);
+      setProgramSessionsAdmin(sessions);
       setLoadingProgramExtras(false);
     });
     return () => {
@@ -355,6 +366,16 @@ export default function ProgramManagementPage() {
       setProgramResourcesAdmin(resources);
     } catch (err) {
       console.error("Failed to reload resources:", err);
+    }
+  };
+
+  const reloadProgramSessions = async () => {
+    if (!selectedProgram) return;
+    try {
+      const sessions = await getProgramSessions(selectedProgram.id);
+      setProgramSessionsAdmin(sessions);
+    } catch (err) {
+      console.error("Failed to reload sessions:", err);
     }
   };
 
@@ -641,46 +662,63 @@ export default function ProgramManagementPage() {
     }
   };
 
-  const addSession = () => {
+  const addSession = async () => {
     if (!selectedProgram) return;
-    const session = {
-      id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title: newSession.title || "New Session",
-      date: newSession.date || new Date().toISOString().split("T")[0],
-      time: newSession.time || "12:00 PM",
-      mentor: newSession.mentor || "Jody Love",
-      link: newSession.link || "",
-      location: newSession.location || "",
-      description: newSession.description || "",
-    };
-    const updatedProgram = {
-      ...selectedProgram,
-      upcomingSessions: [...(selectedProgram.upcomingSessions || []), session],
-    };
-    const updatedPrograms = programs.map((p) =>
-      p.id === selectedProgram.id ? updatedProgram : p,
-    );
-    savePrograms(updatedPrograms);
-    setSelectedProgram(updatedProgram);
-    setIsAddingSession(false);
-    setNewSession({});
-    alert("✅ Session added successfully!");
+    try {
+      const created = await addProgramSession({
+        program_id: selectedProgram.id,
+        title: newSession.title || "New Session",
+        session_date: newSession.date || new Date().toISOString().split("T")[0],
+        session_time: newSession.time || "12:00 PM",
+        mentor: newSession.mentor || "Jody Love",
+        link: newSession.link || "",
+        location: newSession.location || "",
+        description: newSession.description || "",
+      });
+      setProgramSessionsAdmin((prev) => [...prev, created]);
+      setIsAddingSession(false);
+      setNewSession({});
+      alert("✅ Session added successfully!");
+    } catch (err) {
+      console.error("Failed to add session:", err);
+      alert("Failed to add that session. Please try again.");
+    }
   };
 
-  const removeSession = (sessionId: string) => {
-    if (!selectedProgram) return;
+  const removeSession = async (sessionId: string) => {
     if (!confirm("Remove this session?")) return;
-    const updatedProgram = {
-      ...selectedProgram,
-      upcomingSessions: selectedProgram.upcomingSessions.filter(
-        (s) => s.id !== sessionId,
-      ),
-    };
-    const updatedPrograms = programs.map((p) =>
-      p.id === selectedProgram.id ? updatedProgram : p,
+    try {
+      await deleteProgramSession(sessionId);
+      setProgramSessionsAdmin((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch (err) {
+      console.error("Failed to remove session:", err);
+      alert("Failed to remove that session. Please try again.");
+    }
+  };
+
+  // Persist a single field edit on a session (called onBlur, not on every
+  // keystroke) - updates local state immediately for a responsive UI, then
+  // writes the real column to Supabase.
+  const updateSessionField = (
+    sessionId: string,
+    field: "title" | "session_date" | "session_time" | "mentor" | "link",
+    value: string,
+  ) => {
+    setProgramSessionsAdmin((prev) =>
+      prev.map((s) => (s.id === sessionId ? { ...s, [field]: value } : s)),
     );
-    savePrograms(updatedPrograms);
-    setSelectedProgram(updatedProgram);
+  };
+
+  const persistSessionField = async (
+    sessionId: string,
+    field: "title" | "session_date" | "session_time" | "mentor" | "link",
+    value: string,
+  ) => {
+    try {
+      await updateProgramSession(sessionId, { [field]: value });
+    } catch (err) {
+      console.error("Failed to save session change:", err);
+    }
   };
 
   // Real write to participants.mentor - this is what the mentee/
@@ -1053,11 +1091,15 @@ export default function ProgramManagementPage() {
                       <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 mb-4">
                         <p className="text-sm text-amber-700 flex items-center gap-2">
                           <Calendar className="h-4 w-4" />
-                          Jody's sessions for this program. These will appear in
-                          participants' dashboards.
+                          Jody's sessions for this program - saved here for
+                          reference.
                         </p>
                       </div>
-                      {selectedProgram.upcomingSessions.length === 0 ? (
+                      {loadingProgramExtras ? (
+                        <div className="text-center py-8 text-gray-400 text-sm">
+                          Loading sessions...
+                        </div>
+                      ) : programSessionsAdmin.length === 0 ? (
                         <div
                           key="no-sessions"
                           className="text-center py-8 text-gray-400"
@@ -1069,7 +1111,7 @@ export default function ProgramManagementPage() {
                           </p>
                         </div>
                       ) : (
-                        selectedProgram.upcomingSessions.map((session) => (
+                        programSessionsAdmin.map((session) => (
                           <div
                             key={session.id}
                             className="bg-gray-50 rounded-lg p-4 border border-gray-100"
@@ -1080,131 +1122,102 @@ export default function ProgramManagementPage() {
                                 <input
                                   type="text"
                                   value={session.title}
-                                  onChange={(e) => {
-                                    const updated =
-                                      selectedProgram.upcomingSessions.map(
-                                        (s) =>
-                                          s.id === session.id
-                                            ? { ...s, title: e.target.value }
-                                            : s,
-                                      );
-                                    const prog = {
-                                      ...selectedProgram,
-                                      upcomingSessions: updated,
-                                    };
-                                    setSelectedProgram(prog);
-                                    savePrograms(
-                                      programs.map((p) =>
-                                        p.id === selectedProgram.id ? prog : p,
-                                      ),
-                                    );
-                                  }}
+                                  onChange={(e) =>
+                                    updateSessionField(
+                                      session.id,
+                                      "title",
+                                      e.target.value,
+                                    )
+                                  }
+                                  onBlur={(e) =>
+                                    persistSessionField(
+                                      session.id,
+                                      "title",
+                                      e.target.value,
+                                    )
+                                  }
                                   className="w-full bg-transparent font-medium text-gray-900 border-b border-transparent hover:border-gray-300 focus:border-emerald-500"
                                   placeholder="Session title"
                                 />
                                 <div className="grid grid-cols-2 gap-2 mt-2">
                                   <input
                                     type="text"
-                                    value={session.date}
-                                    onChange={(e) => {
-                                      const updated =
-                                        selectedProgram.upcomingSessions.map(
-                                          (s) =>
-                                            s.id === session.id
-                                              ? { ...s, date: e.target.value }
-                                              : s,
-                                        );
-                                      const prog = {
-                                        ...selectedProgram,
-                                        upcomingSessions: updated,
-                                      };
-                                      setSelectedProgram(prog);
-                                      savePrograms(
-                                        programs.map((p) =>
-                                          p.id === selectedProgram.id
-                                            ? prog
-                                            : p,
-                                        ),
-                                      );
-                                    }}
+                                    value={session.session_date || ""}
+                                    onChange={(e) =>
+                                      updateSessionField(
+                                        session.id,
+                                        "session_date",
+                                        e.target.value,
+                                      )
+                                    }
+                                    onBlur={(e) =>
+                                      persistSessionField(
+                                        session.id,
+                                        "session_date",
+                                        e.target.value,
+                                      )
+                                    }
                                     className="bg-white border rounded-lg px-2 py-1 text-sm"
                                     placeholder="Date"
                                   />
                                   <input
                                     type="text"
-                                    value={session.time}
-                                    onChange={(e) => {
-                                      const updated =
-                                        selectedProgram.upcomingSessions.map(
-                                          (s) =>
-                                            s.id === session.id
-                                              ? { ...s, time: e.target.value }
-                                              : s,
-                                        );
-                                      const prog = {
-                                        ...selectedProgram,
-                                        upcomingSessions: updated,
-                                      };
-                                      setSelectedProgram(prog);
-                                      savePrograms(
-                                        programs.map((p) =>
-                                          p.id === selectedProgram.id
-                                            ? prog
-                                            : p,
-                                        ),
-                                      );
-                                    }}
+                                    value={session.session_time || ""}
+                                    onChange={(e) =>
+                                      updateSessionField(
+                                        session.id,
+                                        "session_time",
+                                        e.target.value,
+                                      )
+                                    }
+                                    onBlur={(e) =>
+                                      persistSessionField(
+                                        session.id,
+                                        "session_time",
+                                        e.target.value,
+                                      )
+                                    }
                                     className="bg-white border rounded-lg px-2 py-1 text-sm"
                                     placeholder="Time"
                                   />
                                 </div>
                                 <input
                                   type="text"
-                                  value={session.mentor}
-                                  onChange={(e) => {
-                                    const updated =
-                                      selectedProgram.upcomingSessions.map(
-                                        (s) =>
-                                          s.id === session.id
-                                            ? { ...s, mentor: e.target.value }
-                                            : s,
-                                      );
-                                    const prog = {
-                                      ...selectedProgram,
-                                      upcomingSessions: updated,
-                                    };
-                                    setSelectedProgram(prog);
-                                    savePrograms(
-                                      programs.map((p) =>
-                                        p.id === selectedProgram.id ? prog : p,
-                                      ),
-                                    );
-                                  }}
+                                  value={session.mentor || ""}
+                                  onChange={(e) =>
+                                    updateSessionField(
+                                      session.id,
+                                      "mentor",
+                                      e.target.value,
+                                    )
+                                  }
+                                  onBlur={(e) =>
+                                    persistSessionField(
+                                      session.id,
+                                      "mentor",
+                                      e.target.value,
+                                    )
+                                  }
                                   className="w-full bg-white border rounded-lg px-2 py-1 text-sm mt-2"
                                   placeholder="Mentor name"
                                 />
                                 <input
                                   type="text"
                                   value={session.link || ""}
-                                  onChange={(e) => {
-                                    const updated =
-                                      selectedProgram.upcomingSessions.map(
-                                        (s) =>
-                                          s.id === session.id
-                                            ? { ...s, link: e.target.value }
-                                            : s,
-                                      );
-                                    const prog = {
-                                      ...selectedProgram,
-                                      upcomingSessions: updated,
-                                    };
-                                    setSelectedProgram(prog);
-                                    savePrograms(
-                                      programs.map((p) =>
-                                        p.id === selectedProgram.id ? prog : p,
-                                      ),
-                                    );
-                                  }}
+                                  onChange={(e) =>
+                                    updateSessionField(
+                                      session.id,
+                                      "link",
+                                      e.target.value,
+                                    )
+                                  }
+                                  onBlur={(e) =>
+                                    persistSessionField(
+                                      session.id,
+                                      "link",
+                                      e.target.value,
+                                    )
+                                  }
                                   className="w-full bg-white border rounded-lg px-2 py-1 text-sm mt-1"
                                   placeholder="Zoom Link (optional)"
                                 />

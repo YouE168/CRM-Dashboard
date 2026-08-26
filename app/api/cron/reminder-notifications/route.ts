@@ -181,12 +181,109 @@ export async function GET(request: Request) {
       }
     }
 
+    // Mentor 1:1 session reminders (mentee_sessions) - previously only
+    // fired client-side (checkForUpcomingSessions in app/page.tsx),
+    // gated behind a per-browser localStorage toggle, so a mentor who
+    // wasn't logged in around the right time simply never got reminded.
+    // This mirrors that logic server-side so it goes out reliably the
+    // day before, regardless of whether the mentor has the app open.
+    let mentorSessionSent = 0;
+    const { data: dueMentorSessions, error: mentorSessionsError } =
+      await supabaseAdmin
+        .from("mentee_sessions")
+        .select("*")
+        .eq("date", tomorrowDate)
+        .eq("reminder_sent", false);
+
+    if (mentorSessionsError) {
+      console.error(
+        "reminder-notifications: failed to load mentor sessions:",
+        mentorSessionsError,
+      );
+    } else if (dueMentorSessions && dueMentorSessions.length > 0) {
+      const mentorNames = Array.from(
+        new Set(
+          dueMentorSessions
+            .map((s) => s.mentor_name)
+            .filter((n): n is string => !!n),
+        ),
+      );
+      const participantIds = Array.from(
+        new Set(
+          dueMentorSessions
+            .map((s) => s.participant_id)
+            .filter((id): id is string => !!id),
+        ),
+      );
+
+      const [{ data: mentorRows }, { data: participantRows }] =
+        await Promise.all([
+          mentorNames.length > 0
+            ? supabaseAdmin
+                .from("mentors")
+                .select("name, email")
+                .in("name", mentorNames)
+            : Promise.resolve({ data: [] as { name: string; email: string | null }[] }),
+          participantIds.length > 0
+            ? supabaseAdmin
+                .from("participants")
+                .select("id, name")
+                .in("id", participantIds)
+            : Promise.resolve({ data: [] as { id: string; name: string | null }[] }),
+        ]);
+
+      const mentorEmailByName = Object.fromEntries(
+        (mentorRows ?? []).map((m) => [m.name, m.email]),
+      );
+      const participantNameById = Object.fromEntries(
+        (participantRows ?? []).map((p) => [p.id, p.name]),
+      );
+
+      for (const session of dueMentorSessions) {
+        const mentorEmail = session.mentor_name
+          ? mentorEmailByName[session.mentor_name]
+          : null;
+        if (!mentorEmail) continue;
+
+        const menteeName =
+          (session.participant_id &&
+            participantNameById[session.participant_id]) ||
+          "your mentee";
+        const topic = session.topic || "Mentoring session";
+
+        const success = await sendReminderDueEmail({
+          to: mentorEmail,
+          name: session.mentor_name || "there",
+          note: `Session with ${menteeName}: ${topic}`,
+          meetingDate: session.date,
+          meetingTime: session.time,
+          meetingLocation: null,
+          meetingLink: session.meeting_link,
+        }).catch((err) => {
+          console.error(
+            `reminder-notifications: failed to email mentor session ${session.id}:`,
+            err,
+          );
+          return false;
+        });
+
+        if (success) {
+          mentorSessionSent += 1;
+          await supabaseAdmin
+            .from("mentee_sessions")
+            .update({ reminder_sent: true })
+            .eq("id", session.id);
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       sent,
       checked: dueReminders.length,
       businessSent,
       followUpSent,
+      mentorSessionSent,
     });
   } catch (err: any) {
     console.error("reminder-notifications error:", err);

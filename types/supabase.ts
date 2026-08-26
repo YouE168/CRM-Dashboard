@@ -522,6 +522,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      program_sessions: {
+        Row: {
+          id: string;
+          program_id: string;
+          title: string;
+          session_date: string | null;
+          session_time: string | null;
+          mentor: string | null;
+          link: string | null;
+          location: string | null;
+          description: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          program_id: string;
+          title: string;
+          session_date?: string | null;
+          session_time?: string | null;
+          mentor?: string | null;
+          link?: string | null;
+          location?: string | null;
+          description?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          program_id?: string;
+          title?: string;
+          session_date?: string | null;
+          session_time?: string | null;
+          mentor?: string | null;
+          link?: string | null;
+          location?: string | null;
+          description?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       mentor_ratings: {
         Row: {
           id: string;
@@ -986,6 +1025,7 @@ export type Database = {
           duration: number;
           meeting_link: string | null;
           mentor_name: string | null;
+          reminder_sent: boolean;
           created_at: string;
         };
         Insert: {
@@ -998,6 +1038,7 @@ export type Database = {
           duration?: number;
           meeting_link?: string | null;
           mentor_name?: string | null;
+          reminder_sent?: boolean;
           created_at?: string;
         };
         Update: {
@@ -1010,6 +1051,7 @@ export type Database = {
           duration?: number;
           meeting_link?: string | null;
           mentor_name?: string | null;
+          reminder_sent?: boolean;
           created_at?: string;
         };
         Relationships: [];
