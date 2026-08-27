@@ -153,6 +153,11 @@ function SignupPageInner() {
   // handleSendInvite for how this link gets built.
   const [isBusinessInvite, setIsBusinessInvite] = useState(false);
   const [inviteContactId, setInviteContactId] = useState<string | null>(null);
+  // Set when Jody checked "Combine mentee + entrepreneur" on the Send
+  // Invite picker - written to users.secondary_role at account creation.
+  const [inviteSecondaryRole, setInviteSecondaryRole] = useState<
+    string | null
+  >(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -185,6 +190,7 @@ function SignupPageInner() {
     const prefillName = searchParams.get("name") || "";
     const prefillBusiness = searchParams.get("business") || "";
     const contactId = searchParams.get("contactId");
+    const secondaryRoleId = searchParams.get("inviteSecondaryRole");
     const [firstName, ...rest] = prefillName.trim().split(/\s+/);
 
     setFormData((prev) => ({
@@ -198,6 +204,12 @@ function SignupPageInner() {
       selectedPrograms: role.programs,
     }));
     setInviteContactId(contactId);
+    if (
+      secondaryRoleId === "mentee" ||
+      secondaryRoleId === "entrepreneur"
+    ) {
+      setInviteSecondaryRole(secondaryRoleId);
+    }
     setIsBusinessInvite(true);
     setCurrentStep(1);
     // Only ever needs to run once, off the URL this page loaded with.
@@ -361,6 +373,9 @@ function SignupPageInner() {
             email: formData.email,
             name: `${formData.firstName} ${formData.lastName}`,
             primary_role: formData.primaryRole,
+            // Only set on business invites where Jody checked "Combine
+            // mentee + entrepreneur" - null for every other signup path.
+            secondary_role: isBusinessInvite ? inviteSecondaryRole : null,
             status: "active",
             created_at: new Date().toISOString(),
           })

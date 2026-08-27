@@ -112,6 +112,10 @@ interface ProfileData {
   avatar?: string;
   avatarPosition?: string;
   primaryRole?: string;
+  // Real per-account second role (only "mentee"/"entrepreneur" today),
+  // set by Jody when she explicitly grants both instead of the old
+  // hardcoded "every mentee is also an entrepreneur" assumption.
+  secondaryRole?: string;
   selectedPrograms?: string[];
   phone?: string;
   organization?: string;
@@ -3783,7 +3787,12 @@ function RoleBasedDashboardContent({
 }: {
   showToast: (msg: string, type: any) => void;
   router: any;
-  authProfile?: { name?: string; email?: string; primaryRole?: string } | null;
+  authProfile?: {
+    name?: string;
+    email?: string;
+    primaryRole?: string;
+    secondaryRole?: string;
+  } | null;
 }) {
   // ALL hooks at top level - no conditional hooks!
   const [viewMode, setViewMode] = useState<string>("default");
@@ -3810,12 +3819,13 @@ function RoleBasedDashboardContent({
   // Redirect state - handle redirects without useEffect
   const [shouldRedirect, setShouldRedirect] = useState<string | null>(null);
 
-  // useEffect to check for view parameter
+  // useEffect to check for view parameter - "entrepreneur" or "mentee"
+  // depending on which direction a dual-role account is jumping.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const view = params.get("view");
-    if (view === "entrepreneur") {
-      setViewMode("entrepreneur");
+    if (view === "entrepreneur" || view === "mentee") {
+      setViewMode(view);
     }
   }, []);
 
@@ -4304,9 +4314,15 @@ function RoleBasedDashboardContent({
         email: authProfile.email,
         primaryRole:
           authProfile.primaryRole || prev?.primaryRole || "entrepreneur",
+        secondaryRole: authProfile.secondaryRole ?? prev?.secondaryRole,
       }));
     }
-  }, [authProfile?.name, authProfile?.email, authProfile?.primaryRole]);
+  }, [
+    authProfile?.name,
+    authProfile?.email,
+    authProfile?.primaryRole,
+    authProfile?.secondaryRole,
+  ]);
 
   //  Check for redirects in a useEffect that always runs
   useEffect(() => {
@@ -4341,9 +4357,21 @@ function RoleBasedDashboardContent({
   // Get the role from profile
   let role = profile?.primaryRole || "entrepreneur";
 
-  // If user is mentee and viewMode is entrepreneur, show entrepreneur view
+  // Real dual mentee/entrepreneur access, granted per-account by Jody
+  // (users.secondary_role) - replaces the old hardcoded "every mentee is
+  // also an entrepreneur" assumption, and now works in both directions
+  // (a mentee with entrepreneur as secondary, or an entrepreneur with
+  // mentee as secondary).
+  const secondaryRole = profile?.secondaryRole;
+  const hasDualRole =
+    (role === "mentee" && secondaryRole === "entrepreneur") ||
+    (role === "entrepreneur" && secondaryRole === "mentee");
+  const otherRole = role === "mentee" ? "entrepreneur" : "mentee";
+
+  // If this account has real dual access and viewMode points at the
+  // other side, show that side's view instead of the primary role.
   const effectiveRole =
-    role === "mentee" && viewMode === "entrepreneur" ? "entrepreneur" : role;
+    hasDualRole && viewMode === otherRole ? otherRole : role;
 
   // Coalition Dashboard
   if (effectiveRole === "coalition") {
@@ -4949,37 +4977,44 @@ function RoleBasedDashboardContent({
               </div>
             </div>
 
-            {/* Third Card - Toggle between Mentee and Entrepreneur views.
-                Every mentee is also an entrepreneur, so from the mentee
-                dashboard they can jump into the entrepreneur view, and
-                from the entrepreneur view (when their real role is
-                mentee) they can jump back. Pure entrepreneur accounts
-                don't get this card since they have no mentee view. */}
-            {isMentee && (
+            {/* Third Card - Toggle between Mentee and Entrepreneur views,
+                only shown when Jody has actually granted this account both
+                (users.secondary_role) - not assumed for every mentee. */}
+            {hasDualRole && effectiveRole === role && (
               <div
                 onClick={() => {
-                  window.location.href = "/?view=entrepreneur";
+                  window.location.href = `/?view=${otherRole}`;
                 }}
                 className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer hover:scale-105"
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-emerald-100 rounded-lg">
-                    <Briefcase className="h-5 w-5 text-emerald-600" />
+                    {otherRole === "entrepreneur" ? (
+                      <Briefcase className="h-5 w-5 text-emerald-600" />
+                    ) : (
+                      <Handshake className="h-5 w-5 text-emerald-600" />
+                    )}
                   </div>
                   <div>
                     <p className="font-medium text-gray-900">
-                      Entrepreneur Hub
+                      {otherRole === "entrepreneur"
+                        ? "Entrepreneur Hub"
+                        : "Mentee Hub"}
                     </p>
-                    <p className="text-xs text-gray-500">Access all programs</p>
+                    <p className="text-xs text-gray-500">
+                      {otherRole === "entrepreneur"
+                        ? "Access all programs"
+                        : "Your mentorship dashboard"}
+                    </p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-gray-400 ml-auto" />
                 </div>
               </div>
             )}
 
-            {/* Reverse toggle - shown when a mentee is currently viewing
-                the entrepreneur side, so they can get back. */}
-            {!isMentee && role === "mentee" && (
+            {/* Reverse toggle - shown when currently viewing the "other"
+                side, so they can get back to their primary role's view. */}
+            {hasDualRole && effectiveRole !== role && (
               <div
                 onClick={() => {
                   window.location.href = "/";
@@ -4988,12 +5023,18 @@ function RoleBasedDashboardContent({
               >
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-purple-100 rounded-lg">
-                    <Handshake className="h-5 w-5 text-purple-600" />
+                    {role === "mentee" ? (
+                      <Handshake className="h-5 w-5 text-purple-600" />
+                    ) : (
+                      <Briefcase className="h-5 w-5 text-purple-600" />
+                    )}
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">Mentee Hub</p>
+                    <p className="font-medium text-gray-900">
+                      {role === "mentee" ? "Mentee Hub" : "Entrepreneur Hub"}
+                    </p>
                     <p className="text-xs text-gray-500">
-                      Back to your mentorship dashboard
+                      Back to your {role === "mentee" ? "mentorship" : "entrepreneur"} dashboard
                     </p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-gray-400 ml-auto" />
@@ -6064,7 +6105,7 @@ export default function DashboardPage() {
 
       const { data: userRow, error: userError } = await supabase
         .from("users")
-        .select("id, name, email, primary_role, status")
+        .select("id, name, email, primary_role, secondary_role, status")
         .eq("id", authData.user.id)
         .maybeSingle();
 
@@ -6111,6 +6152,7 @@ export default function DashboardPage() {
         email: userRow.email,
         role: userRow.primary_role || "Member",
         primaryRole: userRow.primary_role ?? undefined,
+        secondaryRole: userRow.secondary_role ?? undefined,
         avatar: profileRow?.avatar ?? undefined,
         avatarPosition: profileRow?.avatar_position ?? "50% 50%",
       };

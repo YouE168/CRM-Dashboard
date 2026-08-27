@@ -734,6 +734,12 @@ function BusinessDetailModal({
   const [contactRole, setContactRole] = useState("");
   const [pendingDeleteContactId, setPendingDeleteContactId] = useState<string | null>(null);
   const [inviteRoleByContact, setInviteRoleByContact] = useState<Record<string, string>>({});
+  // Only meaningful when the picked role is mentee or entrepreneur - lets
+  // Jody explicitly grant both instead of just one, since those two are
+  // the only roles the dashboard actually supports combining today.
+  const [inviteCombineByContact, setInviteCombineByContact] = useState<
+    Record<string, boolean>
+  >({});
   const [sendingInviteId, setSendingInviteId] = useState<string | null>(null);
 
   const [showAddReferral, setShowAddReferral] = useState(false);
@@ -861,6 +867,16 @@ function BusinessDetailModal({
       alert("Pick an account type first.");
       return;
     }
+    // Only mentee/entrepreneur can be combined - the checkbox is hidden
+    // for any other role, but guard here too in case state is stale.
+    const combine =
+      inviteCombineByContact[contact.id] &&
+      (role === "mentee" || role === "entrepreneur");
+    const secondaryRole = combine
+      ? role === "mentee"
+        ? "entrepreneur"
+        : "mentee"
+      : undefined;
     setSendingInviteId(contact.id);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -873,6 +889,7 @@ function BusinessDetailModal({
         name: contact.name,
         business: business.name,
         contactId: contact.id,
+        ...(secondaryRole ? { inviteSecondaryRole: secondaryRole } : {}),
       });
       const actionLink = `${window.location.origin}/signup?${params.toString()}`;
 
@@ -1192,6 +1209,23 @@ function BusinessDetailModal({
                                 </option>
                               ))}
                             </select>
+                            {(inviteRoleByContact[c.id] === "mentee" ||
+                              inviteRoleByContact[c.id] === "entrepreneur") && (
+                              <label className="flex items-center gap-1 text-xs text-gray-500">
+                                <input
+                                  type="checkbox"
+                                  checked={!!inviteCombineByContact[c.id]}
+                                  onChange={(e) =>
+                                    setInviteCombineByContact((prev) => ({
+                                      ...prev,
+                                      [c.id]: e.target.checked,
+                                    }))
+                                  }
+                                  className="rounded"
+                                />
+                                Combine mentee + entrepreneur
+                              </label>
+                            )}
                             <button
                               onClick={() => handleSendInvite(c)}
                               disabled={sendingInviteId === c.id}
@@ -2060,12 +2094,18 @@ function AddMemberModal({
   const [selectedPrograms, setSelectedPrograms] = useState<string[]>(
     getDefaultProgramsForRole("mentee"),
   );
+  // Only meaningful for mentee/entrepreneur - lets Jody grant both
+  // instead of just the one picked above.
+  const [combineRoles, setCombineRoles] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const handleMemberTypeChange = (value: string) => {
     setMemberType(value);
     setSelectedPrograms(getDefaultProgramsForRole(value));
+    if (value !== "mentee" && value !== "entrepreneur") {
+      setCombineRoles(false);
+    }
   };
 
   const toggleProgram = (programName: string) => {
@@ -2102,6 +2142,12 @@ function AddMemberModal({
           phone: phone.trim() || null,
           memberType,
           programs: memberType === "mentor" ? [] : selectedPrograms,
+          secondaryRole:
+            combineRoles && (memberType === "mentee" || memberType === "entrepreneur")
+              ? memberType === "mentee"
+                ? "entrepreneur"
+                : "mentee"
+              : null,
         }),
       });
       const result = await res.json();
@@ -2189,6 +2235,19 @@ function AddMemberModal({
               <option value="mentor">Mentor</option>
             </select>
           </div>
+
+          {(memberType === "mentee" || memberType === "entrepreneur") && (
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={combineRoles}
+                onChange={(e) => setCombineRoles(e.target.checked)}
+                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-400"
+              />
+              Also give them{" "}
+              {memberType === "mentee" ? "entrepreneur" : "mentee"} access
+            </label>
+          )}
 
           {memberType === "mentor" ? (
             <p className="text-xs text-gray-400">

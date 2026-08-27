@@ -47,13 +47,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { name, email, phone, memberType, programs } = await request.json();
+    const { name, email, phone, memberType, programs, secondaryRole } =
+      await request.json();
     if (!name || !email || !memberType) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
     if (!VALID_TYPES.includes(memberType)) {
       return NextResponse.json({ error: "Invalid member type" }, { status: 400 });
     }
+    // Only mentee/entrepreneur can be combined - anything else (including
+    // a mismatched/stale value) is ignored rather than trusted as-is.
+    const validSecondaryRole =
+      (memberType === "mentee" && secondaryRole === "entrepreneur") ||
+      (memberType === "entrepreneur" && secondaryRole === "mentee")
+        ? secondaryRole
+        : null;
     const selectedPrograms: string[] = Array.isArray(programs) ? programs : [];
 
     const siteUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
@@ -93,6 +101,7 @@ export async function POST(request: Request) {
         email,
         name,
         primary_role: memberType,
+        secondary_role: validSecondaryRole,
         status: "active",
       },
       { onConflict: "id" },

@@ -8,6 +8,11 @@ export type Database = {
           password: string | null;
           name: string | null;
           primary_role: string | null;
+          // Real second role Jody can explicitly grant (today only
+          // "mentee"/"entrepreneur" combos are supported), replacing the
+          // old hardcoded "every mentee is also an entrepreneur" UI
+          // assumption in app/page.tsx.
+          secondary_role: string | null;
           user_type: string | null;
           status: string;
           created_at: string;
@@ -19,6 +24,7 @@ export type Database = {
           password?: string | null;
           name?: string | null;
           primary_role?: string | null;
+          secondary_role?: string | null;
           user_type?: string | null;
           status?: string;
           created_at?: string;
@@ -30,6 +36,7 @@ export type Database = {
           password?: string | null;
           name?: string | null;
           primary_role?: string | null;
+          secondary_role?: string | null;
           user_type?: string | null;
           status?: string;
           created_at?: string;
