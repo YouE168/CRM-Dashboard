@@ -2605,11 +2605,25 @@ export function BusinessProfessionalServicesTab() {
             </span>
           </div>
           <div className="flex-1">
-            <p className="font-medium text-gray-800">{note.member_name}</p>
-            <p className="text-xs text-gray-500">
-              {whenLabel}
-              {entry.location ? ` - ${entry.location}` : ""}
-            </p>
+            {isBusiness ? (
+              <>
+                <p className="font-medium text-gray-800 line-clamp-1">
+                  {note.note}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {note.member_name} · {whenLabel}
+                  {entry.location ? ` - ${entry.location}` : ""}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-gray-800">{note.member_name}</p>
+                <p className="text-xs text-gray-500">
+                  {whenLabel}
+                  {entry.location ? ` - ${entry.location}` : ""}
+                </p>
+              </>
+            )}
             {entry.link && (
               <a
                 href={entry.link}
