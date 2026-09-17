@@ -220,6 +220,12 @@ function SignupPageInner() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Mentee + Entrepreneur are the only two roles that can be combined
+  // into one account (mirrors the admin-side "Combine" option Jody uses
+  // on invites). Every other role is single-select: picking Mentor,
+  // Coalition Leader, or Partner clears any other selection.
+  const COMBINABLE_ROLE_IDS = ["mentee", "entrepreneur"];
+
   const handleRoleToggle = (role: Role) => {
     setFormData((prev) => {
       const isSelected = prev.selectedRoles.some((r) => r.id === role.id);
@@ -227,17 +233,30 @@ function SignupPageInner() {
 
       if (isSelected) {
         newSelectedRoles = prev.selectedRoles.filter((r) => r.id !== role.id);
-      } else {
+      } else if (COMBINABLE_ROLE_IDS.includes(role.id)) {
+        // Keep only the other combinable role (if any) already selected,
+        // dropping any non-combinable role, then add this one.
         newSelectedRoles = [
-          ...prev.selectedRoles,
+          ...prev.selectedRoles.filter((r) => COMBINABLE_ROLE_IDS.includes(r.id)),
+          { id: role.id, label: role.label, programs: role.programs },
+        ];
+      } else {
+        // Non-combinable role selected - it stands alone.
+        newSelectedRoles = [
           { id: role.id, label: role.label, programs: role.programs },
         ];
       }
 
+      const primaryStillValid = newSelectedRoles.some(
+        (r) => r.id === prev.primaryRole,
+      );
+
       return {
         ...prev,
         selectedRoles: newSelectedRoles,
-        primaryRole: prev.primaryRole || newSelectedRoles[0]?.id || "",
+        primaryRole: primaryStillValid
+          ? prev.primaryRole
+          : newSelectedRoles[0]?.id || "",
       };
     });
   };
@@ -332,6 +351,21 @@ function SignupPageInner() {
     setIsSubmitting(true);
     setError("");
 
+    // A general (non-invite) signup that checks both "Mentee" and
+    // "Entrepreneur" on the Select Roles step gets real combined access
+    // to both dashboards, same as when Jody checks "Combine" on an
+    // invite. Checking only one of the two (or neither) results in a
+    // single-role account, same as any other role.
+    const selfSelectedBothMenteeAndEntrepreneur =
+      formData.selectedRoles.some((r) => r.id === "mentee") &&
+      formData.selectedRoles.some((r) => r.id === "entrepreneur") &&
+      (formData.primaryRole === "mentee" || formData.primaryRole === "entrepreneur");
+    const selfSelectedSecondaryRole = selfSelectedBothMenteeAndEntrepreneur
+      ? formData.primaryRole === "mentee"
+        ? "entrepreneur"
+        : "mentee"
+      : null;
+
     try {
       // Check if Supabase is configured
       const useSupabase = isSupabaseConfigured() && isClient;
@@ -373,9 +407,12 @@ function SignupPageInner() {
             email: formData.email,
             name: `${formData.firstName} ${formData.lastName}`,
             primary_role: formData.primaryRole,
-            // Only set on business invites where Jody checked "Combine
-            // mentee + entrepreneur" - null for every other signup path.
-            secondary_role: isBusinessInvite ? inviteSecondaryRole : null,
+            // Set when Jody checked "Combine" on a business invite, OR
+            // when the person self-selected both Mentee and Entrepreneur
+            // on this form - null for every other case (single role).
+            secondary_role: isBusinessInvite
+              ? inviteSecondaryRole
+              : selfSelectedSecondaryRole,
             status: "active",
             created_at: new Date().toISOString(),
           })
@@ -650,8 +687,9 @@ function SignupPageInner() {
               Select Your Roles
             </h3>
             <p className="text-sm text-gray-500 mb-4">
-              Select ALL roles that apply to you. You can participate in
-              multiple programs!
+              Select the role that best fits you. Mentee and Entrepreneur can
+              be combined into one account - other roles are selected on
+              their own.
             </p>
 
             {formData.selectedRoles.length > 0 && (
