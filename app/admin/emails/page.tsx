@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 import {
   ArrowLeft,
   Mail,
@@ -36,6 +37,7 @@ export default function EmailsPage() {
   const [notificationMessage, setNotificationMessage] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastCheck, setLastCheck] = useState<Date>(new Date());
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const loadEmails = useCallback(async () => {
     try {
@@ -49,7 +51,47 @@ export default function EmailsPage() {
     }
   }, []);
 
+  // Admin/staff-only route guard - this page has no other access control,
+  // so without this any signed-in user could view every logged email.
   useEffect(() => {
+    let cancelled = false;
+
+    const checkAuth = async () => {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: userRow, error: userError } = await supabase
+        .from("users")
+        .select("primary_role, status")
+        .eq("id", authData.user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (userError || !userRow || (userRow.status && userRow.status !== "active")) {
+        router.push("/login");
+        return;
+      }
+
+      if (userRow.primary_role !== "admin" && userRow.primary_role !== "staff") {
+        router.push("/");
+        return;
+      }
+
+      setIsAdmin(true);
+    };
+
+    checkAuth();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
     loadEmails();
     if (!autoRefresh) return;
     const unsubscribe = subscribeToEmailLogs(() => {
@@ -59,7 +101,7 @@ export default function EmailsPage() {
       setTimeout(() => setShowNotification(false), 3000);
     });
     return unsubscribe;
-  }, [loadEmails, autoRefresh]);
+  }, [isAdmin, loadEmails, autoRefresh]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -187,6 +229,8 @@ export default function EmailsPage() {
       minute: "2-digit",
     });
   };
+
+  if (!isAdmin) return null;
 
   if (loading) {
     return (
