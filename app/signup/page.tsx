@@ -565,7 +565,11 @@ function SignupPageInner() {
         // should never block the account itself from finishing.
         if (isBusinessInvite && inviteContactId) {
           try {
-            await linkBusinessContactToUser(inviteContactId, userData.id);
+            await linkBusinessContactToUser(
+              inviteContactId,
+              userData.id,
+              formData.phone || null,
+            );
           } catch (linkError) {
             console.error("Failed to link business contact to new user:", linkError);
           }

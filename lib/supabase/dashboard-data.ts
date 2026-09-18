@@ -3646,14 +3646,20 @@ export async function markBusinessContactInvited(contactId: string): Promise<voi
 
 // Called from the shortened business-invite signup form once the
 // contact actually finishes creating their real account, so Jody can
-// see this lead converted into a real member and who they became.
+// see this lead converted into a real member and who they became. Also
+// writes back whatever phone number they entered on the form - covers
+// both the case where Jody never had one on file, and the case where
+// the number they enter differs from (or corrects) what's on file.
 export async function linkBusinessContactToUser(
   contactId: string,
   userId: string,
+  phone?: string | null,
 ): Promise<void> {
+  const updates: { user_id: string; phone?: string } = { user_id: userId };
+  if (phone) updates.phone = phone;
   const { error } = await supabase
     .from("business_contacts")
-    .update({ user_id: userId })
+    .update(updates)
     .eq("id", contactId);
   if (error) throw error;
 }
