@@ -175,8 +175,13 @@ export async function POST(request: Request) {
 
       // Grant access (approved: true) to exactly the programs Jody picked
       // on the Add New Member form, rather than a hardcoded default -
-      // matched against the real catalog by exact name.
+      // matched against the real catalog by exact name. Business
+      // Professional Services is the one exception: every member gets it
+      // automatically (same as the public signup flow), regardless of
+      // what Jody picked here - it's never something she needs to opt
+      // someone into.
       const matchedProgramIds = new Set<string>();
+      if (defaultProgram) matchedProgramIds.add(defaultProgram.id);
       for (const programName of selectedPrograms) {
         const match = catalogRows.find(
           (p) => p.name.toLowerCase() === String(programName).toLowerCase(),

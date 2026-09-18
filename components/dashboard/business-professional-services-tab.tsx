@@ -100,6 +100,12 @@ function initials(name: string): string {
   return p.length >= 2 ? p[0][0] + p[1][0] : p[0][0];
 }
 
+// Every CRM member automatically has this program - it's granted at
+// signup/creation regardless of role and is never something Jody needs
+// to (or can) revoke, unlike every other program which starts pending
+// until she approves it.
+const UNIVERSAL_PROGRAM_NAME = "Business Professional Services";
+
 // Case notes + contact details for one member, regardless of what role
 // they are - opened from the roster table below.
 function MemberDetailModal({
@@ -162,8 +168,29 @@ function MemberDetailModal({
   } | null>(null);
   const [programToggleSaving, setProgramToggleSaving] = useState(false);
 
+  // Always show the universal program as granted, even if this member's
+  // user_programs rows don't happen to include it yet (e.g. added via
+  // "Add New Member" without it explicitly picked) - it's automatic, so
+  // it should never appear as "not granted" here.
+  const displayProgramAccess = (() => {
+    const rows = programAccess ?? [];
+    const hasUniversal = rows.some((p) => p.name === UNIVERSAL_PROGRAM_NAME);
+    const withUniversal = hasUniversal
+      ? rows.map((p) =>
+          p.name === UNIVERSAL_PROGRAM_NAME ? { ...p, approved: true } : p,
+        )
+      : [{ name: UNIVERSAL_PROGRAM_NAME, approved: true }, ...rows];
+    return withUniversal;
+  })();
+
   const confirmProgramToggle = async () => {
     if (!pendingProgramToggle || !member.userId) return;
+    // Safety net - the universal program never renders as a clickable
+    // button, but guard here too in case state gets out of sync.
+    if (pendingProgramToggle.name === UNIVERSAL_PROGRAM_NAME) {
+      setPendingProgramToggle(null);
+      return;
+    }
     const { name, approved } = pendingProgramToggle;
     setProgramToggleSaving(true);
     try {
@@ -450,27 +477,37 @@ function MemberDetailModal({
                       (click to allow/revoke)
                     </span>
                   </p>
-                  {programAccess && programAccess.length > 0 ? (
+                  {displayProgramAccess.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
-                      {programAccess.map((p) => (
-                        <button
-                          key={p.name}
-                          onClick={() =>
-                            setPendingProgramToggle({
-                              name: p.name,
-                              approved: p.approved,
-                            })
-                          }
-                          className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
-                            p.approved
-                              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                          }`}
-                          title={p.approved ? "Click to revoke access" : "Click to allow access"}
-                        >
-                          {p.name}
-                        </button>
-                      ))}
+                      {displayProgramAccess.map((p) =>
+                        p.name === UNIVERSAL_PROGRAM_NAME ? (
+                          <span
+                            key={p.name}
+                            className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700"
+                            title="Every member automatically has access to this program - it can't be revoked."
+                          >
+                            {p.name}
+                          </span>
+                        ) : (
+                          <button
+                            key={p.name}
+                            onClick={() =>
+                              setPendingProgramToggle({
+                                name: p.name,
+                                approved: p.approved,
+                              })
+                            }
+                            className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                              p.approved
+                                ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                                : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                            }`}
+                            title={p.approved ? "Click to revoke access" : "Click to allow access"}
+                          >
+                            {p.name}
+                          </button>
+                        ),
+                      )}
                     </div>
                   ) : (
                     <p className="text-sm text-gray-400">
