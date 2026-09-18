@@ -889,6 +889,7 @@ function BusinessDetailModal({
         name: contact.name,
         business: business.name,
         contactId: contact.id,
+        ...(contact.phone ? { phone: contact.phone } : {}),
         ...(secondaryRole ? { inviteSecondaryRole: secondaryRole } : {}),
       });
       const actionLink = `${window.location.origin}/signup?${params.toString()}`;

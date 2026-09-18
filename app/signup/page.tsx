@@ -188,6 +188,7 @@ function SignupPageInner() {
 
     const prefillEmail = searchParams.get("email") || "";
     const prefillName = searchParams.get("name") || "";
+    const prefillPhone = searchParams.get("phone") || "";
     const prefillBusiness = searchParams.get("business") || "";
     const contactId = searchParams.get("contactId");
     const secondaryRoleId = searchParams.get("inviteSecondaryRole");
@@ -198,6 +199,7 @@ function SignupPageInner() {
       email: prefillEmail,
       firstName: firstName || "",
       lastName: rest.join(" "),
+      phone: prefillPhone,
       organization: prefillBusiness,
       selectedRoles: [{ id: role.id, label: role.label, programs: role.programs }],
       primaryRole: role.id,
