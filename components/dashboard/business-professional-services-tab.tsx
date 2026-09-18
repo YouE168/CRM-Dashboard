@@ -30,6 +30,8 @@ import {
 import {
   getAllCrmMembers,
   setCrmMemberStatus,
+  setMemberSecondaryRole,
+  setProgramAccessByName,
   getCaseNotesForMember,
   addCaseNote,
   deleteCaseNote,
@@ -125,6 +127,67 @@ function MemberDetailModal({
   const [meetingLink, setMeetingLink] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Lets Jody grant/revoke combined mentee+entrepreneur access after the
+  // fact - e.g. someone meant to select both roles at signup but only
+  // picked one. Only relevant for mentee/entrepreneur members.
+  const [secondaryRole, setSecondaryRole] = useState(member.secondaryRole);
+  const [combiningSaving, setCombiningSaving] = useState(false);
+  const otherRole = member.member_type === "mentee" ? "entrepreneur" : "mentee";
+  const isCombined = secondaryRole === otherRole;
+
+  const handleToggleCombine = async () => {
+    if (!member.userId) return;
+    setCombiningSaving(true);
+    try {
+      const newValue = isCombined ? null : (otherRole as "mentee" | "entrepreneur");
+      await setMemberSecondaryRole(member.userId, newValue);
+      setSecondaryRole(newValue);
+      onChanged();
+    } catch (err) {
+      console.error("Failed to update member's combined role:", err);
+      alert("Couldn't update that member's roles. Please try again.");
+    } finally {
+      setCombiningSaving(false);
+    }
+  };
+
+  // Lets Jody allow/revoke a member's access to a specific program
+  // straight from their card, instead of only being able to see what
+  // they're currently approved for. Always confirmed first since it's an
+  // access change, not just a note.
+  const [programAccess, setProgramAccess] = useState(member.allProgramAccess);
+  const [pendingProgramToggle, setPendingProgramToggle] = useState<{
+    name: string;
+    approved: boolean;
+  } | null>(null);
+  const [programToggleSaving, setProgramToggleSaving] = useState(false);
+
+  const confirmProgramToggle = async () => {
+    if (!pendingProgramToggle || !member.userId) return;
+    const { name, approved } = pendingProgramToggle;
+    setProgramToggleSaving(true);
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      await setProgramAccessByName(
+        member.userId,
+        name,
+        !approved,
+        authData.user?.id,
+      );
+      setProgramAccess((prev) =>
+        (prev ?? []).map((p) =>
+          p.name === name ? { ...p, approved: !approved } : p,
+        ),
+      );
+      setPendingProgramToggle(null);
+      onChanged();
+    } catch (err) {
+      console.error("Failed to update program access:", err);
+      alert("Couldn't update that program's access. Please try again.");
+    } finally {
+      setProgramToggleSaving(false);
+    }
+  };
 
   const loadNotes = useCallback(async () => {
     try {
@@ -381,27 +444,70 @@ function MemberDetailModal({
                   </p>
                 </div>
                 <div className="col-span-2">
-                  <p className="text-xs text-gray-400 mb-1">Programs</p>
-                  {member.programs.length > 0 ? (
+                  <p className="text-xs text-gray-400 mb-1">
+                    Programs{" "}
+                    <span className="font-normal normal-case text-gray-300">
+                      (click to allow/revoke)
+                    </span>
+                  </p>
+                  {programAccess && programAccess.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
-                      {member.programs.map((p) => (
-                        <span
-                          key={p}
-                          className="inline-block px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium"
+                      {programAccess.map((p) => (
+                        <button
+                          key={p.name}
+                          onClick={() =>
+                            setPendingProgramToggle({
+                              name: p.name,
+                              approved: p.approved,
+                            })
+                          }
+                          className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                            p.approved
+                              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                          }`}
+                          title={p.approved ? "Click to revoke access" : "Click to allow access"}
                         >
-                          {p}
-                        </span>
+                          {p.name}
+                        </button>
                       ))}
                     </div>
                   ) : (
                     <p className="text-sm text-gray-400">
-                      No approved programs yet
+                      No programs on file yet
                     </p>
                   )}
                 </div>
               </>
             )}
           </div>
+
+          {(member.member_type === "mentee" || member.member_type === "entrepreneur") &&
+            member.userId && (
+              <div className="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    Combine mentee + entrepreneur
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {isCombined
+                      ? `This member already has access to both the mentee and entrepreneur dashboards.`
+                      : `Grant this member access to the ${otherRole} dashboard too - use this if they meant to select both at signup but only picked one.`}
+                  </p>
+                </div>
+                <button
+                  onClick={handleToggleCombine}
+                  disabled={combiningSaving}
+                  className={`shrink-0 ml-4 px-3 py-1.5 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                    isCombined
+                      ? "text-red-600 bg-red-50 hover:bg-red-100"
+                      : "text-indigo-600 bg-indigo-100 hover:bg-indigo-200"
+                  }`}
+                >
+                  {combiningSaving ? "Saving..." : isCombined ? "Remove Combine" : "Combine"}
+                </button>
+              </div>
+            )}
 
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -543,6 +649,32 @@ function MemberDetailModal({
           type={isActive ? "danger" : "info"}
           onConfirm={confirmStatusChange}
           onCancel={() => setPendingStatusChange(false)}
+        />
+        <ConfirmationModal
+          isOpen={pendingProgramToggle !== null}
+          title={
+            pendingProgramToggle?.approved
+              ? "Revoke program access"
+              : "Allow program access"
+          }
+          message={
+            pendingProgramToggle
+              ? pendingProgramToggle.approved
+                ? `Revoke ${member.name}'s access to "${pendingProgramToggle.name}"? They'll lose access to that program's details right away.`
+                : `Allow ${member.name} access to "${pendingProgramToggle.name}"?`
+              : ""
+          }
+          confirmText={
+            programToggleSaving
+              ? "Saving…"
+              : pendingProgramToggle?.approved
+                ? "Revoke"
+                : "Allow"
+          }
+          cancelText="Cancel"
+          type={pendingProgramToggle?.approved ? "danger" : "info"}
+          onConfirm={confirmProgramToggle}
+          onCancel={() => setPendingProgramToggle(null)}
         />
       </div>
     </div>

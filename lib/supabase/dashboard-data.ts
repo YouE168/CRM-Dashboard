@@ -3273,6 +3273,13 @@ export interface CrmMemberRow {
   menteeCount: number | null; // mentors only
   entrepreneurCount: number | null; // mentors only
   programs: string[]; // every program this member is approved for - participants only
+  userId: string | null; // real users.id - participants only, null for mentors
+  secondaryRole: string | null; // "mentee" | "entrepreneur" | null - participants only
+  // Every program this member has a user_programs row for (approved or
+  // still pending) - lets the admin roster toggle access on/off, unlike
+  // `programs` above which only lists the already-approved ones. Null
+  // for mentors (they don't have user_programs rows).
+  allProgramAccess: { name: string; approved: boolean }[] | null;
 }
 
 export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
@@ -3283,7 +3290,7 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
       status,
       program_name,
       mentor,
-      users:user_id ( id, name, email, primary_role ),
+      users:user_id ( id, name, email, primary_role, secondary_role ),
       programs:program_id ( name )
     `,
     ),
@@ -3327,6 +3334,17 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
     (acc[e.user_id] ||= []).push(name);
     return acc;
   }, {});
+  // Every program row this user has (approved or still pending) - lets
+  // the admin roster show and toggle access, not just list what's
+  // already granted.
+  const allProgramAccessByUserId = (enrollmentsRes.data ?? []).reduce<
+    Record<string, { name: string; approved: boolean }[]>
+  >((acc, e) => {
+    const name = programNameById[e.program_id];
+    if (!name) return acc;
+    (acc[e.user_id] ||= []).push({ name, approved: !!e.approved });
+    return acc;
+  }, {});
 
   const participantMembers: CrmMemberRow[] = participantRows
     .filter((row) =>
@@ -3346,6 +3364,11 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
       menteeCount: null,
       entrepreneurCount: null,
       programs: row.users?.id ? approvedProgramsByUserId[row.users.id] || [] : [],
+      userId: row.users?.id ?? null,
+      secondaryRole: row.users?.secondary_role ?? null,
+      allProgramAccess: row.users?.id
+        ? allProgramAccessByUserId[row.users.id] || []
+        : [],
     }));
 
   // Mentee/entrepreneur counts come from real participants.mentor
@@ -3366,6 +3389,9 @@ export async function getAllCrmMembers(): Promise<CrmMemberRow[]> {
       entrepreneurCount: assigned.filter((p) => p.member_type === "entrepreneur")
         .length,
       programs: [],
+      userId: null,
+      secondaryRole: null,
+      allProgramAccess: null,
     };
   });
 
@@ -3387,6 +3413,21 @@ export async function setCrmMemberStatus(
 ): Promise<void> {
   const table = memberType === "mentor" ? "mentors" : "participants";
   const { error } = await supabase.from(table).update({ status }).eq("id", memberId);
+  if (error) throw error;
+}
+
+// Lets Jody grant or revoke combined mentee+entrepreneur dashboard access
+// for a member who already has an account - e.g. someone who meant to
+// select both roles at signup but only picked one. Pass null to remove
+// the combined access and leave them on their single primary_role.
+export async function setMemberSecondaryRole(
+  userId: string,
+  secondaryRole: "mentee" | "entrepreneur" | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from("users")
+    .update({ secondary_role: secondaryRole })
+    .eq("id", userId);
   if (error) throw error;
 }
 
