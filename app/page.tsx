@@ -66,6 +66,7 @@ import { RoundtableJoinCard } from "@/components/dashboard/roundtable-join-card"
 import { DirectMessageChat } from "@/components/dashboard/direct-message-chat";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { AvatarPositionEditor } from "@/components/dashboard/avatar-position-editor";
+import { SharedDocumentsCard } from "@/components/dashboard/shared-documents-card";
 import { linkifyText } from "@/lib/linkify";
 import { useRouter } from "next/navigation";
 import {
@@ -1824,6 +1825,8 @@ function CoalitionDashboard({
         showToast={showToast}
       />
 
+      <SharedDocumentsCard userId={userId} />
+
       {/* Support Section */}
       <div
         onClick={() =>
@@ -3431,6 +3434,8 @@ function PartnerDashboard({
         profileEmail={profile?.email ?? ""}
         showToast={showToast}
       />
+
+      <SharedDocumentsCard userId={userId} />
 
       {/* Support Section */}
       <div
@@ -5468,6 +5473,8 @@ function RoleBasedDashboardContent({
               )}
             </div>
           </div>
+
+          <SharedDocumentsCard userId={profile?.id ?? null} />
 
           {/* Support Section */}
           <div

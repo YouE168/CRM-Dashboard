@@ -26,6 +26,9 @@ import {
   NotebookPen,
   UserPlus,
   Bell,
+  FileText,
+  Download,
+  Globe,
 } from "lucide-react";
 import {
   getAllCrmMembers,
@@ -37,6 +40,12 @@ import {
   deleteCaseNote,
   subscribeToCaseNotes,
   getUpcomingCaseNotes,
+  getSharedDocuments,
+  addSharedDocument,
+  updateSharedDocument,
+  setSharedDocumentPublished,
+  deleteSharedDocument,
+  type SharedDocumentRow,
   getMyPersonalNotes,
   addPersonalNote,
   togglePersonalNote,
@@ -105,6 +114,404 @@ function initials(name: string): string {
 // to (or can) revoke, unlike every other program which starts pending
 // until she approves it.
 const UNIVERSAL_PROGRAM_NAME = "Business Professional Services";
+
+// Renders a title + body as a clean, printable "page" - used both as the
+// live preview inside the editor and as the off-screen node captured for
+// PDF export, so what gets downloaded always matches what's on screen.
+function DocumentPage({
+  title,
+  content,
+  meta,
+}: {
+  title: string;
+  content: string;
+  meta?: string;
+}) {
+  return (
+    <div className="bg-white" style={{ width: 800, padding: 56 }}>
+      <h1 className="text-3xl font-bold text-gray-900 mb-1">
+        {title || "Untitled Document"}
+      </h1>
+      {meta && <p className="text-sm text-gray-400 mb-6">{meta}</p>}
+      <div className="text-base text-gray-800 whitespace-pre-wrap leading-relaxed">
+        {content || " "}
+      </div>
+    </div>
+  );
+}
+
+// Full "Word document"-style editor for a Shared Document - a longer,
+// formal write-up (as opposed to a quick Case/Meeting Note) that gets
+// saved as a draft, then published so the member/business it's about can
+// see and download it from their own dashboard.
+function DocumentEditorModal({
+  memberType,
+  memberId,
+  memberName,
+  authorName,
+  document,
+  onClose,
+  onSaved,
+}: {
+  memberType: string;
+  memberId: string;
+  memberName: string;
+  authorName: string;
+  document: SharedDocumentRow | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState(document?.title ?? "");
+  const [content, setContent] = useState(document?.content ?? "");
+  const [docId, setDocId] = useState<string | null>(document?.id ?? null);
+  const [status, setStatus] = useState<"draft" | "published">(
+    (document?.status as "draft" | "published") ?? "draft",
+  );
+  const [saving, setSaving] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pendingPublishChange, setPendingPublishChange] = useState<
+    "publish" | "unpublish" | null
+  >(null);
+  const [pendingDelete, setPendingDelete] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const saveContent = async (): Promise<string | null> => {
+    if (!title.trim()) {
+      alert("Give the document a title first.");
+      return null;
+    }
+    if (docId) {
+      await updateSharedDocument(docId, { title, content });
+      return docId;
+    }
+    const created = await addSharedDocument(
+      memberType,
+      memberId,
+      title,
+      content,
+      authorName,
+    );
+    setDocId(created.id);
+    return created.id;
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const id = await saveContent();
+      if (!id) return;
+      onSaved();
+    } catch (err) {
+      console.error("Failed to save document:", err);
+      alert("Couldn't save that document. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmTogglePublish = async () => {
+    if (!pendingPublishChange) return;
+    setSaving(true);
+    try {
+      const id = await saveContent();
+      if (!id) return;
+      const publish = pendingPublishChange === "publish";
+      await setSharedDocumentPublished(id, publish);
+      setStatus(publish ? "published" : "draft");
+      setPendingPublishChange(null);
+      onSaved();
+    } catch (err) {
+      console.error("Failed to update document status:", err);
+      alert("Couldn't update that document. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!docId) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    try {
+      await deleteSharedDocument(docId);
+      setPendingDelete(false);
+      onSaved();
+    } catch (err) {
+      console.error("Failed to delete document:", err);
+      alert("Couldn't delete that document. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!printRef.current) return;
+    setExportingPdf(true);
+    try {
+      const [{ toCanvas }, { default: jsPDF }] = await Promise.all([
+        import("html-to-image"),
+        import("jspdf"),
+      ]);
+      const node = printRef.current;
+      const rect = node.getBoundingClientRect();
+      const canvas = await toCanvas(node, {
+        backgroundColor: "#ffffff",
+        pixelRatio: 2,
+        width: Math.ceil(rect.width),
+        height: Math.ceil(rect.height),
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "px",
+        format: [canvas.width, canvas.height],
+      });
+      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
+      const slug = (title || "document").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      pdf.save(`${slug}.pdf`);
+    } catch (err) {
+      console.error("Failed to export document to PDF:", err);
+      alert("Couldn't download that document as a PDF. Please try again.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white p-5 border-b border-gray-100 flex justify-between items-center z-10">
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-indigo-600" />
+            <h2 className="text-lg font-semibold text-gray-900">
+              {docId ? "Edit Document" : "New Document"}
+            </h2>
+            <span
+              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                status === "published"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {status === "published" ? "Published" : "Draft"}
+            </span>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <p className="text-xs text-gray-400">
+            {status === "published"
+              ? `Visible to ${memberName} on their dashboard - download or unpublish below.`
+              : `Only Jody/staff can see this until it's published to ${memberName}.`}
+          </p>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Document title"
+            className="w-full text-2xl font-bold border-0 border-b border-gray-200 pb-2 focus:outline-none focus:border-indigo-400 placeholder:text-gray-300"
+          />
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Write the meeting summary, plan, or anything else you want to document here..."
+            rows={16}
+            className="w-full border border-gray-200 rounded-xl p-4 text-base leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
+          />
+        </div>
+
+        <div className="sticky bottom-0 bg-white p-5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
+          <button
+            onClick={() => setPendingDelete(true)}
+            className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-xl flex items-center gap-1.5"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownloadPdf}
+              disabled={exportingPdf}
+              className="px-3 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              {exportingPdf ? "Exporting…" : "Download PDF"}
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-3 py-2 text-sm text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl font-medium disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              onClick={() =>
+                setPendingPublishChange(status === "published" ? "unpublish" : "publish")
+              }
+              disabled={saving}
+              className={`px-3 py-2 text-sm rounded-xl font-medium flex items-center gap-1.5 disabled:opacity-50 ${
+                status === "published"
+                  ? "text-red-600 bg-red-50 hover:bg-red-100"
+                  : "text-white bg-emerald-600 hover:bg-emerald-700"
+              }`}
+            >
+              <Globe className="h-4 w-4" />
+              {status === "published" ? "Unpublish" : "Publish"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Off-screen node captured for the PDF export - always rendered so
+          html-to-image can measure/draw it, just placed outside the
+          viewport instead of hidden (hidden nodes often render blank). */}
+      <div style={{ position: "fixed", top: 0, left: -99999 }}>
+        <div ref={printRef}>
+          <DocumentPage
+            title={title}
+            content={content}
+            meta={`Prepared for ${memberName} by ${authorName}`}
+          />
+        </div>
+      </div>
+
+      <ConfirmationModal
+        isOpen={pendingPublishChange !== null}
+        title={pendingPublishChange === "publish" ? "Publish document" : "Unpublish document"}
+        message={
+          pendingPublishChange === "publish"
+            ? `Publish this document to ${memberName}? They'll be able to view and download it from their own dashboard right away.`
+            : `Unpublish this document? ${memberName} will no longer be able to see or download it.`
+        }
+        confirmText={saving ? "Saving…" : pendingPublishChange === "publish" ? "Publish" : "Unpublish"}
+        cancelText="Cancel"
+        type={pendingPublishChange === "publish" ? "info" : "danger"}
+        onConfirm={confirmTogglePublish}
+        onCancel={() => setPendingPublishChange(null)}
+      />
+      <ConfirmationModal
+        isOpen={pendingDelete}
+        title="Delete document"
+        message="Delete this document? This can't be undone, and it will disappear from the member's dashboard if it was published."
+        confirmText={saving ? "Deleting…" : "Delete"}
+        cancelText="Cancel"
+        type="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(false)}
+      />
+    </div>
+  );
+}
+
+// List of a member/business's Shared Documents, with a button to write a
+// new one - drop this into any detail modal (member or business).
+function DocumentsSection({
+  memberType,
+  memberId,
+  memberName,
+  authorName,
+}: {
+  memberType: string;
+  memberId: string;
+  memberName: string;
+  authorName: string;
+}) {
+  const [documents, setDocuments] = useState<SharedDocumentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingDoc, setEditingDoc] = useState<SharedDocumentRow | "new" | null>(
+    null,
+  );
+
+  const loadDocuments = useCallback(async () => {
+    try {
+      const data = await getSharedDocuments(memberId);
+      setDocuments(data);
+    } catch (err) {
+      console.error("Failed to load documents:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [memberId]);
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <FileText className="h-5 w-5 text-indigo-600" />
+          <h3 className="font-semibold text-gray-900">Documents</h3>
+        </div>
+        <button
+          onClick={() => setEditingDoc("new")}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 font-medium"
+        >
+          <Plus className="h-4 w-4" />
+          New Document
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading documents…</p>
+      ) : documents.length === 0 ? (
+        <p className="text-sm text-gray-400">
+          No documents yet - write one and publish it to share with{" "}
+          {memberName}.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {documents.map((doc) => (
+            <button
+              key={doc.id}
+              onClick={() => setEditingDoc(doc)}
+              className="w-full text-left bg-gray-50 hover:bg-gray-100 rounded-xl p-3 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {doc.title}
+                </p>
+                <span
+                  className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    doc.status === "published"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-gray-200 text-gray-500"
+                  }`}
+                >
+                  {doc.status === "published" ? "Published" : "Draft"}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Updated {new Date(doc.updated_at).toLocaleString()}
+              </p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {editingDoc && (
+        <DocumentEditorModal
+          memberType={memberType}
+          memberId={memberId}
+          memberName={memberName}
+          authorName={authorName}
+          document={editingDoc === "new" ? null : editingDoc}
+          onClose={() => setEditingDoc(null)}
+          onSaved={() => {
+            setEditingDoc(null);
+            loadDocuments();
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
 // Case notes + contact details for one member, regardless of what role
 // they are - opened from the roster table below.
@@ -545,6 +952,15 @@ function MemberDetailModal({
                 </button>
               </div>
             )}
+
+          {member.member_type !== "mentor" && member.userId && (
+            <DocumentsSection
+              memberType={member.member_type}
+              memberId={member.id}
+              memberName={member.name}
+              authorName={currentAuthorName}
+            />
+          )}
 
           <div>
             <div className="flex items-center gap-2 mb-3">
@@ -1540,6 +1956,13 @@ function BusinessDetailModal({
               </div>
             )}
           </div>
+
+          <DocumentsSection
+            memberType="business"
+            memberId={business.id}
+            memberName={business.name}
+            authorName={currentAuthorName}
+          />
 
           {/* Meeting notes - shared case_notes pattern */}
           <div>

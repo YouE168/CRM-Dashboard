@@ -3541,6 +3541,145 @@ export function subscribeToCaseNotes(onChange: () => void) {
 }
 
 // ---------------------------------------------------------------------
+// SHARED DOCUMENTS - a longer, formal document (title + body) Jody/staff
+// write for a business or an individual member, as opposed to a quick
+// case note. Saved as a draft first, then published - only once
+// published does it become visible (read-only) to the person(s) it's
+// about, from their own dashboard, with a PDF download. Uses the same
+// member_type/member_id convention as case_notes (member_type "business"
+// for a business, or the member's primary_role for an individual).
+export interface SharedDocumentRow {
+  id: string;
+  member_type: string;
+  member_id: string;
+  title: string;
+  content: string;
+  status: "draft" | "published";
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+}
+
+export async function getSharedDocuments(
+  memberId: string,
+): Promise<SharedDocumentRow[]> {
+  const { data, error } = await supabase
+    .from("shared_documents")
+    .select("*")
+    .eq("member_id", memberId)
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return data as SharedDocumentRow[];
+}
+
+export async function addSharedDocument(
+  memberType: string,
+  memberId: string,
+  title: string,
+  content: string,
+  author: string,
+): Promise<SharedDocumentRow> {
+  const { data, error } = await supabase
+    .from("shared_documents")
+    .insert({
+      member_type: memberType,
+      member_id: memberId,
+      title,
+      content,
+      created_by: author,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as SharedDocumentRow;
+}
+
+export async function updateSharedDocument(
+  id: string,
+  updates: { title?: string; content?: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from("shared_documents")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function setSharedDocumentPublished(
+  id: string,
+  published: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from("shared_documents")
+    .update({
+      status: published ? "published" : "draft",
+      published_at: published ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteSharedDocument(id: string): Promise<void> {
+  const { error } = await supabase.from("shared_documents").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Every published document relevant to one signed-in member - their own
+// individual profile (if any) plus any business they're a real, signed-
+// up contact of. Powers the "Documents" card on their own dashboard.
+export async function getMyPublishedDocuments(
+  userId: string,
+): Promise<SharedDocumentRow[]> {
+  const [{ data: userRow }, { data: participantRow }, { data: contactRows }] =
+    await Promise.all([
+      supabase.from("users").select("primary_role").eq("id", userId).maybeSingle(),
+      supabase
+        .from("participants")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      supabase.from("business_contacts").select("business_id").eq("user_id", userId),
+    ]);
+
+  const queries = [];
+  if (userRow?.primary_role && participantRow?.id) {
+    queries.push(
+      supabase
+        .from("shared_documents")
+        .select("*")
+        .eq("status", "published")
+        .eq("member_type", userRow.primary_role)
+        .eq("member_id", participantRow.id),
+    );
+  }
+  const businessIds = (contactRows ?? []).map((c) => c.business_id);
+  if (businessIds.length > 0) {
+    queries.push(
+      supabase
+        .from("shared_documents")
+        .select("*")
+        .eq("status", "published")
+        .eq("member_type", "business")
+        .in("member_id", businessIds),
+    );
+  }
+  if (queries.length === 0) return [];
+
+  const results = await Promise.all(queries);
+  for (const r of results) {
+    if (r.error) throw r.error;
+  }
+  return (results.flatMap((r) => r.data ?? []) as SharedDocumentRow[])
+    .sort(
+      (a, b) =>
+        new Date(b.published_at ?? b.updated_at).getTime() -
+        new Date(a.published_at ?? a.updated_at).getTime(),
+    );
+}
+
+// ---------------------------------------------------------------------
 // BUSINESSES - lead/client tracking for a business (not a CRM login
 // account), with one or more contacts connected to it and a running
 // list of program referrals with status + dates. Meeting notes for a

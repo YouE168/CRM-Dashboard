@@ -172,6 +172,48 @@ export type Database = {
         };
         Relationships: [];
       };
+      // A longer, formal document (title + body) for a business or
+      // individual member - draft until published, at which point the
+      // person it's about can see and download it from their dashboard.
+      shared_documents: {
+        Row: {
+          id: string;
+          member_type: string;
+          member_id: string;
+          title: string;
+          content: string;
+          status: string;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          published_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          member_type: string;
+          member_id: string;
+          title: string;
+          content?: string;
+          status?: string;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          published_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          member_type?: string;
+          member_id?: string;
+          title?: string;
+          content?: string;
+          status?: string;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          published_at?: string | null;
+        };
+        Relationships: [];
+      };
       // Lead/client tracking for a business (not a login account) -
       // Jody adds a business, connects one or more contacts to it, and
       // logs program referrals with status + dates. Meeting notes for a
