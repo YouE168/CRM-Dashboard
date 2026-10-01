@@ -3619,8 +3619,10 @@ export function subscribeToCaseNotes(onChange: () => void) {
 // for a business, or the member's primary_role for an individual).
 export interface SharedDocumentRow {
   id: string;
-  member_type: string;
-  member_id: string;
+  // null on a "group" document (shared with multiple recipients via
+  // shared_document_recipients instead of a single owner).
+  member_type: string | null;
+  member_id: string | null;
   title: string;
   content: string;
   status: "draft" | "published";
@@ -3628,6 +3630,133 @@ export interface SharedDocumentRow {
   created_at: string;
   updated_at: string;
   published_at: string | null;
+}
+
+export interface SharedDocumentRecipientRow {
+  id: string;
+  document_id: string;
+  member_type: string;
+  member_id: string;
+  member_name: string;
+}
+
+// One simple option for the "who should get this?" picker when creating
+// a group document - covers every individual member (mentee,
+// entrepreneur, partner, coalition - mentors excluded, since they're not
+// recipients of client-facing documents) plus every business.
+export interface DocumentRecipientOption {
+  member_type: string;
+  member_id: string;
+  member_name: string;
+}
+
+export async function getRecipientOptions(): Promise<DocumentRecipientOption[]> {
+  const [members, businesses] = await Promise.all([
+    getAllCrmMembers(),
+    getAllBusinesses(),
+  ]);
+  const memberOptions: DocumentRecipientOption[] = members
+    .filter((m) => m.member_type !== "mentor")
+    .map((m) => ({
+      member_type: m.member_type,
+      member_id: m.id,
+      member_name: m.name,
+    }));
+  const businessOptions: DocumentRecipientOption[] = businesses.map((b) => ({
+    member_type: "business",
+    member_id: b.id,
+    member_name: b.name,
+  }));
+  return [...memberOptions, ...businessOptions];
+}
+
+// Group documents - one document, many recipients. Distinct from
+// addSharedDocument (single owner) above: member_type/member_id stay
+// null on the shared_documents row, and every recipient gets their own
+// row in shared_document_recipients instead.
+export async function getGroupSharedDocuments(): Promise<SharedDocumentRow[]> {
+  const { data, error } = await supabase
+    .from("shared_documents")
+    .select("*")
+    .is("member_id", null)
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return data as SharedDocumentRow[];
+}
+
+export async function getRecipientsForDocument(
+  documentId: string,
+): Promise<SharedDocumentRecipientRow[]> {
+  const { data, error } = await supabase
+    .from("shared_document_recipients")
+    .select("*")
+    .eq("document_id", documentId)
+    .order("member_name");
+  if (error) throw error;
+  return data as SharedDocumentRecipientRow[];
+}
+
+export async function addGroupSharedDocument(
+  title: string,
+  content: string,
+  author: string,
+  recipients: DocumentRecipientOption[],
+): Promise<SharedDocumentRow> {
+  const { data, error } = await supabase
+    .from("shared_documents")
+    .insert({
+      member_type: null,
+      member_id: null,
+      title,
+      content,
+      created_by: author,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  if (recipients.length > 0) {
+    const { error: recipientsError } = await supabase
+      .from("shared_document_recipients")
+      .insert(
+        recipients.map((r) => ({
+          document_id: data.id,
+          member_type: r.member_type,
+          member_id: r.member_id,
+          member_name: r.member_name,
+        })),
+      );
+    if (recipientsError) throw recipientsError;
+  }
+  return data as SharedDocumentRow;
+}
+
+// Replaces the full recipient list for a group document (simplest way to
+// let Jody add/remove recipients when editing - delete everything, then
+// insert the new set).
+export async function setGroupDocumentRecipients(
+  documentId: string,
+  recipients: DocumentRecipientOption[],
+): Promise<void> {
+  const { error: deleteError } = await supabase
+    .from("shared_document_recipients")
+    .delete()
+    .eq("document_id", documentId);
+  if (deleteError) throw deleteError;
+
+  if (recipients.length > 0) {
+    const { error: insertError } = await supabase
+      .from("shared_document_recipients")
+      .insert(
+        recipients.map((r) => ({
+          document_id: documentId,
+          member_type: r.member_type,
+          member_id: r.member_id,
+          member_name: r.member_name,
+        })),
+      );
+    if (insertError) throw insertError;
+  }
 }
 
 export async function getSharedDocuments(
@@ -3734,18 +3863,49 @@ export async function getMyPublishedDocuments(
         .in("member_id", businessIds),
     );
   }
-  if (queries.length === 0) return [];
 
-  const results = await Promise.all(queries);
+  // Group documents (shared with multiple recipients) - find every
+  // recipient row that's "me" (my own participant row, or a business I'm
+  // a contact of), then fetch those documents directly by id.
+  const myMemberIds = [
+    ...(participantRow?.id ? [participantRow.id] : []),
+    ...businessIds,
+  ];
+  const fetchGroupDocs = async (): Promise<SharedDocumentRow[]> => {
+    if (myMemberIds.length === 0) return [];
+    const { data, error } = await supabase
+      .from("shared_document_recipients")
+      .select("document_id")
+      .in("member_id", myMemberIds);
+    if (error) throw error;
+    const documentIds = [...new Set((data ?? []).map((r) => r.document_id))];
+    if (documentIds.length === 0) return [];
+    const { data: docs, error: docsError } = await supabase
+      .from("shared_documents")
+      .select("*")
+      .eq("status", "published")
+      .in("id", documentIds);
+    if (docsError) throw docsError;
+    return (docs ?? []) as SharedDocumentRow[];
+  };
+  const groupDocsPromise: Promise<SharedDocumentRow[]> = fetchGroupDocs();
+
+  const [results, groupDocs] = await Promise.all([
+    Promise.all(queries),
+    groupDocsPromise,
+  ]);
   for (const r of results) {
     if (r.error) throw r.error;
   }
-  return (results.flatMap((r) => r.data ?? []) as SharedDocumentRow[])
-    .sort(
-      (a, b) =>
-        new Date(b.published_at ?? b.updated_at).getTime() -
-        new Date(a.published_at ?? a.updated_at).getTime(),
-    );
+  const directDocs = results.flatMap((r) => r.data ?? []) as SharedDocumentRow[];
+  const byId = new Map<string, SharedDocumentRow>();
+  for (const doc of [...directDocs, ...groupDocs]) byId.set(doc.id, doc);
+
+  return [...byId.values()].sort(
+    (a, b) =>
+      new Date(b.published_at ?? b.updated_at).getTime() -
+      new Date(a.published_at ?? a.updated_at).getTime(),
+  );
 }
 
 // ---------------------------------------------------------------------

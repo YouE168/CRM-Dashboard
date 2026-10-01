@@ -181,8 +181,10 @@ export type Database = {
       shared_documents: {
         Row: {
           id: string;
-          member_type: string;
-          member_id: string;
+          // null on a "group" document shared with multiple recipients
+          // via shared_document_recipients instead of a single owner.
+          member_type: string | null;
+          member_id: string | null;
           title: string;
           content: string;
           status: string;
@@ -193,8 +195,8 @@ export type Database = {
         };
         Insert: {
           id?: string;
-          member_type: string;
-          member_id: string;
+          member_type?: string | null;
+          member_id?: string | null;
           title: string;
           content?: string;
           status?: string;
@@ -205,8 +207,8 @@ export type Database = {
         };
         Update: {
           id?: string;
-          member_type?: string;
-          member_id?: string;
+          member_type?: string | null;
+          member_id?: string | null;
           title?: string;
           content?: string;
           status?: string;
@@ -214,6 +216,37 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           published_at?: string | null;
+        };
+        Relationships: [];
+      };
+      // Recipients of a "group" shared document (see shared_documents
+      // above) - one row per member/business the document was shared
+      // with, so a single document can go to multiple people at once
+      // (e.g. notes from one meeting with several attendees).
+      shared_document_recipients: {
+        Row: {
+          id: string;
+          document_id: string;
+          member_type: string;
+          member_id: string;
+          member_name: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          document_id: string;
+          member_type: string;
+          member_id: string;
+          member_name: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          document_id?: string;
+          member_type?: string;
+          member_id?: string;
+          member_name?: string;
+          created_at?: string;
         };
         Relationships: [];
       };

@@ -80,6 +80,7 @@ import {
 import { supabase } from "@/lib/supabase/client";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { getProgramsForRole, getDefaultProgramsForRole, ROLE_PROGRAM_OPTIONS } from "@/lib/role-programs";
+import { GroupDocumentsTab } from "@/components/dashboard/group-documents-tab";
 
 const typeLabels: Record<string, string> = {
   mentee: "Mentee",
@@ -2978,7 +2979,9 @@ export function BusinessProfessionalServicesTab() {
   const [adminId, setAdminId] = useState<string | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [rosterTab, setRosterTab] = useState<"members" | "businesses">("members");
+  const [rosterTab, setRosterTab] = useState<"members" | "businesses" | "documents">(
+    "members",
+  );
   const [businesses, setBusinesses] = useState<BusinessWithDetails[]>([]);
   const [businessesLoading, setBusinessesLoading] = useState(true);
   const [selectedBusiness, setSelectedBusiness] = useState<BusinessWithDetails | null>(null);
@@ -3560,7 +3563,21 @@ export function BusinessProfessionalServicesTab() {
         >
           Businesses
         </button>
+        <button
+          onClick={() => setRosterTab("documents")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            rosterTab === "documents"
+              ? "bg-white text-emerald-700 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Group Documents
+        </button>
       </div>
+
+      {rosterTab === "documents" && (
+        <GroupDocumentsTab authorName={currentAuthorName} />
+      )}
 
       {rosterTab === "businesses" && (
         <BusinessesSection
