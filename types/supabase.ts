@@ -139,6 +139,7 @@ export type Database = {
           meeting_time: string | null;
           meeting_location: string | null;
           meeting_link: string | null;
+          duration_minutes: number | null;
           reminder_sent: boolean;
           created_at: string;
         };
@@ -153,6 +154,7 @@ export type Database = {
           meeting_time?: string | null;
           meeting_location?: string | null;
           meeting_link?: string | null;
+          duration_minutes?: number | null;
           reminder_sent?: boolean;
           created_at?: string;
         };
@@ -167,6 +169,7 @@ export type Database = {
           meeting_time?: string | null;
           meeting_location?: string | null;
           meeting_link?: string | null;
+          duration_minutes?: number | null;
           reminder_sent?: boolean;
           created_at?: string;
         };

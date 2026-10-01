@@ -2414,6 +2414,70 @@ export async function getAllSessionsForMentor(mentorName: string): Promise<Mente
   return data;
 }
 
+// One normalized row per logged meeting, for the admin "Download Time
+// Log" CSV export - combines admin<->client/member meetings (case_notes)
+// and mentor<->mentee/entrepreneur sessions (mentee_sessions) into a
+// single list, regardless of which table it actually came from.
+export interface MeetingTimeLogRow {
+  type: "Admin Meeting" | "Mentor Session";
+  personName: string;
+  withOrBy: string; // author (admin meetings) or mentor_name (mentor sessions)
+  date: string | null;
+  time: string | null;
+  durationMinutes: number | null;
+  topicOrNote: string;
+}
+
+export async function getMeetingTimeLog(): Promise<MeetingTimeLogRow[]> {
+  const [caseNotesRes, sessionsRes, participantsRes] = await Promise.all([
+    supabase
+      .from("case_notes")
+      .select("member_name, author, meeting_date, meeting_time, duration_minutes, note")
+      .order("meeting_date", { ascending: false }),
+    supabase
+      .from("mentee_sessions")
+      .select("participant_id, date, time, duration, topic, mentor_name")
+      .order("date", { ascending: false }),
+    supabase.from("participants").select("id, name"),
+  ]);
+  if (caseNotesRes.error) throw caseNotesRes.error;
+  if (sessionsRes.error) throw sessionsRes.error;
+  if (participantsRes.error) throw participantsRes.error;
+
+  const participantNameById = new Map(
+    (participantsRes.data || []).map((p: { id: string; name: string | null }) => [
+      p.id,
+      p.name || "Unknown",
+    ]),
+  );
+
+  const adminRows: MeetingTimeLogRow[] = (caseNotesRes.data || []).map((n) => ({
+    type: "Admin Meeting" as const,
+    personName: n.member_name,
+    withOrBy: n.author || "—",
+    date: n.meeting_date,
+    time: n.meeting_time,
+    durationMinutes: n.duration_minutes,
+    topicOrNote: n.note ? n.note.slice(0, 120) : "",
+  }));
+
+  const mentorRows: MeetingTimeLogRow[] = (sessionsRes.data || []).map((s) => ({
+    type: "Mentor Session" as const,
+    personName: (s.participant_id && participantNameById.get(s.participant_id)) || "Unknown",
+    withOrBy: s.mentor_name || "—",
+    date: s.date,
+    time: s.time,
+    durationMinutes: s.duration ?? null,
+    topicOrNote: s.topic || "",
+  }));
+
+  return [...adminRows, ...mentorRows].sort((a, b) => {
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+  });
+}
+
 export async function addMenteeSession(session: {
   participant_id: string | null;
   date: string;
@@ -3446,6 +3510,9 @@ export interface CaseNoteRow {
   meeting_time: string | null;
   meeting_location: string | null;
   meeting_link: string | null;
+  // How long the meeting actually ran, in minutes - typed in by whoever
+  // logs the note (real Zoom auto-fill is a possible later phase).
+  duration_minutes: number | null;
   created_at: string;
 }
 
@@ -3493,6 +3560,7 @@ export async function addCaseNote(
     time?: string;
     location?: string;
     link?: string;
+    durationMinutes?: number;
   },
 ): Promise<void> {
   const { error } = await supabase.from("case_notes").insert({
@@ -3505,6 +3573,7 @@ export async function addCaseNote(
     meeting_time: meetingDetails?.time || null,
     meeting_location: meetingDetails?.location || null,
     meeting_link: meetingDetails?.link || null,
+    duration_minutes: meetingDetails?.durationMinutes ?? null,
   });
   if (error) throw error;
 }

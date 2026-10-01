@@ -66,6 +66,8 @@ import {
   deleteBusinessReferral,
   subscribeToBusinesses,
   getAllPrograms,
+  getMeetingTimeLog,
+  type MeetingTimeLogRow,
   type CrmMemberRow,
   type CaseNoteRow,
   type PersonalNoteRow,
@@ -538,6 +540,7 @@ function MemberDetailModal({
   const isActive = member.status?.toLowerCase() !== "inactive";
   const [meetingLocation, setMeetingLocation] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
+  const [meetingDuration, setMeetingDuration] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   // Lets Jody grant/revoke combined mentee+entrepreneur access after the
@@ -655,6 +658,7 @@ function MemberDetailModal({
           time: meetingTime,
           location: meetingLocation,
           link: meetingLink,
+          durationMinutes: meetingDuration ? parseInt(meetingDuration, 10) : undefined,
         },
       );
       setNewNote("");
@@ -662,6 +666,7 @@ function MemberDetailModal({
       setMeetingTime("");
       setMeetingLocation("");
       setMeetingLink("");
+      setMeetingDuration("");
       setShowMeetingDetails(false);
       await loadNotes();
     } catch (err) {
@@ -723,7 +728,7 @@ function MemberDetailModal({
       key={n.id}
       className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
     >
-      {(n.meeting_date || n.meeting_time || n.meeting_location || n.meeting_link) && (
+      {(n.meeting_date || n.meeting_time || n.meeting_location || n.meeting_link || n.duration_minutes) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs text-emerald-700">
           {n.meeting_date && (
             <span className="flex items-center gap-1">
@@ -753,6 +758,11 @@ function MemberDetailModal({
               <LinkIcon className="h-3 w-3" />
               Meeting link
             </a>
+          )}
+          {n.duration_minutes != null && (
+            <span className="flex items-center gap-1 text-gray-500">
+              ⏱ {n.duration_minutes} min
+            </span>
           )}
         </div>
       )}
@@ -1035,6 +1045,19 @@ function MemberDetailModal({
                     value={meetingLink}
                     onChange={(e) => setMeetingLink(e.target.value)}
                     placeholder="Zoom / meeting URL"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">
+                    Duration (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={meetingDuration}
+                    onChange={(e) => setMeetingDuration(e.target.value)}
+                    placeholder="e.g. 30"
                     className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                   />
                 </div>
@@ -1340,6 +1363,7 @@ function BusinessDetailModal({
   const [meetingTime, setMeetingTime] = useState("");
   const [meetingLocation, setMeetingLocation] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
+  const [meetingDuration, setMeetingDuration] = useState("");
   const [pendingDeleteNoteId, setPendingDeleteNoteId] = useState<string | null>(null);
   const [deletingNote, setDeletingNote] = useState(false);
   const [pendingDeleteBusiness, setPendingDeleteBusiness] = useState(false);
@@ -1563,12 +1587,14 @@ function BusinessDetailModal({
         time: meetingTime,
         location: meetingLocation,
         link: meetingLink,
+        durationMinutes: meetingDuration ? parseInt(meetingDuration, 10) : undefined,
       });
       setNewNote("");
       setMeetingDate("");
       setMeetingTime("");
       setMeetingLocation("");
       setMeetingLink("");
+      setMeetingDuration("");
       setShowMeetingDetails(false);
       await loadNotes();
     } catch (err) {
@@ -1605,7 +1631,7 @@ function BusinessDetailModal({
 
   const renderNoteCard = (n: CaseNoteRow) => (
     <div key={n.id} className="group bg-gray-50 p-3 rounded-lg border border-gray-100">
-      {(n.meeting_date || n.meeting_time || n.meeting_location || n.meeting_link) && (
+      {(n.meeting_date || n.meeting_time || n.meeting_location || n.meeting_link || n.duration_minutes) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2 text-xs text-emerald-700">
           {n.meeting_date && (
             <span className="flex items-center gap-1">
@@ -1635,6 +1661,11 @@ function BusinessDetailModal({
               <LinkIcon className="h-3 w-3" />
               Meeting link
             </a>
+          )}
+          {n.duration_minutes != null && (
+            <span className="flex items-center gap-1 text-gray-500">
+              ⏱ {n.duration_minutes} min
+            </span>
           )}
         </div>
       )}
@@ -2038,6 +2069,19 @@ function BusinessDetailModal({
                     value={meetingLink}
                     onChange={(e) => setMeetingLink(e.target.value)}
                     placeholder="Zoom / meeting URL"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">
+                    Duration (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={meetingDuration}
+                    onChange={(e) => setMeetingDuration(e.target.value)}
+                    placeholder="e.g. 30"
                     className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                   />
                 </div>
@@ -2944,6 +2988,47 @@ export function BusinessProfessionalServicesTab() {
   const [deletingReminder, setDeletingReminder] = useState(false);
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
   const [deletingSession, setDeletingSession] = useState(false);
+  const [downloadingTimeLog, setDownloadingTimeLog] = useState(false);
+
+  const handleDownloadTimeLog = async () => {
+    setDownloadingTimeLog(true);
+    try {
+      const rows = await getMeetingTimeLog();
+      const header = ["Type", "Person", "With/By", "Date", "Time", "Duration (minutes)", "Topic/Note"];
+      const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+      const lines = [
+        header.map(escapeCsv).join(","),
+        ...rows.map((r) =>
+          [
+            r.type,
+            r.personName,
+            r.withOrBy,
+            r.date || "",
+            r.time || "",
+            r.durationMinutes != null ? String(r.durationMinutes) : "",
+            r.topicOrNote,
+          ]
+            .map((v) => escapeCsv(String(v)))
+            .join(","),
+        ),
+      ];
+      const csv = lines.join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `time-log-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to download time log:", err);
+      alert("Couldn't build the time log CSV. Please try again.");
+    } finally {
+      setDownloadingTimeLog(false);
+    }
+  };
 
   const confirmDeleteSession = async () => {
     if (!pendingDeleteSessionId) return;
@@ -3266,13 +3351,23 @@ export function BusinessProfessionalServicesTab() {
 
   return (
     <>
-      <div className="mb-6">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-700 to-teal-700 bg-clip-text text-transparent">
-          Business Professional Services
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Every CRM member and their case notes, in one place
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-700 to-teal-700 bg-clip-text text-transparent">
+            Business Professional Services
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Every CRM member and their case notes, in one place
+          </p>
+        </div>
+        <button
+          onClick={handleDownloadTimeLog}
+          disabled={downloadingTimeLog}
+          className="shrink-0 flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download className="h-4 w-4" />
+          {downloadingTimeLog ? "Preparing…" : "Download Time Log (CSV)"}
+        </button>
       </div>
 
       {/* Stats Cards */}

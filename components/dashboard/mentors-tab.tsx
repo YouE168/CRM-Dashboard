@@ -29,6 +29,7 @@ import {
   addMenteeNote,
   getSessionsForParticipant,
   addMenteeSession,
+  updateMenteeSession,
   subscribeToMenteeData,
   type MentorRow,
   type MentorsStats,
@@ -73,6 +74,62 @@ function initials(name: string): string {
   return p.length >= 2 ? p[0][0] + p[1][0] : p[0][0];
 }
 
+// A single scheduled-session row, with an inline "Duration (minutes)"
+// field the mentor can fill in/edit after the session happens - saves
+// straight to mentee_sessions.duration on blur.
+function SessionRow({
+  session,
+  onSaveDuration,
+}: {
+  session: MenteeSessionRow;
+  onSaveDuration: (sessionId: string, minutes: string) => void;
+}) {
+  const [duration, setDuration] = useState(session.duration ? String(session.duration) : "");
+
+  useEffect(() => {
+    setDuration(session.duration ? String(session.duration) : "");
+  }, [session.duration]);
+
+  return (
+    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="font-medium text-gray-800">{session.topic}</p>
+          <p className="text-xs text-gray-500">
+            {new Date(session.date).toLocaleDateString()} at {session.time}
+          </p>
+          {session.notes && <p className="text-xs text-gray-600 mt-1">📝 {session.notes}</p>}
+        </div>
+        {session.meeting_link && (
+          <button
+            onClick={() => window.open(session.meeting_link!, "_blank")}
+            className="px-2 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"
+          >
+            <Video className="h-3 w-3 inline mr-1" />
+            Join
+          </button>
+        )}
+      </div>
+      <div className="flex items-center gap-2 mt-2">
+        <label className="text-xs text-gray-500">Duration (minutes)</label>
+        <input
+          type="number"
+          min={0}
+          value={duration}
+          onChange={(e) => setDuration(e.target.value)}
+          onBlur={() => {
+            if (duration !== (session.duration ? String(session.duration) : "")) {
+              onSaveDuration(session.id, duration);
+            }
+          }}
+          placeholder="e.g. 30"
+          className="w-20 border border-blue-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+      </div>
+    </div>
+  );
+}
+
 // Schedule Session Modal
 function ScheduleSessionModal({
   mentee,
@@ -88,6 +145,7 @@ function ScheduleSessionModal({
   const [topic, setTopic] = useState("");
   const [notes, setNotes] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
+  const [duration, setDuration] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +153,7 @@ function ScheduleSessionModal({
       alert("Please fill in all required fields");
       return;
     }
-    onSchedule({ date, time, topic, notes, meetingLink });
+    onSchedule({ date, time, topic, notes, meetingLink, duration });
     onClose();
   };
 
@@ -159,6 +217,19 @@ function ScheduleSessionModal({
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               placeholder="What will be covered? Any prep work?"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Duration (minutes)
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              placeholder="Leave blank if not known yet"
               className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -242,6 +313,7 @@ function MenteeDetailsModal({
     topic: string;
     notes: string;
     meetingLink: string;
+    duration?: string;
   }) => {
     try {
       await addMenteeSession({
@@ -252,11 +324,24 @@ function MenteeDetailsModal({
         notes: session.notes,
         meeting_link: session.meetingLink,
         mentor_name: currentMentorName,
+        duration: session.duration ? parseInt(session.duration, 10) : undefined,
       });
       await loadDetails();
     } catch (err) {
       console.error("Failed to schedule session:", err);
       alert("Couldn't schedule that session. Please try again.");
+    }
+  };
+
+  const handleSaveDuration = async (sessionId: string, minutes: string) => {
+    try {
+      await updateMenteeSession(sessionId, {
+        duration: minutes ? parseInt(minutes, 10) : 0,
+      });
+      await loadDetails();
+    } catch (err) {
+      console.error("Failed to save session duration:", err);
+      alert("Couldn't save that duration. Please try again.");
     }
   };
 
@@ -340,28 +425,11 @@ function MenteeDetailsModal({
                 </div>
                 <div className="space-y-2">
                   {sessions.map((session) => (
-                    <div key={session.id} className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-gray-800">{session.topic}</p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(session.date).toLocaleDateString()} at {session.time}
-                          </p>
-                          {session.notes && (
-                            <p className="text-xs text-gray-600 mt-1">📝 {session.notes}</p>
-                          )}
-                        </div>
-                        {session.meeting_link && (
-                          <button
-                            onClick={() => window.open(session.meeting_link!, "_blank")}
-                            className="px-2 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"
-                          >
-                            <Video className="h-3 w-3 inline mr-1" />
-                            Join
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                    <SessionRow
+                      key={session.id}
+                      session={session}
+                      onSaveDuration={handleSaveDuration}
+                    />
                   ))}
                 </div>
               </div>

@@ -32,6 +32,7 @@ import { PartnersTab } from "@/components/dashboard/partners-tab";
 import { CoalitionsTab } from "@/components/dashboard/coalitions-tab";
 import { MenteesTab } from "@/components/dashboard/mentees-tab";
 import { EntrepreneursTab } from "@/components/dashboard/entrepreneurs-tab";
+import { MentorsAdminTab } from "@/components/dashboard/mentors-admin-tab";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -260,7 +261,7 @@ export default function ProgramManagementPage() {
   // self-reported by the partner) - looks similar (programs, hours,
   // outcomes) but is not the same records or the same table.
   const [pageView, setPageView] = useState<
-    "programs" | "partners" | "coalitions" | "mentees" | "entrepreneurs"
+    "programs" | "partners" | "coalitions" | "mentees" | "entrepreneurs" | "mentors"
   >("programs");
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
@@ -869,6 +870,16 @@ export default function ProgramManagementPage() {
           >
             💼 Entrepreneurs
           </button>
+          <button
+            onClick={() => setPageView("mentors")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              pageView === "mentors"
+                ? "bg-rose-600 text-white"
+                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            👥 Mentors
+          </button>
         </div>
         <p className="text-xs text-gray-400 mb-6">
           {pageView === "programs"
@@ -879,7 +890,9 @@ export default function ProgramManagementPage() {
                 ? "Self-reported meetings, initiatives, and shared resources from coalition leaders - a separate set of accounts and data from the participants above, even though both reference the same programs catalog."
                 : pageView === "mentees"
                   ? "Mentee accounts and which programs each one is approved for. Every mentee also has an Entrepreneur Hub view of their own account - manage that from the Entrepreneurs tab."
-                  : "Entrepreneur accounts and which programs each one is approved for - pure entrepreneur signups, plus mentees (who can toggle into this same view)."}
+                  : pageView === "entrepreneurs"
+                    ? "Entrepreneur accounts and which programs each one is approved for - pure entrepreneur signups, plus mentees (who can toggle into this same view)."
+                    : "Mentor accounts - add a new mentor or deactivate one who's no longer active."}
         </p>
 
         {pageView === "partners" ? (
@@ -890,6 +903,8 @@ export default function ProgramManagementPage() {
           <MenteesTab />
         ) : pageView === "entrepreneurs" ? (
           <EntrepreneursTab />
+        ) : pageView === "mentors" ? (
+          <MentorsAdminTab />
         ) : (
         <>
         {/* Program List */}
