@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { FileText, Download, X } from "lucide-react";
+import { RichTextEditor, RichContent } from "@/components/ui/rich-text-editor";
 import { downloadNodeAsLetterPdf, DOCUMENT_PAGE_WIDTH } from "@/lib/document-pdf";
 import {
   getMyPublishedDocuments,
@@ -55,9 +56,7 @@ function DocumentViewerModal({
             <p className="text-xs text-gray-400 mb-4">
               Published {new Date(doc.published_at ?? doc.updated_at).toLocaleString()}
             </p>
-            <div className="text-base text-gray-800 whitespace-pre-wrap leading-relaxed">
-              {doc.content || " "}
-            </div>
+            <RichContent html={doc.content} />
           </div>
         </div>
         {/* Off-screen, fixed-width copy (title + content) captured for the PDF. */}
@@ -67,9 +66,7 @@ function DocumentViewerModal({
             <p className="text-sm text-gray-400 mb-6">
               Published {new Date(doc.published_at ?? doc.updated_at).toLocaleDateString()}
             </p>
-            <div className="text-base text-gray-800 whitespace-pre-wrap leading-relaxed">
-              {doc.content || " "}
-            </div>
+            <RichContent html={doc.content} />
           </div>
         </div>
         <div className="sticky bottom-0 bg-white p-5 border-t border-gray-100 flex justify-end">

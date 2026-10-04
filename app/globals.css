@@ -172,3 +172,24 @@
 .dark .hover\:bg-gray-50:hover {
   background-color: #222222 !important;
 }
+/* Shared Documents rich text (editor + viewer + PDF capture). Tailwind's
+   reset strips list bullets and heading sizes, so restore them here, and
+   map the editor's font sizes (<font size="N">). */
+.rich-content ul { list-style: disc; padding-left: 1.5rem; margin: 0.5rem 0; }
+.rich-content ol { list-style: decimal; padding-left: 1.5rem; margin: 0.5rem 0; }
+.rich-content li { margin: 0.15rem 0; }
+.rich-content b, .rich-content strong { font-weight: 700; }
+.rich-content i, .rich-content em { font-style: italic; }
+.rich-content u { text-decoration: underline; }
+.rich-content p { margin: 0 0 0.5rem; }
+.rich-content h1 { font-size: 1.75rem; font-weight: 700; margin: 0.75rem 0 0.5rem; }
+.rich-content h2 { font-size: 1.4rem; font-weight: 700; margin: 0.75rem 0 0.5rem; }
+.rich-content h3 { font-size: 1.15rem; font-weight: 700; margin: 0.75rem 0 0.5rem; }
+.rich-content font[size="1"] { font-size: 0.75rem; }
+.rich-content font[size="2"] { font-size: 0.875rem; }
+.rich-content font[size="3"] { font-size: 1rem; }
+.rich-content font[size="4"] { font-size: 1.25rem; }
+.rich-content font[size="5"] { font-size: 1.5rem; }
+.rich-content font[size="6"] { font-size: 2rem; }
+.rich-content font[size="7"] { font-size: 2.5rem; }
+.rich-editor:empty:before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }

@@ -82,6 +82,7 @@ import {
 import { supabase } from "@/lib/supabase/client";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { getProgramsForRole, getDefaultProgramsForRole, ROLE_PROGRAM_OPTIONS } from "@/lib/role-programs";
+import { RichTextEditor, RichContent } from "@/components/ui/rich-text-editor";
 import { downloadNodeAsLetterPdf, DOCUMENT_PAGE_WIDTH } from "@/lib/document-pdf";
 import { GroupDocumentsTab } from "@/components/dashboard/group-documents-tab";
 
@@ -139,9 +140,7 @@ function DocumentPage({
         {title || "Untitled Document"}
       </h1>
       {meta && <p className="text-sm text-gray-400 mb-6">{meta}</p>}
-      <div className="text-base text-gray-800 whitespace-pre-wrap leading-relaxed">
-        {content || " "}
-      </div>
+      <RichContent html={content} />
     </div>
   );
 }
@@ -303,12 +302,10 @@ function DocumentEditorModal({
             placeholder="Document title"
             className="w-full text-2xl font-bold border-0 border-b border-gray-200 pb-2 focus:outline-none focus:border-indigo-400 placeholder:text-gray-300"
           />
-          <textarea
+          <RichTextEditor
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={setContent}
             placeholder="Write the meeting summary, plan, or anything else you want to document here..."
-            rows={16}
-            className="w-full border border-gray-200 rounded-xl p-4 text-base leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
           />
         </div>
 
