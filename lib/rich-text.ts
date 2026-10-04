@@ -54,6 +54,18 @@ export function sanitizeHtml(html: string): string {
         const size = el.getAttribute("size");
         if (size && /^[1-7]$/.test(size)) clean.setAttribute("size", size);
       }
+      // Text alignment - browsers write it as align="center" or
+      // style="text-align: center" depending on the engine; keep only the
+      // alignment value, never arbitrary styles.
+      if (["DIV", "P", "H1", "H2", "H3", "LI", "UL", "OL"].includes(el.tagName)) {
+        const raw =
+          el.getAttribute("align") ||
+          (el as HTMLElement).style?.textAlign ||
+          "";
+        if (["left", "center", "right", "justify"].includes(raw)) {
+          clean.setAttribute("align", raw);
+        }
+      }
       walk(el, clean);
       target.appendChild(clean);
     });

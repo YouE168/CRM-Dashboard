@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Bold, Italic, Underline, List, ListOrdered } from "lucide-react";
+import { Bold, Italic, Underline, List, ListOrdered, AlignLeft, AlignCenter, AlignRight } from "lucide-react";
 import { contentToHtml, sanitizeHtml } from "@/lib/rich-text";
 
 // Small Word-style editor for Shared Documents: bold, italic, underline,
@@ -43,6 +43,18 @@ export function RichTextEditor({
 
   const run = (command: string, arg?: string) => {
     ref.current?.focus();
+    // On a completely empty document there's no block to align yet - give
+    // it one and put the cursor inside, so alignment can be picked before
+    // typing anything.
+    if (command.startsWith("justify") && ref.current && !ref.current.innerHTML.trim()) {
+      ref.current.innerHTML = "<div><br></div>";
+      const range = document.createRange();
+      range.setStart(ref.current.firstChild as Node, 0);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
     document.execCommand("styleWithCSS", false, "false");
     document.execCommand(command, false, arg);
     emit();
@@ -80,6 +92,16 @@ export function RichTextEditor({
         </button>
         <button type="button" className={btn} title="Underline (Ctrl+U)" onMouseDown={(e) => { e.preventDefault(); run("underline"); }}>
           <Underline className="h-4 w-4" />
+        </button>
+        <span className="w-px h-5 bg-gray-200 mx-1" />
+        <button type="button" className={btn} title="Align left" onMouseDown={(e) => { e.preventDefault(); run("justifyLeft"); }}>
+          <AlignLeft className="h-4 w-4" />
+        </button>
+        <button type="button" className={btn} title="Center" onMouseDown={(e) => { e.preventDefault(); run("justifyCenter"); }}>
+          <AlignCenter className="h-4 w-4" />
+        </button>
+        <button type="button" className={btn} title="Align right" onMouseDown={(e) => { e.preventDefault(); run("justifyRight"); }}>
+          <AlignRight className="h-4 w-4" />
         </button>
         <span className="w-px h-5 bg-gray-200 mx-1" />
         <button type="button" className={btn} title="Bullet list" onMouseDown={(e) => { e.preventDefault(); run("insertUnorderedList"); }}>
