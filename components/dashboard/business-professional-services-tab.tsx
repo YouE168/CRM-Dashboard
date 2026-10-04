@@ -28,6 +28,7 @@ import {
   Bell,
   FileText,
   Download,
+  Pencil,
   Globe,
 } from "lucide-react";
 import {
@@ -37,6 +38,7 @@ import {
   setProgramAccessByName,
   getCaseNotesForMember,
   addCaseNote,
+  updateCaseNote,
   deleteCaseNote,
   subscribeToCaseNotes,
   getUpcomingCaseNotes,
@@ -516,6 +518,117 @@ function DocumentsSection({
   );
 }
 
+// Edit an existing note/meeting - mainly so an upcoming meeting can be
+// rescheduled or have its location/link/duration corrected later.
+function EditNoteModal({
+  note,
+  onClose,
+  onSaved,
+}: {
+  note: CaseNoteRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [text, setText] = useState(note.note);
+  const [date, setDate] = useState(note.meeting_date ?? "");
+  const [time, setTime] = useState(note.meeting_time ?? "");
+  const [location, setLocation] = useState(note.meeting_location ?? "");
+  const [link, setLink] = useState(note.meeting_link ?? "");
+  const [duration, setDuration] = useState(
+    note.duration_minutes != null ? String(note.duration_minutes) : "",
+  );
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!text.trim()) {
+      alert("The note can't be empty.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateCaseNote(note.id, {
+        note: text.trim(),
+        meeting_date: date || null,
+        meeting_time: time || null,
+        meeting_location: location.trim() || null,
+        meeting_link: link.trim() || null,
+        duration_minutes: duration ? parseInt(duration, 10) : null,
+      });
+      onSaved();
+    } catch (err) {
+      console.error("Failed to update note:", err);
+      alert(
+        err instanceof Error && err.message.includes("permission")
+          ? err.message
+          : "Couldn't save those changes. Please try again.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputClass =
+    "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400";
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-gray-900">Edit meeting / note</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="p-5 space-y-3">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={4}
+            className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Date</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Time</label>
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Location</label>
+              <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Link</label>
+              <input type="text" value={link} onChange={(e) => setLink(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Duration (minutes)</label>
+              <input type="number" min={0} value={duration} onChange={(e) => setDuration(e.target.value)} className={inputClass} />
+            </div>
+          </div>
+        </div>
+        <div className="p-5 border-t border-gray-100 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Case notes + contact details for one member, regardless of what role
 // they are - opened from the roster table below.
 function MemberDetailModal({
@@ -544,6 +657,7 @@ function MemberDetailModal({
   const [meetingDuration, setMeetingDuration] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [editingNote, setEditingNote] = useState<CaseNoteRow | null>(null);
   // Lets Jody grant/revoke combined mentee+entrepreneur access after the
   // fact - e.g. someone meant to select both roles at signup but only
   // picked one. Only relevant for mentee/entrepreneur members.
@@ -774,14 +888,24 @@ function MemberDetailModal({
         <p className="text-xs text-gray-400">
           {n.author || "Staff"} · {new Date(n.created_at).toLocaleString()}
         </p>
-        <button
-          onClick={() => handleDeleteNote(n.id)}
-          className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
-          title="Delete note"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Delete</span>
-        </button>
+<div className="flex items-center gap-1">
+          <button
+            onClick={() => setEditingNote(n)}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+            title="Edit"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Edit</span>
+          </button>
+          <button
+            onClick={() => handleDeleteNote(n.id)}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
+            title="Delete note"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Delete</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1101,6 +1225,16 @@ function MemberDetailModal({
           </div>
         </div>
 
+        {editingNote && (
+          <EditNoteModal
+            note={editingNote}
+            onClose={() => setEditingNote(null)}
+            onSaved={() => {
+              setEditingNote(null);
+              loadNotes();
+            }}
+          />
+        )}
         <ConfirmationModal
           isOpen={pendingDeleteId !== null}
           title="Delete note"
@@ -1366,6 +1500,7 @@ function BusinessDetailModal({
   const [meetingLink, setMeetingLink] = useState("");
   const [meetingDuration, setMeetingDuration] = useState("");
   const [pendingDeleteNoteId, setPendingDeleteNoteId] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState<CaseNoteRow | null>(null);
   const [deletingNote, setDeletingNote] = useState(false);
   const [pendingDeleteBusiness, setPendingDeleteBusiness] = useState(false);
   const [deletingBusiness, setDeletingBusiness] = useState(false);
@@ -1675,14 +1810,24 @@ function BusinessDetailModal({
         <p className="text-xs text-gray-400">
           {n.author || "Staff"} · {new Date(n.created_at).toLocaleString()}
         </p>
-        <button
-          onClick={() => setPendingDeleteNoteId(n.id)}
-          className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
-          title="Delete note"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Delete</span>
-        </button>
+<div className="flex items-center gap-1">
+          <button
+            onClick={() => setEditingNote(n)}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+            title="Edit"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Edit</span>
+          </button>
+          <button
+            onClick={() => setPendingDeleteNoteId(n.id)}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
+            title="Delete note"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span className="text-xs font-medium">Delete</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -2119,6 +2264,16 @@ function BusinessDetailModal({
           </div>
         </div>
 
+        {editingNote && (
+          <EditNoteModal
+            note={editingNote}
+            onClose={() => setEditingNote(null)}
+            onSaved={() => {
+              setEditingNote(null);
+              loadNotes();
+            }}
+          />
+        )}
         <ConfirmationModal
           isOpen={pendingDeleteNoteId !== null}
           title="Delete note"

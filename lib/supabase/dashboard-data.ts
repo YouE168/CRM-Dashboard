@@ -3578,6 +3578,34 @@ export async function addCaseNote(
   if (error) throw error;
 }
 
+// Edit an existing note/meeting - e.g. reschedule an upcoming meeting or
+// fix its location/link/duration. Needs the case_notes UPDATE policy
+// (case_notes_update_policy.sql); without it Postgres silently updates 0
+// rows, so we check that a row actually came back.
+export async function updateCaseNote(
+  id: string,
+  updates: {
+    note: string;
+    meeting_date: string | null;
+    meeting_time: string | null;
+    meeting_location: string | null;
+    meeting_link: string | null;
+    duration_minutes: number | null;
+  },
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("case_notes")
+    .update(updates)
+    .eq("id", id)
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error(
+      "Update was blocked by a database permission. Run the case_notes update policy SQL, then try again.",
+    );
+  }
+}
+
 export async function deleteCaseNote(id: string): Promise<void> {
   const { data, error } = await supabase
     .from("case_notes")
