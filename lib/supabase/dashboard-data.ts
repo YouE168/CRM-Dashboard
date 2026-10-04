@@ -2421,25 +2421,38 @@ export async function getAllSessionsForMentor(mentorName: string): Promise<Mente
 export interface MeetingTimeLogRow {
   type: "Admin Meeting" | "Mentor Session";
   personName: string;
+  // Who the meeting is about, for filtering: "business" | mentee |
+  // entrepreneur | partner | coalition (admin meetings), or the
+  // participant's id (mentor sessions).
+  personType: string | null;
+  personId: string | null;
   withOrBy: string; // author (admin meetings) or mentor_name (mentor sessions)
   date: string | null;
   time: string | null;
   durationMinutes: number | null;
   topicOrNote: string;
+  // Programs the person is approved for (members) or has been referred to
+  // (businesses) - powers the "filter by program" option.
+  programNames: string[];
 }
 
 export async function getMeetingTimeLog(): Promise<MeetingTimeLogRow[]> {
-  const [caseNotesRes, sessionsRes, participantsRes] = await Promise.all([
-    supabase
-      .from("case_notes")
-      .select("member_name, author, meeting_date, meeting_time, duration_minutes, note")
-      .order("meeting_date", { ascending: false }),
-    supabase
-      .from("mentee_sessions")
-      .select("participant_id, date, time, duration, topic, mentor_name")
-      .order("date", { ascending: false }),
-    supabase.from("participants").select("id, name"),
-  ]);
+  const [caseNotesRes, sessionsRes, participantsRes, businessesRes, matching] =
+    await Promise.all([
+      supabase
+        .from("case_notes")
+        .select(
+          "member_type, member_id, member_name, author, meeting_date, meeting_time, duration_minutes, note",
+        )
+        .order("meeting_date", { ascending: false }),
+      supabase
+        .from("mentee_sessions")
+        .select("participant_id, date, time, duration, topic, mentor_name")
+        .order("date", { ascending: false }),
+      supabase.from("participants").select("id, name"),
+      getAllBusinesses(),
+      getAllParticipantsForMatching(),
+    ]);
   if (caseNotesRes.error) throw caseNotesRes.error;
   if (sessionsRes.error) throw sessionsRes.error;
   if (participantsRes.error) throw participantsRes.error;
@@ -2450,31 +2463,76 @@ export async function getMeetingTimeLog(): Promise<MeetingTimeLogRow[]> {
       p.name || "Unknown",
     ]),
   );
+  const programsByParticipantId = new Map(
+    matching.map((m) => [m.id, m.programNames]),
+  );
+  const programsByBusinessId = new Map(
+    businessesRes.map((b) => [
+      b.id,
+      [...new Set(b.referrals.map((r) => r.program_name))],
+    ]),
+  );
 
-  const adminRows: MeetingTimeLogRow[] = (caseNotesRes.data || []).map((n) => ({
-    type: "Admin Meeting" as const,
-    personName: n.member_name,
-    withOrBy: n.author || "—",
-    date: n.meeting_date,
-    time: n.meeting_time,
-    durationMinutes: n.duration_minutes,
-    topicOrNote: n.note ? n.note.slice(0, 120) : "",
-  }));
+  const adminRows: MeetingTimeLogRow[] = (caseNotesRes.data || [])
+    // Plain notes with no meeting date or duration aren't meetings.
+    .filter((n) => n.meeting_date || n.duration_minutes != null)
+    .map((n) => ({
+      type: "Admin Meeting" as const,
+      personName: n.member_name,
+      personType: n.member_type,
+      personId: n.member_id,
+      withOrBy: n.author || "—",
+      date: n.meeting_date,
+      time: n.meeting_time,
+      durationMinutes: n.duration_minutes,
+      topicOrNote: n.note ? n.note.slice(0, 120) : "",
+      programNames:
+        (n.member_type === "business"
+          ? programsByBusinessId.get(n.member_id)
+          : programsByParticipantId.get(n.member_id)) ?? [],
+    }));
 
   const mentorRows: MeetingTimeLogRow[] = (sessionsRes.data || []).map((s) => ({
     type: "Mentor Session" as const,
     personName: (s.participant_id && participantNameById.get(s.participant_id)) || "Unknown",
+    personType: "participant",
+    personId: s.participant_id,
     withOrBy: s.mentor_name || "—",
     date: s.date,
     time: s.time,
     durationMinutes: s.duration ?? null,
     topicOrNote: s.topic || "",
+    programNames: (s.participant_id && programsByParticipantId.get(s.participant_id)) || [],
   }));
 
   return [...adminRows, ...mentorRows].sort((a, b) => {
     if (!a.date) return 1;
     if (!b.date) return -1;
     return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+  });
+}
+
+// The signed-in person's OWN meeting time log (mentor, mentee,
+// entrepreneur, or a business contact) - read through the
+// get_my_time_log() database function so private admin note text is never
+// exposed, only the meeting facts (who, when, how long).
+export interface MyTimeLogRow {
+  entry_type: string;
+  person_name: string;
+  with_or_by: string;
+  meeting_date: string | null;
+  meeting_time: string | null;
+  duration_minutes: number | null;
+  topic: string;
+}
+
+export async function getMyTimeLog(): Promise<MyTimeLogRow[]> {
+  const { data, error } = await supabase.rpc("get_my_time_log");
+  if (error) throw error;
+  return ((data ?? []) as MyTimeLogRow[]).sort((a, b) => {
+    if (!a.meeting_date) return 1;
+    if (!b.meeting_date) return -1;
+    return a.meeting_date < b.meeting_date ? 1 : a.meeting_date > b.meeting_date ? -1 : 0;
   });
 }
 

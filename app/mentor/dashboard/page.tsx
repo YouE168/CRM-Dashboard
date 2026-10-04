@@ -424,6 +424,7 @@ function MenteeDetailModal({
 
 // Main Mentor Dashboard Component
 import { supabase } from "@/lib/supabase/client";
+import { MyTimeLogCard } from "@/components/dashboard/my-time-log-card";
 import {
   getMenteesForMentor,
   getGoalsForParticipant,
@@ -658,6 +659,8 @@ export default function MentorDashboardPage() {
             </div>
           </div>
         </div>
+
+        <MyTimeLogCard />
 
         {/* Search */}
         <div className="mb-6">

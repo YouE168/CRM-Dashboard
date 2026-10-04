@@ -67,6 +67,7 @@ import { DirectMessageChat } from "@/components/dashboard/direct-message-chat";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { AvatarPositionEditor } from "@/components/dashboard/avatar-position-editor";
 import { SharedDocumentsCard } from "@/components/dashboard/shared-documents-card";
+import { MyTimeLogCard } from "@/components/dashboard/my-time-log-card";
 import { linkifyText } from "@/lib/linkify";
 import { useRouter } from "next/navigation";
 import {
@@ -1827,6 +1828,8 @@ function CoalitionDashboard({
 
       <SharedDocumentsCard userId={userId} />
 
+      <MyTimeLogCard />
+
       {/* Support Section */}
       <div
         onClick={() =>
@@ -3436,6 +3439,8 @@ function PartnerDashboard({
       />
 
       <SharedDocumentsCard userId={userId} />
+
+      <MyTimeLogCard />
 
       {/* Support Section */}
       <div
@@ -5475,6 +5480,8 @@ function RoleBasedDashboardContent({
           </div>
 
           <SharedDocumentsCard userId={profile?.id ?? null} />
+
+          <MyTimeLogCard />
 
           {/* Support Section */}
           <div

@@ -1821,7 +1821,18 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      get_my_time_log: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          entry_type: string;
+          person_name: string;
+          with_or_by: string;
+          meeting_date: string | null;
+          meeting_time: string | null;
+          duration_minutes: number | null;
+          topic: string;
+        }[];
+      };
     };
     Enums: {
       [_ in never]: never;
