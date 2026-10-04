@@ -82,6 +82,7 @@ import {
 import { supabase } from "@/lib/supabase/client";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import { getProgramsForRole, getDefaultProgramsForRole, ROLE_PROGRAM_OPTIONS } from "@/lib/role-programs";
+import { downloadNodeAsLetterPdf, DOCUMENT_PAGE_WIDTH } from "@/lib/document-pdf";
 import { GroupDocumentsTab } from "@/components/dashboard/group-documents-tab";
 
 const typeLabels: Record<string, string> = {
@@ -255,27 +256,8 @@ function DocumentEditorModal({
     if (!printRef.current) return;
     setExportingPdf(true);
     try {
-      const [{ toCanvas }, { default: jsPDF }] = await Promise.all([
-        import("html-to-image"),
-        import("jspdf"),
-      ]);
-      const node = printRef.current;
-      const rect = node.getBoundingClientRect();
-      const canvas = await toCanvas(node, {
-        backgroundColor: "#ffffff",
-        pixelRatio: 2,
-        width: Math.ceil(rect.width),
-        height: Math.ceil(rect.height),
-      });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "px",
-        format: [canvas.width, canvas.height],
-      });
-      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
       const slug = (title || "document").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      pdf.save(`${slug}.pdf`);
+      await downloadNodeAsLetterPdf(printRef.current, `${slug}.pdf`);
     } catch (err) {
       console.error("Failed to export document to PDF:", err);
       alert("Couldn't download that document as a PDF. Please try again.");
@@ -375,7 +357,7 @@ function DocumentEditorModal({
       {/* Off-screen node captured for the PDF export - always rendered so
           html-to-image can measure/draw it, just placed outside the
           viewport instead of hidden (hidden nodes often render blank). */}
-      <div style={{ position: "fixed", top: 0, left: -99999 }}>
+      <div style={{ position: "fixed", top: 0, left: -99999, width: DOCUMENT_PAGE_WIDTH }}>
         <div ref={printRef}>
           <DocumentPage
             title={title}

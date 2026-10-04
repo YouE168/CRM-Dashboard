@@ -8,46 +8,11 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { FileText, Download, X } from "lucide-react";
+import { downloadNodeAsLetterPdf, DOCUMENT_PAGE_WIDTH } from "@/lib/document-pdf";
 import {
   getMyPublishedDocuments,
   type SharedDocumentRow,
 } from "@/lib/supabase/dashboard-data";
-
-function downloadDocumentPdf(
-  node: HTMLDivElement,
-  title: string,
-  onDone: () => void,
-  onError: () => void,
-) {
-  (async () => {
-    try {
-      const [{ toCanvas }, { default: jsPDF }] = await Promise.all([
-        import("html-to-image"),
-        import("jspdf"),
-      ]);
-      const rect = node.getBoundingClientRect();
-      const canvas = await toCanvas(node, {
-        backgroundColor: "#ffffff",
-        pixelRatio: 2,
-        width: Math.ceil(rect.width),
-        height: Math.ceil(rect.height),
-      });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "px",
-        format: [canvas.width, canvas.height],
-      });
-      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
-      const slug = (title || "document").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      pdf.save(`${slug}.pdf`);
-      onDone();
-    } catch (err) {
-      console.error("Failed to export document to PDF:", err);
-      onError();
-    }
-  })();
-}
 
 function DocumentViewerModal({
   doc,
@@ -59,18 +24,18 @@ function DocumentViewerModal({
   const [exportingPdf, setExportingPdf] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!printRef.current) return;
     setExportingPdf(true);
-    downloadDocumentPdf(
-      printRef.current,
-      doc.title,
-      () => setExportingPdf(false),
-      () => {
-        setExportingPdf(false);
-        alert("Couldn't download that document as a PDF. Please try again.");
-      },
-    );
+    try {
+      const slug = (doc.title || "document").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      await downloadNodeAsLetterPdf(printRef.current, `${slug}.pdf`);
+    } catch (err) {
+      console.error("Failed to export document to PDF:", err);
+      alert("Couldn't download that document as a PDF. Please try again.");
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   return (
@@ -86,12 +51,24 @@ function DocumentViewerModal({
           </button>
         </div>
         <div className="p-6">
-          <div ref={printRef} className="bg-white" style={{ width: "100%", maxWidth: 800 }}>
+          <div className="bg-white" style={{ width: "100%", maxWidth: 800 }}>
             <p className="text-xs text-gray-400 mb-4">
               Published {new Date(doc.published_at ?? doc.updated_at).toLocaleString()}
             </p>
             <div className="text-base text-gray-800 whitespace-pre-wrap leading-relaxed">
               {doc.content || " "}
+            </div>
+          </div>
+        </div>
+        {/* Off-screen, fixed-width copy (title + content) captured for the PDF. */}
+        <div style={{ position: "fixed", top: 0, left: -99999, width: DOCUMENT_PAGE_WIDTH }}>
+          <div ref={printRef} className="bg-white" style={{ width: DOCUMENT_PAGE_WIDTH, padding: 56 }}>
+            <h1 className="text-3xl font-bold text-gray-900 mb-1">{doc.title}</h1>
+            <p className="text-sm text-gray-400 mb-6">
+              Published {new Date(doc.published_at ?? doc.updated_at).toLocaleDateString()}
+            </p>
+            <div className="text-base text-gray-800 whitespace-pre-wrap leading-relaxed">
+              {doc.content || " "}
             </div>
           </div>
         </div>
