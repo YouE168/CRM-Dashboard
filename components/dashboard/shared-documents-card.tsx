@@ -88,6 +88,7 @@ export function SharedDocumentsCard({ userId }: { userId: string | null }) {
   const [documents, setDocuments] = useState<SharedDocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewingDoc, setViewingDoc] = useState<SharedDocumentRow | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const loadDocuments = useCallback(async () => {
     if (!userId) {
@@ -99,6 +100,7 @@ export function SharedDocumentsCard({ userId }: { userId: string | null }) {
       setDocuments(data);
     } catch (err) {
       console.error("Failed to load shared documents:", err);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -110,7 +112,7 @@ export function SharedDocumentsCard({ userId }: { userId: string | null }) {
 
   // Nothing to show and nothing loading - don't take up space on the
   // dashboard with an empty card for members who've never had one shared.
-  if (!loading && documents.length === 0) return null;
+  if (!loading && !loadError && documents.length === 0) return null;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -120,6 +122,11 @@ export function SharedDocumentsCard({ userId }: { userId: string | null }) {
       </div>
       {loading ? (
         <p className="text-sm text-gray-400">Loading…</p>
+      ) : loadError ? (
+        <p className="text-sm text-amber-700">
+          We couldn't load your documents right now. Please refresh, or email Jody if this
+          keeps happening.
+        </p>
       ) : (
         <div className="space-y-2">
           {documents.map((doc) => (

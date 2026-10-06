@@ -3925,78 +3925,12 @@ export async function getMyPublishedDocuments(
     /* ignore */
   }
 
-  const [{ data: userRow }, { data: participantRow }, { data: contactRows }] =
-    await Promise.all([
-      supabase.from("users").select("primary_role").eq("id", userId).maybeSingle(),
-      supabase
-        .from("participants")
-        .select("id")
-        .eq("user_id", userId)
-        .maybeSingle(),
-      supabase.from("business_contacts").select("business_id").eq("user_id", userId),
-    ]);
-
-  const queries = [];
-  if (userRow?.primary_role && participantRow?.id) {
-    queries.push(
-      supabase
-        .from("shared_documents")
-        .select("*")
-        .eq("status", "published")
-        .eq("member_type", userRow.primary_role)
-        .eq("member_id", participantRow.id),
-    );
-  }
-  const businessIds = (contactRows ?? []).map((c) => c.business_id);
-  if (businessIds.length > 0) {
-    queries.push(
-      supabase
-        .from("shared_documents")
-        .select("*")
-        .eq("status", "published")
-        .eq("member_type", "business")
-        .in("member_id", businessIds),
-    );
-  }
-
-  // Group documents (shared with multiple recipients) - find every
-  // recipient row that's "me" (my own participant row, or a business I'm
-  // a contact of), then fetch those documents directly by id.
-  const myMemberIds = [
-    ...(participantRow?.id ? [participantRow.id] : []),
-    ...businessIds,
-  ];
-  const fetchGroupDocs = async (): Promise<SharedDocumentRow[]> => {
-    if (myMemberIds.length === 0) return [];
-    const { data, error } = await supabase
-      .from("shared_document_recipients")
-      .select("document_id")
-      .in("member_id", myMemberIds);
-    if (error) throw error;
-    const documentIds = [...new Set((data ?? []).map((r) => r.document_id))];
-    if (documentIds.length === 0) return [];
-    const { data: docs, error: docsError } = await supabase
-      .from("shared_documents")
-      .select("*")
-      .eq("status", "published")
-      .in("id", documentIds);
-    if (docsError) throw docsError;
-    return (docs ?? []) as SharedDocumentRow[];
-  };
-  const groupDocsPromise: Promise<SharedDocumentRow[]> = fetchGroupDocs();
-
-  const [results, groupDocs] = await Promise.all([
-    Promise.all(queries),
-    groupDocsPromise,
-  ]);
-  for (const r of results) {
-    if (r.error) throw r.error;
-  }
-  const directDocs = results.flatMap((r) => r.data ?? []) as SharedDocumentRow[];
-  const byId = new Map<string, SharedDocumentRow>();
-  for (const doc of [...directDocs, ...groupDocs]) byId.set(doc.id, doc);
-
-  return [...byId.values()].sort(
+  // Runs server-side with elevated rights (see get_my_published_documents.sql)
+  // because regular accounts can't read business_contacts directly.
+  const { data, error } = await (supabase as any).rpc("get_my_published_documents");
+  if (error) throw error;
+  void userId;
+  return ((data ?? []) as SharedDocumentRow[]).sort(
     (a, b) =>
       new Date(b.published_at ?? b.updated_at).getTime() -
       new Date(a.published_at ?? a.updated_at).getTime(),
