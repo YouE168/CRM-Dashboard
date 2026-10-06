@@ -3916,6 +3916,15 @@ export async function deleteSharedDocument(id: string): Promise<void> {
 export async function getMyPublishedDocuments(
   userId: string,
 ): Promise<SharedDocumentRow[]> {
+  // Self-heal: link any business contact whose email matches this login
+  // but was never connected (e.g. they signed up outside the invite link).
+  // Best-effort - harmless if the SQL function isn't installed yet.
+  try {
+    await (supabase as any).rpc("link_my_business_contacts");
+  } catch {
+    /* ignore */
+  }
+
   const [{ data: userRow }, { data: participantRow }, { data: contactRows }] =
     await Promise.all([
       supabase.from("users").select("primary_role").eq("id", userId).maybeSingle(),
