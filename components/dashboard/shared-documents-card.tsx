@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { FileText, Download, X } from "lucide-react";
 import { RichTextEditor, RichContent } from "@/components/ui/rich-text-editor";
 import { downloadNodeAsLetterPdf, DOCUMENT_PAGE_WIDTH } from "@/lib/document-pdf";
+import { supabase } from "@/lib/supabase/client";
 import {
   getMyPublishedDocuments,
   type SharedDocumentRow,
@@ -89,6 +90,7 @@ export function SharedDocumentsCard({ userId }: { userId: string | null }) {
   const [loading, setLoading] = useState(true);
   const [viewingDoc, setViewingDoc] = useState<SharedDocumentRow | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [debugInfo, setDebugInfo] = useState("");
 
   const loadDocuments = useCallback(async () => {
     if (!userId) {
@@ -98,6 +100,11 @@ export function SharedDocumentsCard({ userId }: { userId: string | null }) {
     try {
       const data = await getMyPublishedDocuments(userId);
       setDocuments(data);
+      // Small support line shown only when the list is empty.
+      const { data: authData } = await supabase.auth.getUser();
+      setDebugInfo(
+        `Signed in as ${authData.user?.email ?? "unknown"} (id ${(authData.user?.id ?? "").slice(0, 8)}…) · ${data.length} found`,
+      );
     } catch (err) {
       console.error("Failed to load shared documents:", err);
       setLoadError(true);
@@ -127,6 +134,9 @@ export function SharedDocumentsCard({ userId }: { userId: string | null }) {
         <p className="text-sm text-gray-400">
           No documents yet. When Jody shares a document with you, it will appear here.
         </p>
+      ) : null}
+      {!loading && !loadError && documents.length === 0 && debugInfo ? (
+        <p className="text-[11px] text-gray-300 mt-2">{debugInfo}</p>
       ) : (
         <div className="space-y-2">
           {documents.map((doc) => (
