@@ -573,6 +573,14 @@ function SignupPageInner() {
           } catch (linkError) {
             console.error("Failed to link business contact to new user:", linkError);
           }
+          // The direct update above can be refused for a brand-new account
+          // (only admins may edit business_contacts), so also link by email
+          // through the SQL function that's allowed to. Best-effort.
+          try {
+            await (supabase as any).rpc("link_my_business_contacts");
+          } catch (linkError) {
+            console.error("Email-based contact link failed:", linkError);
+          }
         }
 
         // 4. Send notification to Jody
