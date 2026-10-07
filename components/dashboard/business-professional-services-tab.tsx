@@ -63,6 +63,8 @@ import {
   getAllBusinesses,
   addBusiness,
   deleteBusiness,
+  updateBusiness,
+  updateBusinessContact,
   addBusinessContact,
   deleteBusinessContact,
   markBusinessContactInvited,
@@ -1490,6 +1492,75 @@ function BusinessDetailModal({
   const [notes, setNotes] = useState<CaseNoteRow[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
 
+  // Admin edits to the business's own name/industry and to existing contacts.
+  const [bizName, setBizName] = useState(business.name);
+  const [bizIndustry, setBizIndustry] = useState(business.industry ?? "");
+  const [editingBiz, setEditingBiz] = useState(false);
+  const [bizDraftName, setBizDraftName] = useState("");
+  const [bizDraftIndustry, setBizDraftIndustry] = useState("");
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [contactDraft, setContactDraft] = useState({
+    name: "",
+    role_title: "",
+    email: "",
+    phone: "",
+  });
+
+  const handleSaveBusiness = async () => {
+    const name = bizDraftName.trim();
+    if (!name) {
+      alert("The business needs a name.");
+      return;
+    }
+    try {
+      await updateBusiness(business.id, {
+        name,
+        industry: bizDraftIndustry.trim() || null,
+      });
+      setBizName(name);
+      setBizIndustry(bizDraftIndustry.trim());
+      setEditingBiz(false);
+      onChanged();
+    } catch (err) {
+      console.error("Failed to update business:", err);
+      alert("Couldn't save those changes. Please try again.");
+    }
+  };
+
+  const handleSaveContact = async (id: string) => {
+    const name = contactDraft.name.trim();
+    if (!name) {
+      alert("The contact needs a name.");
+      return;
+    }
+    try {
+      await updateBusinessContact(id, {
+        name,
+        role_title: contactDraft.role_title.trim() || null,
+        email: contactDraft.email.trim() || null,
+        phone: contactDraft.phone.trim() || null,
+        });
+      setContacts((prev) =>
+        prev.map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                name,
+                role_title: contactDraft.role_title.trim() || null,
+                email: contactDraft.email.trim() || null,
+                phone: contactDraft.phone.trim() || null,
+              }
+            : c,
+        ),
+      );
+      setEditingContactId(null);
+      onChanged();
+    } catch (err) {
+      console.error("Failed to update contact:", err);
+      alert("Couldn't save those changes. Please try again.");
+    }
+  };
+
   const [showAddContact, setShowAddContact] = useState(false);
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
@@ -1856,13 +1927,57 @@ function BusinessDetailModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto">
         <div className="sticky top-0 bg-white p-5 border-b border-gray-100 flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">{business.name}</h2>
-            {business.industry && (
-              <p className="text-xs text-gray-400 mt-1">{business.industry}</p>
-            )}
-          </div>
+          {editingBiz ? (
+            <div className="flex-1 mr-3 space-y-2">
+              <input
+                value={bizDraftName}
+                onChange={(e) => setBizDraftName(e.target.value)}
+                placeholder="Business name"
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-base font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+              <input
+                value={bizDraftIndustry}
+                onChange={(e) => setBizDraftIndustry(e.target.value)}
+                placeholder="Industry (optional)"
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveBusiness}
+                  className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditingBiz(false)}
+                  className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">{bizName}</h2>
+              {bizIndustry && (
+                <p className="text-xs text-gray-400 mt-1">{bizIndustry}</p>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-1">
+            {!editingBiz && (
+              <button
+                onClick={() => {
+                  setBizDraftName(bizName);
+                  setBizDraftIndustry(bizIndustry);
+                  setEditingBiz(true);
+                }}
+                className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
+                title="Edit business name"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
             <button
               onClick={() => setPendingDeleteBusiness(true)}
               className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
@@ -1943,6 +2058,49 @@ function BusinessDetailModal({
                     key={c.id}
                     className="group bg-gray-50 p-3 rounded-lg border border-gray-100"
                   >
+                    {editingContactId === c.id ? (
+                      <div className="grid grid-cols-2 gap-2 mb-1">
+                        <input
+                          value={contactDraft.name}
+                          onChange={(e) => setContactDraft({ ...contactDraft, name: e.target.value })}
+                          placeholder="Name"
+                          className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        />
+                        <input
+                          value={contactDraft.role_title}
+                          onChange={(e) => setContactDraft({ ...contactDraft, role_title: e.target.value })}
+                          placeholder="Role (e.g. Owner)"
+                          className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        />
+                        <input
+                          type="email"
+                          value={contactDraft.email}
+                          onChange={(e) => setContactDraft({ ...contactDraft, email: e.target.value })}
+                          placeholder="Email"
+                          className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        />
+                        <input
+                          value={contactDraft.phone}
+                          onChange={(e) => setContactDraft({ ...contactDraft, phone: e.target.value })}
+                          placeholder="Phone"
+                          className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                        />
+                        <div className="col-span-2 flex justify-end gap-2">
+                          <button
+                            onClick={() => setEditingContactId(null)}
+                            className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleSaveContact(c.id)}
+                            className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-800">
@@ -1958,14 +2116,32 @@ function BusinessDetailModal({
                           )}
                         </div>
                       </div>
-                      <button
-                        onClick={() => setPendingDeleteContactId(c.id)}
-                        className="p-1.5 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
-                        title="Remove contact"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setContactDraft({
+                              name: c.name,
+                              role_title: c.role_title ?? "",
+                              email: c.email ?? "",
+                              phone: c.phone ?? "",
+                            });
+                            setEditingContactId(c.id);
+                          }}
+                          className="p-1.5 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                          title="Edit contact"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setPendingDeleteContactId(c.id)}
+                          className="p-1.5 rounded-md text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 hover:bg-red-50 transition-all"
+                          title="Remove contact"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
+                    )}
                     {c.email && (
                       <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200 flex-wrap">
                         {c.user_id ? (

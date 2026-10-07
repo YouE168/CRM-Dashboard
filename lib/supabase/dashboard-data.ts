@@ -4165,6 +4165,27 @@ export async function addBusinessContact(
   if (error) throw error;
 }
 
+export async function updateBusiness(
+  id: string,
+  fields: { name?: string; industry?: string | null },
+): Promise<void> {
+  const { error } = await supabase.from("businesses").update(fields).eq("id", id);
+  if (error) throw error;
+}
+
+export async function updateBusinessContact(
+  id: string,
+  fields: {
+    name?: string;
+    email?: string | null;
+    phone?: string | null;
+    role_title?: string | null;
+  },
+): Promise<void> {
+  const { error } = await supabase.from("business_contacts").update(fields).eq("id", id);
+  if (error) throw error;
+}
+
 export async function deleteBusinessContact(id: string): Promise<void> {
   const { error } = await supabase.from("business_contacts").delete().eq("id", id);
   if (error) throw error;
