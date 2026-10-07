@@ -3857,6 +3857,72 @@ export async function getSharedDocuments(
   return data as SharedDocumentRow[];
 }
 
+// Documents tied to the "other side" of the same person: for a member,
+// the documents shared with any business they're a signed-up contact of;
+// for a business, the documents shared directly with its signed-up
+// contacts. Lets admin see everything one account can see in one place.
+export interface LinkedDocumentRow extends SharedDocumentRow {
+  linkedLabel: string; // e.g. "Via business: Vathana Technology"
+}
+
+export async function getLinkedDocuments(
+  memberType: string,
+  memberId: string,
+): Promise<LinkedDocumentRow[]> {
+  if (memberType === "business") {
+    const { data: contacts } = await supabase
+      .from("business_contacts")
+      .select("name, user_id")
+      .eq("business_id", memberId)
+      .not("user_id", "is", null);
+    const userIds = (contacts ?? []).map((c) => c.user_id as string);
+    if (userIds.length === 0) return [];
+    const { data: parts } = await supabase
+      .from("participants")
+      .select("id, name, user_id")
+      .in("user_id", userIds);
+    const byId = new Map((parts ?? []).map((p) => [p.id, p.name || "Contact"]));
+    if (byId.size === 0) return [];
+    const { data: docs, error } = await supabase
+      .from("shared_documents")
+      .select("*")
+      .in("member_id", [...byId.keys()])
+      .order("updated_at", { ascending: false });
+    if (error) throw error;
+    return (docs ?? []).map((d) => ({
+      ...(d as SharedDocumentRow),
+      linkedLabel: `Shared directly with ${byId.get(d.member_id as string)}`,
+    }));
+  }
+
+  const { data: part } = await supabase
+    .from("participants")
+    .select("user_id")
+    .eq("id", memberId)
+    .maybeSingle();
+  if (!part?.user_id) return [];
+  const { data: contacts } = await supabase
+    .from("business_contacts")
+    .select("business_id")
+    .eq("user_id", part.user_id);
+  const businessIds = (contacts ?? []).map((c) => c.business_id);
+  if (businessIds.length === 0) return [];
+  const [{ data: businesses }, { data: docs, error }] = await Promise.all([
+    supabase.from("businesses").select("id, name").in("id", businessIds),
+    supabase
+      .from("shared_documents")
+      .select("*")
+      .in("member_id", businessIds)
+      .order("updated_at", { ascending: false }),
+  ]);
+  if (error) throw error;
+  const names = new Map((businesses ?? []).map((b) => [b.id, b.name]));
+  return (docs ?? []).map((d) => ({
+    ...(d as SharedDocumentRow),
+    linkedLabel: `Via business: ${names.get(d.member_id as string) ?? "their business"}`,
+  }));
+}
+
 export async function addSharedDocument(
   memberType: string,
   memberId: string,

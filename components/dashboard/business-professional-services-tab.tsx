@@ -43,6 +43,8 @@ import {
   subscribeToCaseNotes,
   getUpcomingCaseNotes,
   getSharedDocuments,
+  getLinkedDocuments,
+  type LinkedDocumentRow,
   addSharedDocument,
   updateSharedDocument,
   setSharedDocumentPublished,
@@ -405,6 +407,7 @@ function DocumentsSection({
   authorName: string;
 }) {
   const [documents, setDocuments] = useState<SharedDocumentRow[]>([]);
+  const [linkedDocs, setLinkedDocs] = useState<LinkedDocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingDoc, setEditingDoc] = useState<SharedDocumentRow | "new" | null>(
     null,
@@ -412,14 +415,18 @@ function DocumentsSection({
 
   const loadDocuments = useCallback(async () => {
     try {
-      const data = await getSharedDocuments(memberId);
+      const [data, linked] = await Promise.all([
+        getSharedDocuments(memberId),
+        getLinkedDocuments(memberType, memberId).catch(() => []),
+      ]);
       setDocuments(data);
+      setLinkedDocs(linked);
     } catch (err) {
       console.error("Failed to load documents:", err);
     } finally {
       setLoading(false);
     }
-  }, [memberId]);
+  }, [memberId, memberType]);
 
   useEffect(() => {
     loadDocuments();
@@ -475,6 +482,39 @@ function DocumentsSection({
               </p>
             </button>
           ))}
+        </div>
+      )}
+
+      {linkedDocs.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-semibold text-gray-500 mb-2">
+            Also on this account&apos;s dashboard
+          </p>
+          <div className="space-y-2">
+            {linkedDocs.map((doc) => (
+              <button
+                key={doc.id}
+                onClick={() => setEditingDoc(doc)}
+                className="w-full text-left bg-indigo-50/40 hover:bg-indigo-50 rounded-xl p-3 transition-colors"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {doc.title}
+                  </p>
+                  <span
+                    className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${
+                      doc.status === "published"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-gray-200 text-gray-500"
+                    }`}
+                  >
+                    {doc.status === "published" ? "Published" : "Draft"}
+                  </span>
+                </div>
+                <p className="text-xs text-indigo-500 mt-0.5">{doc.linkedLabel}</p>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
