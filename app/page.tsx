@@ -6125,12 +6125,17 @@ export default function DashboardPage() {
 
       if (cancelled) return;
 
+      // Signed in but no matching CRM user row (or deactivated): sign out
+      // first, otherwise /login sees the live session and bounces straight
+      // back here - an endless reload loop.
       if (userError || !userRow) {
+        await supabase.auth.signOut();
         router.push("/login");
         return;
       }
 
       if (userRow.status && userRow.status !== "active") {
+        await supabase.auth.signOut();
         router.push("/login");
         return;
       }
