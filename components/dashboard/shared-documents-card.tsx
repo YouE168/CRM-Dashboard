@@ -93,12 +93,10 @@ export function SharedDocumentsCard({ userId }: { userId: string | null }) {
   const [debugInfo, setDebugInfo] = useState("");
 
   const loadDocuments = useCallback(async () => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
+    // The lookup runs as the signed-in user on the server, so it doesn't
+    // depend on the userId prop (some dashboards don't have it handy).
     try {
-      const data = await getMyPublishedDocuments(userId);
+      const data = await getMyPublishedDocuments(userId ?? "");
       setDocuments(data);
       // Small support line shown only when the list is empty.
       const { data: authData } = await supabase.auth.getUser();
