@@ -110,10 +110,6 @@ export function SharedDocumentsCard({ userId }: { userId: string | null }) {
     loadDocuments();
   }, [loadDocuments]);
 
-  // Nothing to show and nothing loading - don't take up space on the
-  // dashboard with an empty card for members who've never had one shared.
-  if (!loading && !loadError && documents.length === 0) return null;
-
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
       <div className="flex items-center gap-2 mb-3">
@@ -126,6 +122,10 @@ export function SharedDocumentsCard({ userId }: { userId: string | null }) {
         <p className="text-sm text-amber-700">
           We couldn't load your documents right now. Please refresh, or email Jody if this
           keeps happening.
+        </p>
+      ) : documents.length === 0 ? (
+        <p className="text-sm text-gray-400">
+          No documents yet. When Jody shares a document with you, it will appear here.
         </p>
       ) : (
         <div className="space-y-2">
