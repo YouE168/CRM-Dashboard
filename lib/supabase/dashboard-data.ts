@@ -3923,6 +3923,39 @@ export async function getLinkedDocuments(
   }));
 }
 
+// Every document in the CRM (individual, business and group), with who
+// it's shared with - powers the admin "All Documents" overview.
+export interface DocumentOverviewRow extends SharedDocumentRow {
+  recipientLabel: string; // person/business name, or "N recipients" for group docs
+  recipientKind: "Member" | "Business" | "Group";
+}
+
+export async function getAllDocumentsOverview(): Promise<DocumentOverviewRow[]> {
+  const [docsRes, recipientsRes, partsRes, bizRes] = await Promise.all([
+    supabase.from("shared_documents").select("*").order("updated_at", { ascending: false }),
+    supabase.from("shared_document_recipients").select("document_id"),
+    supabase.from("participants").select("id, name"),
+    supabase.from("businesses").select("id, name"),
+  ]);
+  if (docsRes.error) throw docsRes.error;
+  const people = new Map((partsRes.data ?? []).map((p) => [p.id, p.name || "Unknown"]));
+  const businesses = new Map((bizRes.data ?? []).map((b) => [b.id, b.name]));
+  const groupCounts = new Map<string, number>();
+  for (const r of recipientsRes.data ?? []) {
+    groupCounts.set(r.document_id, (groupCounts.get(r.document_id) ?? 0) + 1);
+  }
+  return ((docsRes.data ?? []) as SharedDocumentRow[]).map((d) => {
+    if (!d.member_id) {
+      const n = groupCounts.get(d.id) ?? 0;
+      return { ...d, recipientKind: "Group" as const, recipientLabel: `${n} recipient${n === 1 ? "" : "s"}` };
+    }
+    if (d.member_type === "business") {
+      return { ...d, recipientKind: "Business" as const, recipientLabel: businesses.get(d.member_id) ?? "Business" };
+    }
+    return { ...d, recipientKind: "Member" as const, recipientLabel: people.get(d.member_id) ?? "Member" };
+  });
+}
+
 export async function addSharedDocument(
   memberType: string,
   memberId: string,

@@ -44,6 +44,7 @@ import {
   getUpcomingCaseNotes,
   getSharedDocuments,
   getLinkedDocuments,
+  type DocumentOverviewRow,
   type LinkedDocumentRow,
   addSharedDocument,
   updateSharedDocument,
@@ -86,6 +87,7 @@ import { RichTextEditor, RichContent } from "@/components/ui/rich-text-editor";
 import { downloadNodeAsLetterPdf, DOCUMENT_PAGE_WIDTH } from "@/lib/document-pdf";
 import { GroupDocumentsTab } from "@/components/dashboard/group-documents-tab";
 import { TimeLogModal } from "@/components/dashboard/time-log-modal";
+import { AllDocumentsTab } from "@/components/dashboard/all-documents-tab";
 
 const typeLabels: Record<string, string> = {
   mentee: "Mentee",
@@ -3152,7 +3154,7 @@ export function BusinessProfessionalServicesTab() {
   const [adminId, setAdminId] = useState<string | null>(null);
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [rosterTab, setRosterTab] = useState<"members" | "businesses" | "documents">(
+  const [rosterTab, setRosterTab] = useState<"members" | "businesses" | "documents" | "all-documents">(
     "members",
   );
   const [businesses, setBusinesses] = useState<BusinessWithDetails[]>([]);
@@ -3165,6 +3167,8 @@ export function BusinessProfessionalServicesTab() {
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
   const [deletingSession, setDeletingSession] = useState(false);
   const [showTimeLog, setShowTimeLog] = useState(false);
+  const [openAllDoc, setOpenAllDoc] = useState<DocumentOverviewRow | null>(null);
+  const [allDocsReload, setAllDocsReload] = useState(0);
 
   const confirmDeleteSession = async () => {
     if (!pendingDeleteSessionId) return;
@@ -3697,6 +3701,16 @@ export function BusinessProfessionalServicesTab() {
           Businesses
         </button>
         <button
+          onClick={() => setRosterTab("all-documents")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            rosterTab === "all-documents"
+              ? "bg-white text-emerald-700 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          All Documents
+        </button>
+        <button
           onClick={() => setRosterTab("documents")}
           className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             rosterTab === "documents"
@@ -3707,6 +3721,33 @@ export function BusinessProfessionalServicesTab() {
           Group Documents
         </button>
       </div>
+
+      {rosterTab === "all-documents" && (
+        <>
+          <AllDocumentsTab
+            reloadKey={allDocsReload}
+            onOpen={(d) => {
+              // Group documents have their own editor (recipient picker).
+              if (d.recipientKind === "Group") setRosterTab("documents");
+              else setOpenAllDoc(d);
+            }}
+          />
+          {openAllDoc && (
+            <DocumentEditorModal
+              memberType={openAllDoc.member_type ?? "mentee"}
+              memberId={openAllDoc.member_id ?? ""}
+              memberName={openAllDoc.recipientLabel}
+              authorName={currentAuthorName}
+              document={openAllDoc}
+              onClose={() => setOpenAllDoc(null)}
+              onSaved={() => {
+                setOpenAllDoc(null);
+                setAllDocsReload((n) => n + 1);
+              }}
+            />
+          )}
+        </>
+      )}
 
       {rosterTab === "documents" && (
         <GroupDocumentsTab authorName={currentAuthorName} />
