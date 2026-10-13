@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { ConfirmationModal } from "@/components/ui/confirmation-modal";
+import { getProgramsForRole } from "@/lib/role-programs";
 import {
   getAllPrograms,
   type ProgramRow,
@@ -240,6 +241,23 @@ export function ParticipantAccessTab({
                   ) : (
                     <div className="divide-y divide-gray-100">
                       {[...allPrograms]
+                        .filter((prog) => {
+                          // Only programs that apply to this account's
+                          // role(s) - plus anything they already have, so
+                          // it can still be turned off.
+                          const relevant = new Set([
+                            ...getProgramsForRole(selected.primaryRole),
+                            ...(selected.secondaryRole
+                              ? getProgramsForRole(selected.secondaryRole)
+                              : []),
+                          ]);
+                          return (
+                            relevant.has(prog.name) ||
+                            selected.programs.some(
+                              (p) => p.program_id === prog.id && p.approved,
+                            )
+                          );
+                        })
                         .sort((x, y) => x.name.localeCompare(y.name))
                         .map((prog) => {
                           const row = selected.programs.find(
