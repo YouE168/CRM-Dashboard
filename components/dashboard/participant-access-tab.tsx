@@ -20,16 +20,23 @@ export function ParticipantAccessTab({
   description,
   emptyLabel,
   filter,
+  showControls = false,
 }: {
   title: string;
   description: string;
   emptyLabel: string;
   filter: (row: ParticipantAccountRow) => boolean;
+  // Adds a search box + program filter and shows each person's programs
+  // right in the list (used by the "All Participants" tab).
+  showControls?: boolean;
 }) {
   const [accounts, setAccounts] = useState<ParticipantAccountRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [togglingProgram, setTogglingProgram] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [programFilter, setProgramFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
 
   const loadData = useCallback(async () => {
     try {
@@ -48,7 +55,35 @@ export function ParticipantAccessTab({
     return unsubscribe;
   }, [loadData]);
 
-  const filtered = accounts.filter(filter);
+  const roleLabel = (a: ParticipantAccountRow) =>
+    a.secondaryRole && a.secondaryRole !== a.primaryRole
+      ? `${a.primaryRole === "mentee" ? "Mentee" : "Entrepreneur"} + ${
+          a.secondaryRole === "mentee" ? "Mentee" : "Entrepreneur"
+        }`
+      : a.primaryRole === "mentee"
+        ? "Mentee"
+        : "Entrepreneur";
+
+  const programOptions = Array.from(
+    new Set(accounts.flatMap((a) => a.programs.map((p) => p.name))),
+  ).sort();
+
+  const filtered = accounts
+    .filter(filter)
+    .filter((a) => {
+      if (!showControls) return true;
+      const t = q.trim().toLowerCase();
+      if (t && !a.name.toLowerCase().includes(t) && !a.email.toLowerCase().includes(t)) {
+        return false;
+      }
+      if (programFilter !== "all" && !a.programs.some((p) => p.name === programFilter && p.approved)) {
+        return false;
+      }
+      if (roleFilter === "mentee" && a.primaryRole !== "mentee" && a.secondaryRole !== "mentee") return false;
+      if (roleFilter === "entrepreneur" && a.primaryRole !== "entrepreneur" && a.secondaryRole !== "entrepreneur") return false;
+      return true;
+    })
+    .sort((x, y) => x.name.localeCompare(y.name));
   const selected = filtered.find((a) => a.userId === selectedId) || null;
 
   const toggleProgramAccess = async (programName: string, approved: boolean) => {
@@ -75,9 +110,46 @@ export function ParticipantAccessTab({
         <p className="text-sm text-gray-500 mt-1">{description}</p>
       </div>
 
+      {showControls && (
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by name or email…"
+            className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          />
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white text-gray-700"
+          >
+            <option value="all">Mentees + Entrepreneurs</option>
+            <option value="mentee">Mentee access</option>
+            <option value="entrepreneur">Entrepreneur access</option>
+          </select>
+          <select
+            value={programFilter}
+            onChange={(e) => setProgramFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white text-gray-700"
+          >
+            <option value="all">All programs</option>
+            {programOptions.map((n) => (
+              <option key={n} value={n}>
+                In: {n}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {showControls && (
+        <p className="text-xs text-gray-500">
+          {filtered.length} participant{filtered.length === 1 ? "" : "s"}
+        </p>
+      )}
+
       {filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-8 text-center text-gray-400 text-sm">
-          {emptyLabel}
+          {showControls && accounts.length > 0 ? "No one matches these filters." : emptyLabel}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -93,9 +165,26 @@ export function ParticipantAccessTab({
                 <p className="font-medium text-gray-800 text-sm">{a.name}</p>
                 <p className="text-xs text-gray-500">{a.email}</p>
                 <div className="flex gap-2 mt-1 text-[11px] text-gray-400 flex-wrap">
-                  <span>{a.primaryRole === "mentee" ? "Mentee" : "Entrepreneur"}</span>
+                  <span>{roleLabel(a)}</span>
                   {a.mentor && <span>· Mentor: {a.mentor}</span>}
                 </div>
+                {showControls && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {a.programs.filter((p) => p.approved).map((p) => (
+                      <span
+                        key={p.user_program_id}
+                        className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700"
+                      >
+                        {p.name}
+                      </span>
+                    ))}
+                    {a.programs.some((p) => !p.approved) && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                        {a.programs.filter((p) => !p.approved).length} pending
+                      </span>
+                    )}
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -114,7 +203,7 @@ export function ParticipantAccessTab({
                   <p className="text-xs text-gray-500">{selected.email}</p>
                   <div className="flex gap-2 mt-3 flex-wrap">
                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                      {selected.primaryRole === "mentee" ? "Mentee" : "Entrepreneur"}
+                      {roleLabel(selected)}
                     </span>
                     {selected.status && (
                       <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">

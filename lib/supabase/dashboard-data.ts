@@ -2935,6 +2935,7 @@ export interface ParticipantAccountRow {
   name: string;
   email: string;
   primaryRole: string;
+  secondaryRole: string | null;
   mentor: string | null;
   status: string | null;
   programs: UserProgramRow[];
@@ -2945,7 +2946,7 @@ export async function getAllMenteeEntrepreneurAccounts(): Promise<
 > {
   const { data: users, error: usersError } = await supabase
     .from("users")
-    .select("id, name, email, primary_role")
+    .select("id, name, email, primary_role, secondary_role")
     .in("primary_role", ["mentee", "entrepreneur"]);
   if (usersError) throw usersError;
   if (!users || users.length === 0) return [];
@@ -2997,6 +2998,7 @@ export async function getAllMenteeEntrepreneurAccounts(): Promise<
       name: u.name || u.email || "",
       email: u.email || "",
       primaryRole: u.primary_role || "",
+      secondaryRole: u.secondary_role ?? null,
       mentor: participant?.mentor ?? null,
       status: participant?.status ?? null,
       programs: programsByUser[u.id] || [],
