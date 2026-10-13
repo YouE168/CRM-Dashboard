@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { ConfirmationModal } from "@/components/ui/confirmation-modal";
 import {
+  getAllPrograms,
+  type ProgramRow,
   getAllMenteeEntrepreneurAccounts,
   subscribeToMenteeEntrepreneurAccounts,
   setProgramAccessByName,
   type ParticipantAccountRow,
 } from "@/lib/supabase/dashboard-data";
-import { Check } from "lucide-react";
 
 // Shared list-plus-detail view for the admin Mentees and Entrepreneurs
 // tabs in Program Management. Mirrors the Partners/Coalitions tab pattern
@@ -34,6 +36,8 @@ export function ParticipantAccessTab({
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [togglingProgram, setTogglingProgram] = useState<string | null>(null);
+  const [allPrograms, setAllPrograms] = useState<ProgramRow[]>([]);
+  const [pendingRevokeBps, setPendingRevokeBps] = useState(false);
   const [q, setQ] = useState("");
   const [programFilter, setProgramFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -47,6 +51,12 @@ export function ParticipantAccessTab({
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    getAllPrograms()
+      .then(setAllPrograms)
+      .catch((err) => console.error("Failed to load programs:", err));
   }, []);
 
   useEffect(() => {
@@ -220,63 +230,68 @@ export function ParticipantAccessTab({
 
                 <div className="bg-white rounded-xl border border-gray-100 p-4">
                   <h4 className="font-medium text-gray-900 text-sm mb-1">
-                    Programs
+                    Program access
                   </h4>
-                  <p className="text-[11px] text-gray-400 mb-2">
-                    Click a program to approve or revoke access.
+                  <p className="text-[11px] text-gray-400 mb-3">
+                    Turn a program on to allow access, or off to remove it.
                   </p>
-                  {selected.programs.length === 0 ? (
-                    <p className="text-xs text-gray-400">
-                      Not enrolled in any program yet.
-                    </p>
+                  {allPrograms.length === 0 ? (
+                    <p className="text-xs text-gray-400">Loading programs…</p>
                   ) : (
-                    <div className="flex flex-wrap gap-1">
-                      {selected.programs.map((p) => {
-                        // Business Professional Services is auto-approved
-                        // for every account at signup and can't be revoked -
-                        // show it as a plain badge instead of a clickable
-                        // toggle, since there's nothing to approve/revoke.
-                        if (p.name === "Business Professional Services") {
-                          return (
-                            <span
-                              key={p.user_program_id}
-                              className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 inline-flex items-center gap-1"
-                              title="Granted automatically to every account - not editable"
-                            >
-                              <Check className="h-3 w-3" />
-                              {p.name}
-                            </span>
+                    <div className="divide-y divide-gray-100">
+                      {[...allPrograms]
+                        .sort((x, y) => x.name.localeCompare(y.name))
+                        .map((prog) => {
+                          const row = selected.programs.find(
+                            (p) => p.program_id === prog.id,
                           );
-                        }
-                        const isApproved = p.approved;
-                        return (
-                          <button
-                            key={p.user_program_id}
-                            onClick={() => toggleProgramAccess(p.name, p.approved)}
-                            disabled={togglingProgram === p.name}
-                            className={`text-[11px] px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 inline-flex items-center gap-1 ${
-                              isApproved
-                                ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700"
-                                : "bg-yellow-100 text-yellow-700 hover:bg-green-100 hover:text-green-700"
-                            }`}
-                            title={
-                              isApproved
-                                ? "Click to revoke access"
-                                : "Click to approve access"
-                            }
-                          >
-                            {togglingProgram === p.name ? (
-                              "…"
-                            ) : (
-                              <>
-                                {isApproved && <Check className="h-3 w-3" />}
-                                {p.name}
-                                {!isApproved && " (pending)"}
-                              </>
-                            )}
-                          </button>
-                        );
-                      })}
+                          const isOn = !!row?.approved;
+                          const busy = togglingProgram === prog.name;
+                          return (
+                            <div
+                              key={prog.id}
+                              className="flex items-center justify-between py-2.5 gap-3"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm text-gray-800 truncate">
+                                  {prog.name}
+                                </p>
+                                <p className="text-[11px] text-gray-400">
+                                  {isOn
+                                    ? "Allowed"
+                                    : row
+                                      ? "Pending / not allowed"
+                                      : "Not allowed"}
+                                </p>
+                              </div>
+                              <button
+                                role="switch"
+                                aria-checked={isOn}
+                                disabled={busy}
+                                onClick={() => {
+                                  if (
+                                    isOn &&
+                                    prog.name === "Business Professional Services"
+                                  ) {
+                                    setPendingRevokeBps(true);
+                                  } else {
+                                    toggleProgramAccess(prog.name, isOn);
+                                  }
+                                }}
+                                className={`relative shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
+                                  isOn ? "bg-emerald-500" : "bg-gray-300"
+                                }`}
+                                title={isOn ? "Click to turn off" : "Click to turn on"}
+                              >
+                                <span
+                                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                                    isOn ? "translate-x-5" : "translate-x-0.5"
+                                  }`}
+                                />
+                              </button>
+                            </div>
+                          );
+                        })}
                     </div>
                   )}
                 </div>
@@ -285,6 +300,19 @@ export function ParticipantAccessTab({
           </div>
         </div>
       )}
+      <ConfirmationModal
+        isOpen={pendingRevokeBps}
+        title="Turn off Business Professional Services?"
+        message={`${selected?.name ?? "This person"} will lose access to Business Professional Services. This is normally on for every account.`}
+        confirmText="Turn off"
+        cancelText="Cancel"
+        type="warning"
+        onConfirm={() => {
+          setPendingRevokeBps(false);
+          toggleProgramAccess("Business Professional Services", true);
+        }}
+        onCancel={() => setPendingRevokeBps(false)}
+      />
     </div>
   );
 }
