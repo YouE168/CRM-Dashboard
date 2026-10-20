@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
+import { SessionDocuments } from "@/components/dashboard/session-documents";
 import {
   getMentorProfileByEmail,
   createMentorProfile,
@@ -827,6 +828,7 @@ function MentorSettingsContent() {
                         <p className="text-xs text-gray-400 mt-1">
                           {session.duration} minutes
                         </p>
+                        <SessionDocuments sessionId={session.id} canUpload />
                       </div>
                       <div className="flex gap-1">
                         <button

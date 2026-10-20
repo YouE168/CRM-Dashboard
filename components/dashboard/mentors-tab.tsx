@@ -38,6 +38,7 @@ import {
   type MenteeSessionRow,
 } from "@/lib/supabase/dashboard-data";
 import { supabase } from "@/lib/supabase/client";
+import { SessionDocuments } from "./session-documents";
 
 // Types
 interface Mentee {
@@ -126,6 +127,7 @@ function SessionRow({
           className="w-20 border border-blue-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
         />
       </div>
+      <SessionDocuments sessionId={session.id} canUpload />
     </div>
   );
 }

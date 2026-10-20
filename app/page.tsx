@@ -68,6 +68,7 @@ import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { AvatarPositionEditor } from "@/components/dashboard/avatar-position-editor";
 import { SharedDocumentsCard } from "@/components/dashboard/shared-documents-card";
 import { MyTimeLogCard } from "@/components/dashboard/my-time-log-card";
+import { SessionDocuments } from "@/components/dashboard/session-documents";
 import { linkifyText } from "@/lib/linkify";
 import { useRouter } from "next/navigation";
 import {
@@ -5847,6 +5848,7 @@ function RoleBasedDashboardContent({
                                   {session.notes}
                                 </p>
                               )}
+                              <SessionDocuments sessionId={session.id} canUpload={false} />
                             </div>
                             {session.meeting_link && (
                               <button
