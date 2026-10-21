@@ -4083,6 +4083,7 @@ export interface BusinessRow {
   id: string;
   name: string;
   industry: string | null;
+  county?: string | null;
   status: string;
   created_at: string;
 }
@@ -4123,10 +4124,11 @@ export async function addBusiness(
   industry: string | null,
   createdBy: string,
   contacts: { name: string; email?: string; phone?: string; role_title?: string }[] = [],
+  county?: string | null,
 ): Promise<string> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("businesses")
-    .insert({ name, industry: industry || null, created_by: createdBy })
+    .insert({ name, industry: industry || null, county: county || null, created_by: createdBy })
     .select("id")
     .single();
   if (error) throw error;
@@ -4169,9 +4171,9 @@ export async function addBusinessContact(
 
 export async function updateBusiness(
   id: string,
-  fields: { name?: string; industry?: string | null },
+  fields: { name?: string; industry?: string | null; county?: string | null },
 ): Promise<void> {
-  const { error } = await supabase.from("businesses").update(fields).eq("id", id);
+  const { error } = await (supabase as any).from("businesses").update(fields).eq("id", id);
   if (error) throw error;
 }
 

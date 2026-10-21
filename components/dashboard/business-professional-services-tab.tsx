@@ -90,6 +90,9 @@ import { downloadNodeAsLetterPdf, DOCUMENT_PAGE_WIDTH } from "@/lib/document-pdf
 import { GroupDocumentsTab } from "@/components/dashboard/group-documents-tab";
 import { TimeLogModal } from "@/components/dashboard/time-log-modal";
 import { AllDocumentsTab } from "@/components/dashboard/all-documents-tab";
+import { ReferralsOutcomesSection } from "@/components/dashboard/referrals-outcomes-section";
+import { ReferralsOutcomesReportModal } from "@/components/dashboard/referrals-outcomes-report-modal";
+import { COUNTIES } from "@/lib/analytics-constants";
 
 const typeLabels: Record<string, string> = {
   mentee: "Mentee",
@@ -1119,6 +1122,14 @@ function MemberDetailModal({
             />
           )}
 
+          {member.member_type !== "mentor" && (
+            <ReferralsOutcomesSection
+              kind="member"
+              entityId={member.id}
+              entityName={member.name}
+            />
+          )}
+
           <div>
             <div className="flex items-center gap-2 mb-3">
               <MessageCircle className="h-5 w-5 text-amber-600" />
@@ -1334,6 +1345,7 @@ function AddBusinessModal({
 }) {
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
+  const [newCounty, setNewCounty] = useState("");
   const [contacts, setContacts] = useState([{ name: "", email: "", phone: "" }]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1357,7 +1369,7 @@ function AddBusinessModal({
       const { data: authData } = await supabase.auth.getUser();
       const createdBy = authData.user?.id;
       if (!createdBy) throw new Error("Not signed in");
-      const id = await addBusiness(name, industry || null, createdBy, contacts);
+      const id = await addBusiness(name, industry || null, createdBy, contacts, newCounty || null);
       onCreated(id);
     } catch (err) {
       console.error("Failed to add business:", err);
@@ -1397,6 +1409,19 @@ function AddBusinessModal({
               placeholder="e.g. Retail"
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">County (used in reports)</label>
+            <select
+              value={newCounty}
+              onChange={(e) => setNewCounty(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="">Select county (optional)</option>
+              {COUNTIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs text-gray-400 mb-2">
@@ -1498,6 +1523,8 @@ function BusinessDetailModal({
   const [editingBiz, setEditingBiz] = useState(false);
   const [bizDraftName, setBizDraftName] = useState("");
   const [bizDraftIndustry, setBizDraftIndustry] = useState("");
+  const [bizCounty, setBizCounty] = useState(business.county ?? "");
+  const [bizDraftCounty, setBizDraftCounty] = useState("");
   const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const [contactDraft, setContactDraft] = useState({
     name: "",
@@ -1516,9 +1543,11 @@ function BusinessDetailModal({
       await updateBusiness(business.id, {
         name,
         industry: bizDraftIndustry.trim() || null,
+        county: bizDraftCounty || null,
       });
       setBizName(name);
       setBizIndustry(bizDraftIndustry.trim());
+      setBizCounty(bizDraftCounty);
       setEditingBiz(false);
       onChanged();
     } catch (err) {
@@ -1941,6 +1970,16 @@ function BusinessDetailModal({
                 placeholder="Industry (optional)"
                 className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
               />
+              <select
+                value={bizDraftCounty}
+                onChange={(e) => setBizDraftCounty(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              >
+                <option value="">County (for reports)</option>
+                {COUNTIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveBusiness}
@@ -1959,8 +1998,10 @@ function BusinessDetailModal({
           ) : (
             <div>
               <h2 className="text-xl font-semibold text-gray-900">{bizName}</h2>
-              {bizIndustry && (
-                <p className="text-xs text-gray-400 mt-1">{bizIndustry}</p>
+              {(bizIndustry || bizCounty) && (
+                <p className="text-xs text-gray-400 mt-1">
+                  {[bizIndustry, bizCounty ? `${bizCounty} County` : ""].filter(Boolean).join(" · ")}
+                </p>
               )}
             </div>
           )}
@@ -1970,6 +2011,7 @@ function BusinessDetailModal({
                 onClick={() => {
                   setBizDraftName(bizName);
                   setBizDraftIndustry(bizIndustry);
+                  setBizDraftCounty(bizCounty);
                   setEditingBiz(true);
                 }}
                 className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
@@ -2335,6 +2377,12 @@ function BusinessDetailModal({
             memberId={business.id}
             memberName={business.name}
             authorName={currentAuthorName}
+          />
+
+          <ReferralsOutcomesSection
+            kind="business"
+            entityId={business.id}
+            entityName={bizName}
           />
 
           {/* Meeting notes - shared case_notes pattern */}
@@ -3343,6 +3391,7 @@ export function BusinessProfessionalServicesTab() {
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<string | null>(null);
   const [deletingSession, setDeletingSession] = useState(false);
   const [showTimeLog, setShowTimeLog] = useState(false);
+  const [showRefOutReport, setShowRefOutReport] = useState(false);
   const [openAllDoc, setOpenAllDoc] = useState<DocumentOverviewRow | null>(null);
   const [allDocsReload, setAllDocsReload] = useState(0);
 
@@ -3676,14 +3725,26 @@ export function BusinessProfessionalServicesTab() {
             Every CRM member and their case notes, in one place
           </p>
         </div>
-        <button
-          onClick={() => setShowTimeLog(true)}
-          className="shrink-0 flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          <Clock className="h-4 w-4" />
-          Time Log
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            onClick={() => setShowTimeLog(true)}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Clock className="h-4 w-4" />
+            Time Log
+          </button>
+          <button
+            onClick={() => setShowRefOutReport(true)}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <FileText className="h-4 w-4" />
+            Referrals &amp; Outcomes Report
+          </button>
+        </div>
         {showTimeLog && <TimeLogModal onClose={() => setShowTimeLog(false)} />}
+        {showRefOutReport && (
+          <ReferralsOutcomesReportModal onClose={() => setShowRefOutReport(false)} />
+        )}
       </div>
 
       {/* Stats Cards */}

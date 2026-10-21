@@ -94,9 +94,9 @@ function MenteeDetailModal({
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState("");
   const [showAllGoals, setShowAllGoals] = useState(false);
-  const [activeTab, setActiveTab] = useState<"goals" | "notes" | "info">(
-    "goals",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "goals" | "notes" | "refout" | "info"
+  >("goals");
 
   useEffect(() => {
     let cancelled = false;
@@ -214,6 +214,17 @@ function MenteeDetailModal({
               Notes ({notes.length})
             </button>
             <button
+              onClick={() => setActiveTab("refout")}
+              className={`pb-2 px-1 text-sm font-medium transition-colors ${
+                activeTab === "refout"
+                  ? "text-emerald-600 border-b-2 border-emerald-600"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <Target className="h-4 w-4 inline mr-1" />
+              Referrals & Outcomes
+            </button>
+            <button
               onClick={() => setActiveTab("info")}
               className={`pb-2 px-1 text-sm font-medium transition-colors ${
                 activeTab === "info"
@@ -228,6 +239,14 @@ function MenteeDetailModal({
         </div>
 
         <div className="p-5">
+          {activeTab === "refout" && (
+            <ReferralsOutcomesSection
+              kind="member"
+              entityId={mentee.id}
+              entityName={mentee.name}
+            />
+          )}
+
           {/* Goals Tab */}
           {activeTab === "goals" && (
             <div className="space-y-4">
@@ -425,6 +444,7 @@ function MenteeDetailModal({
 // Main Mentor Dashboard Component
 import { supabase } from "@/lib/supabase/client";
 import { MyTimeLogCard } from "@/components/dashboard/my-time-log-card";
+import { ReferralsOutcomesSection } from "@/components/dashboard/referrals-outcomes-section";
 import {
   getMenteesForMentor,
   getGoalsForParticipant,
