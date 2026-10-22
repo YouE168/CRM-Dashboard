@@ -127,7 +127,7 @@ export function ReferralsOutcomesReportModal({ onClose }: { onClose: () => void 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Referrals and Outcomes Report</h2>
             <p className="text-xs text-gray-500">{filterText}</p>
@@ -148,7 +148,7 @@ export function ReferralsOutcomesReportModal({ onClose }: { onClose: () => void 
         </div>
 
         {queue.length > 0 && (
-          <div className="px-6 py-3 border-b border-amber-200 bg-amber-50 max-h-64 overflow-y-auto">
+          <div className="shrink-0 px-6 py-3 border-b border-amber-200 bg-amber-50 max-h-[45vh] overflow-y-auto">
             <p className="text-sm font-semibold text-amber-800 mb-2">
               Waiting for your review ({queue.length}). Not counted in the report until approved.
             </p>
@@ -189,7 +189,7 @@ export function ReferralsOutcomesReportModal({ onClose }: { onClose: () => void 
           </div>
         )}
 
-        <div className="px-6 py-3 border-b border-gray-100 flex flex-wrap items-end gap-3">
+        <div className="shrink-0 px-6 py-3 border-b border-gray-100 flex flex-wrap items-end gap-3">
           <div>
             <label className="block text-[11px] text-gray-500 mb-0.5">From</label>
             <input type="date" className={field} value={from} onChange={(e) => setFrom(e.target.value)} />
