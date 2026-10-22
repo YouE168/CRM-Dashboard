@@ -161,7 +161,13 @@ function MenteeDetailModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[92vh] overflow-y-auto">
+      <div
+        className={`bg-white rounded-2xl w-full overflow-y-auto ${
+          activeTab === "refout"
+            ? "max-w-[96vw] h-[94vh]"
+            : "max-w-5xl max-h-[92vh]"
+        }`}
+      >
         {/* Header */}
         <div className="sticky top-0 bg-white p-5 border-b border-gray-100">
           <div className="flex justify-between items-start">
