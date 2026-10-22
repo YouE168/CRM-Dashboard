@@ -1363,6 +1363,10 @@ function AddBusinessModal({
       setError("Business name is required.");
       return;
     }
+    if (!newCounty) {
+      setError("County is required.");
+      return;
+    }
     setError("");
     setSaving(true);
     try {
@@ -1411,13 +1415,13 @@ function AddBusinessModal({
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1">County (used in reports)</label>
+            <label className="block text-xs text-gray-400 mb-1">County * (used in reports)</label>
             <select
               value={newCounty}
               onChange={(e) => setNewCounty(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
-              <option value="">Select county (optional)</option>
+              <option value="">Select county</option>
               {COUNTIES.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
@@ -1975,7 +1979,7 @@ function BusinessDetailModal({
                 onChange={(e) => setBizDraftCounty(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
               >
-                <option value="">County (for reports)</option>
+                <option value="" disabled>County (required)</option>
                 {COUNTIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}

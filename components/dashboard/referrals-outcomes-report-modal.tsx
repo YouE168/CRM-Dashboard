@@ -11,6 +11,8 @@ import {
   buildReport,
   formatMoney,
   getReportSource,
+  buildReviewQueue,
+  decideReview,
   type ReportSource,
 } from "@/lib/referrals-outcomes";
 import { getAllPrograms } from "@/lib/supabase/dashboard-data";
@@ -37,13 +39,32 @@ export function ReferralsOutcomesReportModal({ onClose }: { onClose: () => void 
   const [county, setCounty] = useState("");
   const [program, setProgram] = useState("");
 
-  useEffect(() => {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const reload = () =>
     getReportSource()
       .then(setSource)
       .catch((e) => {
         console.error("Failed to load report data:", e);
         setError("Couldn't load the report. Please try again.");
       });
+
+  const decide = async (kind: "referral" | "outcome", id: string, d: "approved" | "rejected") => {
+    setBusyId(id);
+    try {
+      await decideReview(kind, id, d);
+      await reload();
+    } catch (e) {
+      console.error(e);
+      setError("Couldn't save that decision. Please try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const queue = useMemo(() => (source ? buildReviewQueue(source) : []), [source]);
+
+  useEffect(() => {
+    reload();
     getAllPrograms()
       .then((p) => setPrograms(p.map((x) => x.name).sort()))
       .catch(() => {});
@@ -125,6 +146,48 @@ export function ReferralsOutcomesReportModal({ onClose }: { onClose: () => void 
             </button>
           </div>
         </div>
+
+        {queue.length > 0 && (
+          <div className="px-6 py-3 border-b border-amber-200 bg-amber-50 max-h-64 overflow-y-auto">
+            <p className="text-sm font-semibold text-amber-800 mb-2">
+              Waiting for your review ({queue.length}). Not counted in the report until approved.
+            </p>
+            <div className="space-y-2">
+              {queue.map((q) => (
+                <div key={q.id} className="bg-white border border-amber-200 rounded-lg p-2.5 flex items-start justify-between gap-3">
+                  <div className="min-w-0 text-sm">
+                    <p className="font-medium text-gray-800">
+                      {q.kind === "referral" ? "Referral" : "Outcome"}: {q.typeLabel}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {q.subjectName} · {new Date(q.date + "T00:00:00").toLocaleDateString()} · added by {q.submittedBy}
+                    </p>
+                    {q.summary && <p className="text-xs text-gray-600">{q.summary}</p>}
+                    {q.duplicates.map((d, i) => (
+                      <p key={i} className="text-xs text-red-600 font-medium">Possible duplicate: {d}</p>
+                    ))}
+                  </div>
+                  <div className="flex gap-1.5 shrink-0">
+                    <button
+                      disabled={busyId === q.id}
+                      onClick={() => decide(q.kind, q.id, "approved")}
+                      className="px-3 py-1 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      disabled={busyId === q.id}
+                      onClick={() => decide(q.kind, q.id, "rejected")}
+                      className="px-3 py-1 bg-white border border-red-200 text-red-600 text-xs rounded-lg hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="px-6 py-3 border-b border-gray-100 flex flex-wrap items-end gap-3">
           <div>

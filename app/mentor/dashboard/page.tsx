@@ -240,11 +240,16 @@ function MenteeDetailModal({
 
         <div className="p-5">
           {activeTab === "refout" && (
+            <>
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+              Entries you add are sent to the program administrator for review and are included in reports once approved.
+            </p>
             <ReferralsOutcomesSection
               kind="member"
               entityId={mentee.id}
               entityName={mentee.name}
             />
+            </>
           )}
 
           {/* Goals Tab */}

@@ -66,6 +66,9 @@ export const outcomeLabel = (id: string) =>
 // ---------------------------------------------------------------------
 // Row types
 // ---------------------------------------------------------------------
+// Entries a mentor adds start as "pending_review" and only count in reports
+// once admin/staff approves them (the database enforces this).
+export type ReviewStatus = "approved" | "pending_review" | "rejected";
 export interface ReferralRecord {
   id: string;
   business_id: string | null;
@@ -81,6 +84,9 @@ export interface ReferralRecord {
   created_by: string | null;
   created_by_name: string | null;
   created_at: string;
+  review_status?: ReviewStatus;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
 }
 
 export interface OutcomeRecord {
@@ -102,10 +108,14 @@ export interface OutcomeRecord {
   created_by: string | null;
   created_by_name: string | null;
   created_at: string;
+  review_status?: ReviewStatus;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
 }
 
-export type NewReferral = Omit<ReferralRecord, "id" | "created_at" | "created_by" | "created_by_name">;
-export type NewOutcome = Omit<OutcomeRecord, "id" | "created_at" | "created_by" | "created_by_name">;
+type ReviewFields = "review_status" | "reviewed_by" | "reviewed_at";
+export type NewReferral = Omit<ReferralRecord, "id" | "created_at" | "created_by" | "created_by_name" | ReviewFields>;
+export type NewOutcome = Omit<OutcomeRecord, "id" | "created_at" | "created_by" | "created_by_name" | ReviewFields>;
 
 export interface SubjectRef {
   business_id: string | null;
@@ -313,8 +323,10 @@ export function buildReport(src: ReportSource, f: ReportFilters): ReportResult {
     (!f.county || countyOf(r) === f.county) &&
     (!f.program || program === f.program);
 
-  const referrals = src.referrals.filter((r) => keep(r, r.referred_date, r.related_program));
-  const outcomes = src.outcomes.filter((o) => keep(o, o.achieved_date, o.related_program));
+  // Only approved entries count (rows from before the review step are approved).
+  const approved = (r: { review_status?: ReviewStatus }) => (r.review_status ?? "approved") === "approved";
+  const referrals = src.referrals.filter((r) => approved(r) && keep(r, r.referred_date, r.related_program));
+  const outcomes = src.outcomes.filter((o) => approved(o) && keep(o, o.achieved_date, o.related_program));
 
   const referralsByType: Record<string, number> = {};
   const referralsByStatus: Record<string, number> = {};
@@ -361,6 +373,120 @@ export function buildReport(src: ReportSource, f: ReportFilters): ReportResult {
     internshipsCompleted,
     outcomesLinkedToReferrals: linked,
   };
+}
+
+// ---------------------------------------------------------------------
+// Review queue (admin/staff)
+// ---------------------------------------------------------------------
+export interface ReviewItem {
+  kind: "referral" | "outcome";
+  id: string;
+  record: ReferralRecord | OutcomeRecord;
+  typeLabel: string;
+  date: string;
+  subjectName: string;
+  submittedBy: string;
+  summary: string;
+  duplicates: string[]; // human-readable "possible duplicate of" notes
+}
+
+const dayMs = 86400000;
+const near = (a: string, b: string, days: number) =>
+  Math.abs(new Date(a + "T00:00:00").getTime() - new Date(b + "T00:00:00").getTime()) <= days * dayMs;
+const sharesSubject = (a: Subject, b: Subject) =>
+  (!!a.business_id && a.business_id === b.business_id) ||
+  (!!a.member_id && a.member_id === b.member_id);
+
+// Flags entries that look like something already recorded: same business or
+// member, same type, close dates (and the same amount for money outcomes).
+export function buildReviewQueue(src: Pick<ReportSource, "referrals" | "outcomes">): ReviewItem[] {
+  const items: ReviewItem[] = [];
+
+  for (const r of src.referrals) {
+    if (r.review_status !== "pending_review") continue;
+    const dups = src.referrals
+      .filter(
+        (o) =>
+          o.id !== r.id &&
+          o.review_status !== "rejected" &&
+          o.referral_type === r.referral_type &&
+          sharesSubject(o, r) &&
+          near(o.referred_date, r.referred_date, 14),
+      )
+      .map(
+        (o) =>
+          `Similar referral already ${(o.review_status ?? "approved") === "approved" ? "recorded" : "waiting for review"} on ${new Date(o.referred_date + "T00:00:00").toLocaleDateString()}${o.created_by_name ? ` (by ${o.created_by_name})` : ""}`,
+      );
+    items.push({
+      kind: "referral",
+      id: r.id,
+      record: r,
+      typeLabel: referralLabel(r.referral_type) + (r.other_label ? `: ${r.other_label}` : ""),
+      date: r.referred_date,
+      subjectName: r.subject_name || "Unknown",
+      submittedBy: r.created_by_name || "Unknown",
+      summary: [r.referred_to ? `Referred to ${r.referred_to}` : "", r.status.replace(/_/g, " ")]
+        .filter(Boolean)
+        .join(" · "),
+      duplicates: dups,
+    });
+  }
+
+  for (const o of src.outcomes) {
+    if (o.review_status !== "pending_review") continue;
+    const dups = src.outcomes
+      .filter(
+        (x) =>
+          x.id !== o.id &&
+          x.review_status !== "rejected" &&
+          x.outcome_type === o.outcome_type &&
+          sharesSubject(x, o) &&
+          near(x.achieved_date, o.achieved_date, 14) &&
+          (o.amount == null || x.amount == null || Number(x.amount) === Number(o.amount)),
+      )
+      .map(
+        (x) =>
+          `Similar outcome already ${(x.review_status ?? "approved") === "approved" ? "recorded" : "waiting for review"} on ${new Date(x.achieved_date + "T00:00:00").toLocaleDateString()}${x.created_by_name ? ` (by ${x.created_by_name})` : ""}`,
+      );
+    items.push({
+      kind: "outcome",
+      id: o.id,
+      record: o,
+      typeLabel: outcomeLabel(o.outcome_type) + (o.other_label ? `: ${o.other_label}` : ""),
+      date: o.achieved_date,
+      subjectName: o.subject_name || "Unknown",
+      submittedBy: o.created_by_name || "Unknown",
+      summary: [
+        o.amount != null ? formatMoney(Number(o.amount)) : "",
+        o.job_count != null ? `${o.job_count} jobs` : "",
+        o.internship_count != null ? `${o.internship_count} internships` : "",
+        o.funding_source ?? "",
+        o.description ?? "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      duplicates: dups,
+    });
+  }
+
+  return items.sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
+export async function decideReview(
+  kind: "referral" | "outcome",
+  id: string,
+  decision: "approved" | "rejected",
+): Promise<void> {
+  const user = await me();
+  const { error } = await db
+    .from(kind === "referral" ? "rcp_referrals" : "rcp_outcomes")
+    .update({
+      review_status: decision,
+      reviewed_by: user.id,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 export function formatMoney(n: number): string {

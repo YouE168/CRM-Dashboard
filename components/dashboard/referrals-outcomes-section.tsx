@@ -322,6 +322,21 @@ function outcomeProblem(d: OutcomeDraft): string | null {
 // ---------------------------------------------------------------------
 // The section
 // ---------------------------------------------------------------------
+function ReviewBadge({ status }: { status?: string }) {
+  if (!status || status === "approved") return null;
+  const pending = status === "pending_review";
+  return (
+    <span
+      className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold align-middle ${
+        pending ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"
+      }`}
+      title={pending ? "Waiting for admin approval. Not counted in reports yet." : "Not approved"}
+    >
+      {pending ? "Pending review" : "Not approved"}
+    </span>
+  );
+}
+
 export function ReferralsOutcomesSection({
   kind,
   entityId,
@@ -650,6 +665,7 @@ export function ReferralsOutcomesSection({
                           <p className="text-sm font-medium text-gray-800">
                             {referralLabel(r.referral_type)}
                             {r.referral_type === "other" && r.other_label ? `: ${r.other_label}` : ""}
+                            <ReviewBadge status={r.review_status} />
                           </p>
                           <p className="text-xs text-gray-500">
                             {new Date(r.referred_date + "T00:00:00").toLocaleDateString()}
@@ -708,6 +724,7 @@ export function ReferralsOutcomesSection({
                           <p className="text-sm font-medium text-gray-800">
                             {outcomeLabel(o.outcome_type)}
                             {o.outcome_type === "other" && o.other_label ? `: ${o.other_label}` : ""}
+                            <ReviewBadge status={o.review_status} />
                             {o.amount != null ? ` · ${formatMoney(Number(o.amount))}` : ""}
                             {o.job_count != null ? ` · ${o.job_count} job${o.job_count === 1 ? "" : "s"}` : ""}
                             {o.internship_count != null ? ` · ${o.internship_count} internship${o.internship_count === 1 ? "" : "s"}` : ""}
