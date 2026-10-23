@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { SessionsChart } from "./sessions-chart";
 import { ClientsByCountyChart } from "./clients-by-county-chart";
+import { ReferralsOutcomesReportModal } from "./referrals-outcomes-report-modal";
+import { getReportSource, buildReviewQueue } from "@/lib/referrals-outcomes";
 import {
   getParticipants,
   getLiveOverviewStats,
@@ -39,6 +41,7 @@ import {
   Plus,
   X,
   DollarSign,
+  Handshake,
 } from "lucide-react";
 
 interface ReportsTabProps {
@@ -224,6 +227,16 @@ function LogTransactionModal({
 
 export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
   const [currentView, setCurrentView] = useState<ReportView>("list");
+  const [showRefOut, setShowRefOut] = useState(false);
+  const [refOutPending, setRefOutPending] = useState(0);
+  const loadRefOutPending = useCallback(() => {
+    getReportSource()
+      .then((src) => setRefOutPending(buildReviewQueue(src).length))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadRefOutPending();
+  }, [loadRefOutPending]);
   const [participants, setParticipants] = useState<DashboardParticipant[]>([]);
   const [overviewStats, setOverviewStats] = useState<LiveOverviewStats | null>(null);
   const [mentorActivity, setMentorActivity] = useState<LiveMentorActivityRow[]>([]);
@@ -951,12 +964,42 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
               <span className="text-emerald-600 text-sm">→</span>
             </button>
           ))}
+          <button
+            onClick={() => setShowRefOut(true)}
+            className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-start gap-4 hover:border-emerald-300 hover:shadow-md transition-all text-left w-full cursor-pointer"
+          >
+            <div className="p-2.5 rounded-lg shrink-0 bg-indigo-100 text-indigo-600">
+              <Handshake className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-gray-900">
+                Referrals and Outcomes Report
+                {refOutPending > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold align-middle">
+                    {refOutPending} pending review
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Referrals made, outcomes achieved, capital and jobs. Review mentor entries.
+              </p>
+            </div>
+            <span className="text-emerald-600 text-sm">→</span>
+          </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <SessionsChart />
           <ClientsByCountyChart data={countyChartData} />
         </div>
       </div>
+      {showRefOut && (
+        <ReferralsOutcomesReportModal
+          onClose={() => {
+            setShowRefOut(false);
+            loadRefOutPending();
+          }}
+        />
+      )}
     </>
   );
 }
