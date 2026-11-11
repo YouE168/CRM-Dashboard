@@ -95,7 +95,7 @@ function MenteeDetailModal({
   const [newNote, setNewNote] = useState("");
   const [showAllGoals, setShowAllGoals] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "goals" | "notes" | "refout" | "info"
+    "goals" | "notes" | "info"
   >("goals");
 
   useEffect(() => {
@@ -161,13 +161,7 @@ function MenteeDetailModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div
-        className={`bg-white rounded-2xl w-full overflow-y-auto ${
-          activeTab === "refout"
-            ? "max-w-[96vw] h-[94vh]"
-            : "max-w-5xl max-h-[92vh]"
-        }`}
-      >
+      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-white p-5 border-b border-gray-100">
           <div className="flex justify-between items-start">
@@ -220,17 +214,6 @@ function MenteeDetailModal({
               Notes ({notes.length})
             </button>
             <button
-              onClick={() => setActiveTab("refout")}
-              className={`pb-2 px-1 text-sm font-medium transition-colors ${
-                activeTab === "refout"
-                  ? "text-emerald-600 border-b-2 border-emerald-600"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              <Target className="h-4 w-4 inline mr-1" />
-              Referrals & Outcomes
-            </button>
-            <button
               onClick={() => setActiveTab("info")}
               className={`pb-2 px-1 text-sm font-medium transition-colors ${
                 activeTab === "info"
@@ -245,19 +228,6 @@ function MenteeDetailModal({
         </div>
 
         <div className="p-5">
-          {activeTab === "refout" && (
-            <>
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
-              Entries you add are sent to the program administrator for review and are included in reports once approved.
-            </p>
-            <ReferralsOutcomesSection
-              kind="member"
-              entityId={mentee.id}
-              entityName={mentee.name}
-            />
-            </>
-          )}
-
           {/* Goals Tab */}
           {activeTab === "goals" && (
             <div className="space-y-4">
@@ -455,7 +425,6 @@ function MenteeDetailModal({
 // Main Mentor Dashboard Component
 import { supabase } from "@/lib/supabase/client";
 import { MyTimeLogCard } from "@/components/dashboard/my-time-log-card";
-import { ReferralsOutcomesSection } from "@/components/dashboard/referrals-outcomes-section";
 import {
   getMenteesForMentor,
   getGoalsForParticipant,
