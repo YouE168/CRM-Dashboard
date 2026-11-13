@@ -56,6 +56,7 @@ import {
   DollarSign,
   Clock,
 } from "lucide-react";
+import { todayLocal } from "@/lib/date-utils";
 
 interface ProgramResource {
   id: string;
@@ -670,7 +671,7 @@ export default function ProgramManagementPage() {
       const created = await addProgramSession({
         program_id: selectedProgram.id,
         title: newSession.title || "New Session",
-        session_date: newSession.date || new Date().toISOString().split("T")[0],
+        session_date: newSession.date || todayLocal(),
         session_time: newSession.time || "12:00 PM",
         mentor: newSession.mentor || "Jody Love",
         link: newSession.link || "",

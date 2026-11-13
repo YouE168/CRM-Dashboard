@@ -25,6 +25,7 @@ import {
   ExternalLink,
   Check,
 } from "lucide-react";
+import { formatDateOnly } from "@/lib/date-utils";
 
 export function CoalitionsTab() {
   const [coalitions, setCoalitions] = useState<CoalitionOverviewRow[]>([]);
@@ -352,7 +353,7 @@ export function CoalitionsTab() {
                             </p>
                             <p className="text-xs text-gray-500 mt-0.5">
                               {m.date
-                                ? new Date(m.date).toLocaleDateString()
+                                ? formatDateOnly(m.date)
                                 : "No date set"}
                               {m.time ? ` · ${m.time}` : ""}
                               {" · "}

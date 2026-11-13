@@ -26,6 +26,7 @@ import {
   Check,
   X,
 } from "lucide-react";
+import { todayLocal, formatDateOnly } from "@/lib/date-utils";
 
 interface SessionHistory {
   date: string;
@@ -182,7 +183,7 @@ function AddSessionModal({
   ) => void;
 }) {
   const [selectedMentee, setSelectedMentee] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(todayLocal());
   const [topic, setTopic] = useState("");
   const [duration, setDuration] = useState(60);
   const [notes, setNotes] = useState("");
@@ -814,7 +815,7 @@ function MentorSettingsContent() {
                           </span>
                           <span className="text-xs text-gray-400">•</span>
                           <span className="text-xs text-gray-500">
-                            {new Date(session.date).toLocaleDateString()}
+                            {formatDateOnly(session.date)}
                           </span>
                         </div>
                         <p className="text-emerald-600 font-medium">

@@ -23,8 +23,9 @@ import {
   type LinkCandidate,
 } from "@/lib/referrals-outcomes";
 import { getAllPrograms } from "@/lib/supabase/dashboard-data";
+import { todayLocal } from "@/lib/date-utils";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayLocal();
 
 const inputCls =
   "w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400";

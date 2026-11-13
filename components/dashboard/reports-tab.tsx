@@ -43,6 +43,7 @@ import {
   DollarSign,
   Handshake,
 } from "lucide-react";
+import { todayLocal } from "@/lib/date-utils";
 
 interface ReportsTabProps {
   showToast: (
@@ -100,7 +101,7 @@ function LogTransactionModal({
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<"pending" | "approved">("approved");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => todayLocal());
   const [saving, setSaving] = useState(false);
 
   return (
@@ -845,7 +846,7 @@ export function ReportsTab({ showToast, profileName }: ReportsTabProps) {
       pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
       const reportTitle = reports.find((r) => r.id === currentView)?.title || "report";
       const fileSlug = reportTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      const dateLabel = new Date().toISOString().slice(0, 10);
+      const dateLabel = todayLocal();
       pdf.save(`${fileSlug}-${dateLabel}.pdf`);
       showToast("PDF downloaded", "success");
     } catch (err) {

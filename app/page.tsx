@@ -1,5 +1,7 @@
 "use client";
 
+import { todayLocal, formatDateOnly } from "@/lib/date-utils";
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import {
@@ -453,7 +455,7 @@ function AllNotesModal({
                       {note.author}
                     </span>
                     <span className="text-xs text-gray-400">
-                      {new Date(note.date).toLocaleDateString()}
+                      {formatDateOnly(note.date)}
                     </span>
                   </div>
                 </div>
@@ -707,7 +709,7 @@ function CoalitionDashboard({
     try {
       await addCoalitionMeeting(userId, {
         title: tempFormData.title || "New Meeting",
-        date: tempFormData.date || new Date().toISOString().split("T")[0],
+        date: tempFormData.date || todayLocal(),
         time: tempFormData.time || "12:00 PM",
         type: tempFormData.type || "virtual",
         link: tempFormData.link || "",
@@ -757,7 +759,7 @@ function CoalitionDashboard({
         progress: tempFormData.progress || 0,
         description: tempFormData.description || "",
         start_date:
-          tempFormData.startDate || new Date().toISOString().split("T")[0],
+          tempFormData.startDate || todayLocal(),
         target_date: tempFormData.targetDate || "",
       });
       setInitiatives(await getCoalitionInitiatives(userId));
@@ -1128,7 +1130,7 @@ function CoalitionDashboard({
                             <Clock className="h-3 w-3 text-gray-400" />
                             <span className="text-xs text-gray-500">
                               Started{" "}
-                              {new Date(p.start_date).toLocaleDateString()}
+                              {formatDateOnly(p.start_date)}
                             </span>
                           </div>
                         </div>
@@ -2273,12 +2275,12 @@ function CoalitionDashboard({
                     <div className="flex items-center gap-1 text-sm text-gray-500">
                       <Clock className="h-4 w-4 text-gray-400" />
                       {selectedCoalitionProgram.start_date &&
-                        `Started ${new Date(selectedCoalitionProgram.start_date).toLocaleDateString()}`}
+                        `Started ${formatDateOnly(selectedCoalitionProgram.start_date)}`}
                       {selectedCoalitionProgram.start_date &&
                         selectedCoalitionProgram.end_date &&
                         " · "}
                       {selectedCoalitionProgram.end_date &&
-                        `Ends ${new Date(selectedCoalitionProgram.end_date).toLocaleDateString()}`}
+                        `Ends ${formatDateOnly(selectedCoalitionProgram.end_date)}`}
                     </div>
                   )}
 
@@ -2923,7 +2925,7 @@ function PartnerDashboard({
                             <Clock className="h-3 w-3 text-gray-400" />
                             <span className="text-xs text-gray-500">
                               Started{" "}
-                              {new Date(p.start_date).toLocaleDateString()}
+                              {formatDateOnly(p.start_date)}
                             </span>
                           </div>
                         </div>
@@ -3737,12 +3739,12 @@ function PartnerDashboard({
                 <div className="flex items-center gap-1 text-sm text-gray-500">
                   <Clock className="h-4 w-4 text-gray-400" />
                   {selectedPartnerProgram.start_date &&
-                    `Started ${new Date(selectedPartnerProgram.start_date).toLocaleDateString()}`}
+                    `Started ${formatDateOnly(selectedPartnerProgram.start_date)}`}
                   {selectedPartnerProgram.start_date &&
                     selectedPartnerProgram.end_date &&
                     " · "}
                   {selectedPartnerProgram.end_date &&
-                    `Ends ${new Date(selectedPartnerProgram.end_date).toLocaleDateString()}`}
+                    `Ends ${formatDateOnly(selectedPartnerProgram.end_date)}`}
                 </div>
               )}
 
@@ -5396,7 +5398,7 @@ function RoleBasedDashboardContent({
                           </p>
                           {goal.due_date && (
                             <p className="text-xs text-gray-400">
-                              Due: {new Date(goal.due_date).toLocaleDateString()}
+                              Due: {formatDateOnly(goal.due_date)}
                             </p>
                           )}
                         </div>
@@ -5460,7 +5462,7 @@ function RoleBasedDashboardContent({
                             {note.author}
                           </span>
                           <span className="text-xs text-gray-400">
-                            {new Date(note.date).toLocaleDateString()}
+                            {formatDateOnly(note.date)}
                           </span>
                         </div>
                       </div>

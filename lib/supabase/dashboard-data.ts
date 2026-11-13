@@ -1,5 +1,6 @@
 // lib/supabase/dashboard-data.ts
 import { supabase } from "./client";
+import { todayLocal } from "@/lib/date-utils";
 
 export interface DashboardParticipant {
   id: string;
@@ -3594,7 +3595,7 @@ export async function getCaseNotesForMember(
 export async function getUpcomingCaseNotes(
   limit: number = 5,
 ): Promise<CaseNoteRow[]> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const { data, error } = await supabase
     .from("case_notes")
     .select("*")
@@ -4238,7 +4239,7 @@ export async function addBusinessReferral(
     program_id: programId,
     program_name: programName,
     status: opts?.status || "referred",
-    referred_date: opts?.referredDate || new Date().toISOString().slice(0, 10),
+    referred_date: opts?.referredDate || todayLocal(),
     follow_up_date: opts?.followUpDate || null,
     notes: opts?.notes || null,
     created_by: createdBy,

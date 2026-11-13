@@ -23,6 +23,7 @@ import {
   User,
   Plus,
 } from "lucide-react";
+import { todayLocal, formatDateOnly } from "@/lib/date-utils";
 
 interface Mentee {
   id: string;
@@ -177,7 +178,7 @@ function MenteeDetailModal({
                 </h2>
                 <p className="text-sm text-gray-500">
                   {mentee.program} • Started{" "}
-                  {new Date(mentee.startDate).toLocaleDateString()}
+                  {formatDateOnly(mentee.startDate)}
                 </p>
               </div>
             </div>
@@ -284,7 +285,7 @@ function MenteeDetailModal({
                             {goal.category}
                           </span>
                           <span className="text-xs text-gray-400">
-                            Due: {new Date(goal.dueDate).toLocaleDateString()}
+                            Due: {formatDateOnly(goal.dueDate)}
                           </span>
                         </div>
                       </div>
@@ -352,7 +353,7 @@ function MenteeDetailModal({
                             {note.author}
                           </span>
                           <span className="text-xs text-gray-400">
-                            {new Date(note.date).toLocaleDateString()}
+                            {formatDateOnly(note.date)}
                           </span>
                         </div>
                         <p className="text-gray-700">{linkifyText(note.note)}</p>
@@ -403,7 +404,7 @@ function MenteeDetailModal({
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-gray-400" />
                     <span className="text-gray-700">
-                      Started: {new Date(mentee.startDate).toLocaleDateString()}
+                      Started: {formatDateOnly(mentee.startDate)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -491,7 +492,7 @@ export default function MentorDashboardPage() {
           program: m.program_name ?? "Business Catalyst Program",
           status: m.status || "Active",
           sessionsCompleted: m.sessions_completed ?? 0,
-          startDate: new Date().toISOString().split("T")[0],
+          startDate: todayLocal(),
         }));
         if (!cancelled) {
           setMentees(menteeList);

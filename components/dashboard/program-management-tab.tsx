@@ -17,6 +17,7 @@ import {
   X,
   UserMinus,
 } from "lucide-react";
+import { todayLocal } from "@/lib/date-utils";
 
 interface ProgramResource {
   id: string;
@@ -178,7 +179,7 @@ export function ProgramManagementTab() {
     const session = {
       id: `session-${Date.now()}`,
       title: newSession.title || "New Session",
-      date: newSession.date || new Date().toISOString().split("T")[0],
+      date: newSession.date || todayLocal(),
       time: newSession.time || "12:00 PM",
       mentor: newSession.mentor || "Jody Love",
       link: newSession.link || "",

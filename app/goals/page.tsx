@@ -25,6 +25,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { todayLocal, formatDateOnly } from "@/lib/date-utils";
 
 interface Goal {
   id: string;
@@ -56,7 +57,7 @@ export default function GoalsPage() {
   const [newGoal, setNewGoal] = useState({
     title: "",
     description: "",
-    dueDate: new Date().toISOString().split("T")[0],
+    dueDate: todayLocal(),
     category: "Personal",
   });
 
@@ -160,7 +161,7 @@ export default function GoalsPage() {
       setNewGoal({
         title: "",
         description: "",
-        dueDate: new Date().toISOString().split("T")[0],
+        dueDate: todayLocal(),
         category: "Personal",
       });
       setShowAddModal(false);
@@ -332,7 +333,7 @@ export default function GoalsPage() {
                               <div className="flex items-center gap-1">
                                 <Calendar className="h-3 w-3 text-gray-400" />
                                 <span className="text-xs text-gray-400">
-                                  Due: {new Date(goal.dueDate).toLocaleDateString()}
+                                  Due: {formatDateOnly(goal.dueDate)}
                                 </span>
                               </div>
                             </div>

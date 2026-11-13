@@ -39,6 +39,7 @@ import {
 } from "@/lib/supabase/dashboard-data";
 import { supabase } from "@/lib/supabase/client";
 import { SessionDocuments } from "./session-documents";
+import { formatDateOnly } from "@/lib/date-utils";
 
 // Types
 interface Mentee {
@@ -97,7 +98,7 @@ function SessionRow({
         <div>
           <p className="font-medium text-gray-800">{session.topic}</p>
           <p className="text-xs text-gray-500">
-            {new Date(session.date).toLocaleDateString()} at {session.time}
+            {formatDateOnly(session.date)} at {session.time}
           </p>
           {session.notes && <p className="text-xs text-gray-600 mt-1">📝 {session.notes}</p>}
         </div>
@@ -477,7 +478,7 @@ function MenteeDetailsModal({
                           </p>
                           <p className="text-xs text-gray-400">
                             {goal.due_date
-                              ? `Due: ${new Date(goal.due_date).toLocaleDateString()}`
+                              ? `Due: ${formatDateOnly(goal.due_date)}`
                               : "No due date"}
                           </p>
                         </div>

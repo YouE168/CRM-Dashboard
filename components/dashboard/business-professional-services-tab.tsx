@@ -1,5 +1,7 @@
 "use client";
 
+import { todayLocal } from "@/lib/date-utils";
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import { linkifyText } from "@/lib/linkify";
 import {
@@ -3540,7 +3542,7 @@ export function BusinessProfessionalServicesTab() {
       ?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayLocal();
   const upcomingEntries: UpcomingEntry[] = [
     ...upcoming.map((n) => ({
       kind: "session" as const,
