@@ -1079,6 +1079,12 @@ export async function getAdminNotes(): Promise<AdminNoteRow[]> {
   return data;
 }
 
+// Short "log in" line added to notification emails so people know where to go.
+function crmLoginLine(): string {
+  if (typeof window === "undefined") return "";
+  return `\n\nLog in to the CRM to read and reply: ${window.location.origin}/login`;
+}
+
 export async function sendAdminNoteRow(
   subject: string,
   message: string,
@@ -1097,17 +1103,22 @@ export async function sendAdminNoteRow(
   // the in-app notification bell shows this to. Best-effort: a failed
   // lookup or send here should never make the note itself fail to save.
   try {
-    const { data: recipients } = await supabase
+    let recipientQuery = supabase
       .from("users")
       .select("email")
-      .eq("primary_role", recipientType);
+      .or("status.is.null,status.eq.active");
+    // "all" means everyone with an account, not a role literally named "all"
+    if (recipientType !== "all") {
+      recipientQuery = recipientQuery.eq("primary_role", recipientType);
+    }
+    const { data: recipients } = await recipientQuery;
     await Promise.allSettled(
       (recipients ?? [])
         .filter((u) => u.email)
         .map((u) =>
           sendStaffNotificationEmail(
             subject || "New note from Rural Community Partners",
-            message,
+            message + crmLoginLine(),
             "admin_note",
             u.email as string,
           ),
@@ -1243,7 +1254,7 @@ export async function sendDirectMessage(
       if (recipient?.email) {
         await sendStaffNotificationEmail(
           `Message from ${senderName}`,
-          message,
+          message + crmLoginLine(),
           "direct_message",
           recipient.email,
         );
@@ -2330,23 +2341,28 @@ export async function addMenteeNote(
   try {
     const { data: participant } = await supabase
       .from("participants")
-      .select("user_id")
+      .select("user_id, email")
       .eq("id", participantId)
       .maybeSingle();
+    let recipientEmail: string | null = null;
     if (participant?.user_id) {
       const { data: recipient } = await supabase
         .from("users")
         .select("email")
         .eq("id", participant.user_id)
         .maybeSingle();
-      if (recipient?.email) {
-        await sendStaffNotificationEmail(
-          `Note from ${author || "your mentor"}`,
-          note,
-          "mentor_note",
-          recipient.email,
-        );
-      }
+      recipientEmail = recipient?.email ?? null;
+    }
+    // Older participant rows may not be linked to an account yet - fall
+    // back to the email on the participant record so they still get alerted.
+    if (!recipientEmail) recipientEmail = participant?.email ?? null;
+    if (recipientEmail) {
+      await sendStaffNotificationEmail(
+        `Note from ${author || "your mentor"}`,
+        note + crmLoginLine(),
+        "mentor_note",
+        recipientEmail,
+      );
     }
   } catch (err) {
     console.error("Failed to email mentee note recipient:", err);
