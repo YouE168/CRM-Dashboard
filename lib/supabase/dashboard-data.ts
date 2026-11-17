@@ -1211,6 +1211,28 @@ export async function sendDirectMessage(
   // in-app notification bell surfaces (a coalition/partner/mentor's own
   // reply doesn't need to email them back). Best-effort, never blocks
   // the message itself from sending.
+  // When a user messages admin, email Jody so she knows to check the CRM
+  // (the bell only shows once she's already logged in). Best-effort.
+  if (senderRole === "user") {
+    try {
+      const preview =
+        message.length > 200 ? `${message.slice(0, 200)}...` : message;
+      const link =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/admin/dashboard`
+          : "";
+      await sendStaffNotificationEmail(
+        `New message from ${senderName} in the CRM`,
+        `${senderName} sent you a message in the CRM:\n\n"${preview}"\n\n` +
+          `You have a message waiting for your reply. Log in to the CRM and open Notes, then Direct Messages` +
+          `${link ? `:\n${link}` : "."}`,
+        "direct_message",
+      );
+    } catch (err) {
+      console.error("Failed to email admin about new message:", err);
+    }
+  }
+
   if (senderRole === "admin") {
     try {
       const { data: recipient } = await supabase
