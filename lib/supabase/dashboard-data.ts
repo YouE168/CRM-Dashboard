@@ -1154,7 +1154,16 @@ export interface DirectMessageRow {
   sender_name: string | null;
   message: string;
   created_at: string;
+  channel?: DirectMessageChannel;
 }
+
+export type DirectMessageChannel = "admin" | "it_support";
+
+// Where IT support alerts go. Set NEXT_PUBLIC_IT_SUPPORT_EMAIL in Vercel to
+// the IT support person's email; until it's set, alerts fall back to Jody
+// so no message is ever missed.
+const IT_SUPPORT_EMAIL =
+  process.env.NEXT_PUBLIC_IT_SUPPORT_EMAIL || "jody@hbcat.org";
 
 export interface MessageableUserRow {
   id: string;
@@ -1191,14 +1200,37 @@ export async function getAllDirectMessages(): Promise<DirectMessageRow[]> {
   return data as DirectMessageRow[];
 }
 
+// Basic info for a set of user ids - used by the IT support inbox, where
+// the people writing in can have any role (mentee, entrepreneur, etc.).
+export async function getUsersByIds(
+  ids: string[],
+): Promise<MessageableUserRow[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, name, email, primary_role")
+    .in("id", ids)
+    .order("name");
+  if (error) throw error;
+  return (data ?? []).map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    primaryRole: u.primary_role || "",
+  }));
+}
+
 // One person's thread - used on that person's own dashboard.
 export async function getDirectMessagesForUser(
   userId: string,
+  channel: DirectMessageChannel = "admin",
 ): Promise<DirectMessageRow[]> {
-  const { data, error } = await supabase
+  // `channel` is a newer column the generated types don't know about yet
+  const { data, error } = await (supabase as any)
     .from("direct_messages")
     .select("*")
     .eq("user_id", userId)
+    .eq("channel", channel)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return data as DirectMessageRow[];
@@ -1209,21 +1241,22 @@ export async function sendDirectMessage(
   senderRole: "admin" | "user",
   senderName: string,
   message: string,
+  channel: DirectMessageChannel = "admin",
 ): Promise<void> {
-  const { error } = await supabase.from("direct_messages").insert({
+  const { error } = await (supabase as any).from("direct_messages").insert({
     user_id: userId,
     sender_role: senderRole,
     sender_name: senderName,
     message,
+    channel,
   });
   if (error) throw error;
 
-  // Only email when admin is the one sending - that's the direction the
-  // in-app notification bell surfaces (a coalition/partner/mentor's own
-  // reply doesn't need to email them back). Best-effort, never blocks
-  // the message itself from sending.
-  // When a user messages admin, email Jody so she knows to check the CRM
-  // (the bell only shows once she's already logged in). Best-effort.
+  const isIt = channel === "it_support";
+
+  // When a user messages admin (or IT support), email whoever handles that
+  // channel so they know to check the CRM (the bell only shows once
+  // they're already logged in). Best-effort.
   if (senderRole === "user") {
     try {
       const preview =
@@ -1233,17 +1266,24 @@ export async function sendDirectMessage(
           ? `${window.location.origin}/admin/dashboard`
           : "";
       await sendStaffNotificationEmail(
-        `New message from ${senderName} in the CRM`,
+        isIt
+          ? `IT support request from ${senderName}`
+          : `New message from ${senderName} in the CRM`,
         `${senderName} sent you a message in the CRM:\n\n"${preview}"\n\n` +
           `You have a message waiting for your reply. Log in to the CRM and open Notes, then Direct Messages` +
+          `${isIt ? " (IT Support tab)" : ""}` +
           `${link ? `:\n${link}` : "."}`,
         "direct_message",
+        isIt ? IT_SUPPORT_EMAIL : undefined,
       );
     } catch (err) {
       console.error("Failed to email admin about new message:", err);
     }
   }
 
+  // Only email the user when staff is the one sending - that's the
+  // direction the in-app notification bell surfaces. Best-effort, never
+  // blocks the message itself from sending.
   if (senderRole === "admin") {
     try {
       const { data: recipient } = await supabase
@@ -1253,7 +1293,9 @@ export async function sendDirectMessage(
         .maybeSingle();
       if (recipient?.email) {
         await sendStaffNotificationEmail(
-          `Message from ${senderName}`,
+          isIt
+            ? `IT support reply from ${senderName}`
+            : `Message from ${senderName}`,
           message + crmLoginLine(),
           "direct_message",
           recipient.email,

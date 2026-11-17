@@ -1750,6 +1750,13 @@ function CoalitionDashboard({
         userName={profile?.name || "Coalition Leader"}
       />
 
+      {/* Contact IT Support - Coalition */}
+      <DirectMessageChat
+        userId={userId}
+        userName={profile?.name || "Coalition Leader"}
+        channel="it_support"
+      />
+
       {/* Zoom Meeting Section - Coalition */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
@@ -3362,6 +3369,13 @@ function PartnerDashboard({
         userName={profile?.name || "Partner"}
       />
 
+      {/* Contact IT Support - Partner */}
+      <DirectMessageChat
+        userId={userId}
+        userName={profile?.name || "Partner"}
+        channel="it_support"
+      />
+
       {/* Zoom Meeting Section - Partner */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
@@ -4877,6 +4891,13 @@ function RoleBasedDashboardContent({
           userName={authProfile?.name || "Mentor"}
         />
 
+        {/* Contact IT Support - Mentor */}
+        <DirectMessageChat
+          userId={mentorUserId}
+          userName={authProfile?.name || "Mentor"}
+          channel="it_support"
+        />
+
         <div
           onClick={() =>
             (window.location.href =
@@ -5483,6 +5504,13 @@ function RoleBasedDashboardContent({
           </div>
 
           <SharedDocumentsCard userId={profile?.id ?? null} />
+
+          {/* Contact IT Support - Mentee / Entrepreneur */}
+          <DirectMessageChat
+            userId={profile?.id ?? null}
+            userName={authProfile?.name || profile?.name || "Member"}
+            channel="it_support"
+          />
 
           <MyTimeLogCard />
 

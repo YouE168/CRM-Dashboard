@@ -10,6 +10,7 @@ import {
   subscribeToMenteeData,
   type MenteeNoteWithContext,
   getMessageableUsers,
+  getUsersByIds,
   getAllDirectMessages,
   sendDirectMessage,
   subscribeToDirectMessages,
@@ -392,6 +393,11 @@ function AdminDashboardContent() {
   >(null);
   const [messageInput, setMessageInput] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
+  // Which inbox is showing: normal admin messages, or IT support requests
+  const [inboxChannel, setInboxChannel] = useState<"admin" | "it_support">(
+    "admin",
+  );
+  const [itUsers, setItUsers] = useState<MessageableUserRow[]>([]);
 
   useEffect(() => {
     getMessageableUsers()
@@ -414,6 +420,26 @@ function AdminDashboardContent() {
     return unsubscribe;
   }, [loadDirectMessages]);
 
+  // Messages in the inbox that's currently showing
+  const channelMessages = allDirectMessages.filter(
+    (m) => ((m as any).channel ?? "admin") === inboxChannel,
+  );
+  const itMessageUserIds = Array.from(
+    new Set(
+      allDirectMessages
+        .filter((m) => (m as any).channel === "it_support")
+        .map((m) => m.user_id),
+    ),
+  );
+  const itMessageKey = itMessageUserIds.join(",");
+  useEffect(() => {
+    getUsersByIds(itMessageUserIds)
+      .then(setItUsers)
+      .catch((err) => console.error("Failed to load IT support users:", err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itMessageKey]);
+  const inboxUsers = inboxChannel === "admin" ? messageableUsers : itUsers;
+
   const handleSendDirectMessage = async () => {
     if (!messageInput.trim() || !selectedMessageUserId) return;
     setSendingMessage(true);
@@ -423,6 +449,7 @@ function AdminDashboardContent() {
         "admin",
         profile.name || "Admin",
         messageInput.trim(),
+        inboxChannel,
       );
       setMessageInput("");
     } catch (err) {
@@ -2104,17 +2131,40 @@ function AdminDashboardContent() {
                 Private conversations with Coalition Leaders, Mentors, and
                 Partners - they can reply, unlike the announcements above
               </p>
+              <div className="flex gap-2 mb-4">
+                {([
+                  ["admin", "💬 Admin Messages"],
+                  ["it_support", "🛠️ IT Support"],
+                ] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => {
+                      setInboxChannel(id);
+                      setSelectedMessageUserId(null);
+                    }}
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                      inboxChannel === id
+                        ? "bg-emerald-600 text-white border-emerald-600"
+                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* People list */}
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden lg:col-span-1">
                   <div className="divide-y divide-gray-50 max-h-[520px] overflow-y-auto">
-                    {messageableUsers.length === 0 ? (
+                    {inboxUsers.length === 0 ? (
                       <div className="p-6 text-center text-sm text-gray-400">
-                        No coalition, mentor, or partner accounts yet.
+                        {inboxChannel === "it_support"
+                          ? "No IT support requests yet."
+                          : "No coalition, mentor, or partner accounts yet."}
                       </div>
                     ) : (
-                      messageableUsers.map((u) => {
-                        const thread = allDirectMessages.filter(
+                      inboxUsers.map((u) => {
+                        const thread = channelMessages.filter(
                           (m) => m.user_id === u.id,
                         );
                         const last = thread[thread.length - 1];
@@ -2163,10 +2213,10 @@ function AdminDashboardContent() {
                     </div>
                   ) : (
                     (() => {
-                      const person = messageableUsers.find(
+                      const person = inboxUsers.find(
                         (u) => u.id === selectedMessageUserId,
                       );
-                      const thread = allDirectMessages.filter(
+                      const thread = channelMessages.filter(
                         (m) => m.user_id === selectedMessageUserId,
                       );
                       return (

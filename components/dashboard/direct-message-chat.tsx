@@ -8,6 +8,7 @@ import {
   sendDirectMessage,
   subscribeToDirectMessages,
   type DirectMessageRow,
+  type DirectMessageChannel,
 } from "@/lib/supabase/dashboard-data";
 
 // Real, private 1:1 chat with admin - shown on the Coalition/Mentor/Partner
@@ -17,10 +18,15 @@ import {
 export function DirectMessageChat({
   userId,
   userName,
+  channel = "admin",
 }: {
   userId: string | null;
   userName: string;
+  // "admin" = the normal Message Admin card, "it_support" = a separate
+  // thread that goes to IT support instead of Jody.
+  channel?: DirectMessageChannel;
 }) {
+  const isIt = channel === "it_support";
   const [messages, setMessages] = useState<DirectMessageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
@@ -29,14 +35,14 @@ export function DirectMessageChat({
   const loadMessages = useCallback(async () => {
     if (!userId) return;
     try {
-      const data = await getDirectMessagesForUser(userId);
+      const data = await getDirectMessagesForUser(userId, channel);
       setMessages(data);
     } catch (err) {
       console.error("Failed to load messages:", err);
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, channel]);
 
   useEffect(() => {
     loadMessages();
@@ -48,7 +54,7 @@ export function DirectMessageChat({
     if (!input.trim() || !userId || sending) return;
     setSending(true);
     try {
-      await sendDirectMessage(userId, "user", userName, input.trim());
+      await sendDirectMessage(userId, "user", userName, input.trim(), channel);
       setInput("");
     } catch (err) {
       console.error("Failed to send message:", err);
@@ -63,7 +69,9 @@ export function DirectMessageChat({
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-50 to-white flex items-center gap-2">
         <MessageCircle className="h-5 w-5 text-emerald-600" />
-        <h3 className="font-semibold text-gray-900">💬 Message Admin</h3>
+        <h3 className="font-semibold text-gray-900">
+          {isIt ? "🛠️ Contact IT Support" : "💬 Message Admin"}
+        </h3>
       </div>
 
       <div className="p-5 space-y-3 max-h-80 overflow-y-auto">
@@ -74,7 +82,9 @@ export function DirectMessageChat({
             <MessageCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
             <p className="text-gray-400 text-sm">No messages yet.</p>
             <p className="text-xs text-gray-400">
-              Send a message and admin will see it here.
+              {isIt
+                ? "Having a technical problem or a bug? Send a message and IT support will reply here."
+                : "Send a message and admin will see it here."}
             </p>
           </div>
         ) : (
@@ -128,7 +138,11 @@ export function DirectMessageChat({
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
           }}
-          placeholder="Write a message to admin… (⌘Enter to send)"
+          placeholder={
+            isIt
+              ? "Describe the problem or question… (⌘Enter to send)"
+              : "Write a message to admin… (⌘Enter to send)"
+          }
           rows={4}
           className="w-full min-h-[6rem] max-h-[50vh] text-sm text-gray-700 placeholder:text-gray-400 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-y focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
         />
