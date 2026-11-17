@@ -129,8 +129,8 @@ export function DirectMessageChat({
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
           }}
           placeholder="Write a message to admin… (⌘Enter to send)"
-          rows={2}
-          className="w-full text-sm text-gray-700 placeholder:text-gray-400 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
+          rows={4}
+          className="w-full min-h-[6rem] max-h-[50vh] text-sm text-gray-700 placeholder:text-gray-400 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-y focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
         />
         <div className="flex justify-end mt-2">
           <button
