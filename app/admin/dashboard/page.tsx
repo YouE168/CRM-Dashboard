@@ -923,12 +923,17 @@ function AdminDashboardContent() {
   const getTabs = () => {
     const tabs = ["Overview"];
 
+    // Notes sits right after Overview so new messages are easy to find
+    if (isAdmin || isStaff) {
+      tabs.push("Notes");
+    }
+
     if (isAdmin || isStaff || isProgramManager) {
       tabs.push("Analytics", "Participants", "Mentors");
     }
 
     if (isAdmin || isStaff) {
-      tabs.push("Leadership Roundtable", "Resources", "Reports", "Notes");
+      tabs.push("Leadership Roundtable", "Resources", "Reports");
     }
 
     return tabs;
